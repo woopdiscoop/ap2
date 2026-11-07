@@ -547,7 +547,7 @@ def test_M11_rulebook_rules(h: SimpleNamespace) -> None:
             Rulebook.model_validate({**data, **bad})
     mined = Rulebook.model_validate({**data, "kind": "mined", "author": None, "date": None})
     assert mined.author is None
-    for bad_key in ("circulation", "unknown", "kitchen"):
+    for bad_key in ("circulation", "outdoor_space", "unknown", "kitchen"):
         types = {**data["types"], bad_key: data["types"]["office"]}
         with pytest.raises(ValidationError):
             Rulebook.model_validate({**data, "types": types})

@@ -59,17 +59,6 @@ def test_A03_bounds_exact() -> None:
     assert check_area(ModuleRect(0, 0, 19, 51), GRID100, 10, TOL).placed_m2 == 9.69
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="spec issue (reported): with module_mm=100, 97x100 / 100x112 / 101x111 modules are "
-    "97 / 112 / 112.11 m², not 9.70 / 11.20 / 11.211 m² as eval.md A03 states",
-)
-def test_A03_bounds_exact_literal_rects() -> None:
-    assert check_area(ModuleRect(0, 0, 97, 100), GRID100, 10, TOL).valid
-    assert check_area(ModuleRect(0, 0, 100, 112), GRID100, 10, TOL).valid
-    assert not check_area(ModuleRect(0, 0, 101, 111), GRID100, 10, TOL).valid
-
-
 def test_A04_pct_regime() -> None:
     assert area_bounds_mm2(60, TOL)[1] == 61_800_000
 

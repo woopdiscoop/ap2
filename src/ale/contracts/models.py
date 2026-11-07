@@ -47,7 +47,7 @@ from ale.contracts.geometry import (
     Polygon,
 )
 from ale.contracts.serialization import canonical_json
-from ale.contracts.taxonomy import UNKNOWN, RoomTypeKey, load_taxonomy
+from ale.contracts.taxonomy import RoomTypeKey, load_taxonomy
 from ale.contracts.units import (
     MODULE_MM_MAX,
     MODULE_MM_MIN,
@@ -90,11 +90,13 @@ Prob = Annotated[Float, Field(ge=0.0, le=1.0)]
 NonNegInt = Annotated[StrictInt, Field(ge=0)]
 
 
+_FORBIDDEN_CATEGORIES = (TypeCategory.SPECIAL, TypeCategory.CIRCULATION)
+
+
 def _check_type_allowed(key: str, what: str) -> None:
-    if key == UNKNOWN:
-        raise ValueError(f"{what}: type {UNKNOWN!r} is not allowed")
-    if load_taxonomy().get(key).category is TypeCategory.CIRCULATION:
-        raise ValueError(f"{what}: circulation type {key!r} is not allowed")
+    category = load_taxonomy().get(key).category
+    if category in _FORBIDDEN_CATEGORIES:
+        raise ValueError(f"{what}: type {key!r} of category {category} is not allowed")
 
 
 def _duplicates(items: Iterable[str]) -> list[str]:

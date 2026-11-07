@@ -6,9 +6,16 @@
 # default_macro_zone and service_core are Router proposals — the architect
 # should review them (they are defaults; the Excel program overrides the zone).
 #
-# Known ambiguity: on French drawings "OFFICE" is a pantry/kitchenette, not an
-# office. It is mapped to kitchenette here.
-version: "1.0.0"
+# Known ambiguities: on French drawings "OFFICE" is a pantry/kitchenette, not an
+# office (mapped to kitchenette); "CUISINE" is mapped to commercial_kitchen.
+#
+# v1.1.0 (2026-11-07): 50 types added for other tertiary programmes, based on the
+# Uniclass 2015 SL (Spaces/locations) table v1.23 and the French ERP building types
+# (M retail, N food service, R education, S libraries, U health, X sport, L/Y culture).
+# The taxonomy also normalises labels read from REFERENCE plans (Phase 1), so it covers
+# more types than a program usually uses. Category SPECIAL types (unknown, outdoor_space)
+# are recognised but never generated.
+version: "1.1.0"
 types:
   - key: office
     label_fr: Bureau
@@ -65,7 +72,7 @@ types:
     category: ROOM
     default_macro_zone: PUBLIC
     service_core: false
-    synonyms: [HALL, HALL D'ENTREE, HALL ENTREE, ENTREE, SAS, SAS D'ENTREE, VESTIBULE]
+    synonyms: [HALL, HALL D'ENTREE, HALL ENTREE, ENTREE, SAS, SAS D'ENTREE, VESTIBULE, ATRIUM, HALL PUBLIC]
   - key: circulation
     label_fr: Circulation
     label_en: Circulation
@@ -93,7 +100,7 @@ types:
     category: ROOM
     default_macro_zone: SERVICES
     service_core: true
-    synonyms: [SANITAIRES, SANITAIRE, SANIT., SAN., WC, W.C., WC H/F, WC H, WC F, WC HOMMES, WC FEMMES, TOILETTES, BLOC SANITAIRE]
+    synonyms: [SANITAIRES, SANITAIRE, SANIT., SAN., WC, W.C., WC H/F, WC H, WC F, WC HOMMES, WC FEMMES, TOILETTES, BLOC SANITAIRE, SALLE DE BAINS, SALLE DE BAIN, SDB, SALLE D'EAU, SDE]
   - key: sanitary_accessible
     label_fr: Sanitaire PMR
     label_en: Accessible toilet
@@ -121,14 +128,14 @@ types:
     category: ROOM
     default_macro_zone: ADMINISTRATIVE
     service_core: false
-    synonyms: [SALLE DE PAUSE, S. PAUSE, PAUSE, ESPACE PAUSE, CAFETERIA, CAFET., REFECTOIRE, SALLE DE DETENTE, DETENTE]
+    synonyms: [SALLE DE PAUSE, S. PAUSE, PAUSE, ESPACE PAUSE, CAFETERIA, CAFET., SALLE DE DETENTE, DETENTE, SALLE DE REPOS, ESPACE INFORMEL]
   - key: kitchenette
     label_fr: Office / kitchenette
     label_en: Kitchenette
     category: ROOM
     default_macro_zone: ADMINISTRATIVE
     service_core: false
-    synonyms: [KITCHENETTE, OFFICE, TISANERIE, COIN CAFE, OFFICE TRAITEUR]
+    synonyms: [KITCHENETTE, OFFICE, TISANERIE, COIN CAFE, ESPACE CAFE, OFFICE TRAITEUR]
   - key: storage
     label_fr: Rangement
     label_en: Storage
@@ -156,7 +163,7 @@ types:
     category: ROOM
     default_macro_zone: SERVICES
     service_core: true
-    synonyms: [LOCAL TECHNIQUE, LOCAL TECH., LOC. TECH., L. TECH., LT, TECHNIQUE, CTA, CHAUFFERIE, TGBT, LOCAL ELECTRIQUE, LOCAL ELEC., SOUS-STATION, GAINE TECHNIQUE]
+    synonyms: [LOCAL TECHNIQUE, LOCAL TECH., LOC. TECH., L. TECH., LT, TECHNIQUE, CTA, CHAUFFERIE, TGBT, LOCAL ELECTRIQUE, LOCAL ELEC., SOUS-STATION, GAINE TECHNIQUE, TRANSFORMATEUR, LOCAL TRANSFO, MACHINERIE, LOCAL MACHINERIE, LOCAL SPRINKLER, LOCAL POMPES, LOCAL GROUPE ELECTROGENE]
   - key: it_room
     label_fr: Local informatique
     label_en: IT / server room
@@ -178,6 +185,117 @@ types:
     default_macro_zone: SERVICES
     service_core: false
     synonyms: [LOCAL DECHETS, LOCAL POUBELLES, POUBELLES, DECHETS, LOCAL OM, LOCAL ORDURES, LOCAL TRI]
+  # ======================= v1.1.0 additions =======================
+  # ---- Offices / administration (ERP type W) ----
+  - {key: focus_room, label_fr: Bulle / box, label_en: Focus room / phone booth, category: ROOM, default_macro_zone: ADMINISTRATIVE, service_core: false,
+     synonyms: [BULLE, BULLES, BOX, PHONE BOX, CABINE TELEPHONIQUE, SALLE DE CONFIDENTIALITE, ESPACE DE CONCENTRATION, CONCENTRATION]}
+  - {key: mail_room, label_fr: Local courrier, label_en: Mail room, category: ROOM, default_macro_zone: ADMINISTRATIVE, service_core: false,
+     synonyms: [COURRIER, LOCAL COURRIER, SALLE COURRIER, VAGUEMESTRE]}
+  - {key: staff_room, label_fr: Salle du personnel, label_en: Staff room, category: ROOM, default_macro_zone: ADMINISTRATIVE, service_core: false,
+     synonyms: [SALLE DES PROFESSEURS, SALLE DES PROFS, SALLE DES ENSEIGNANTS, SALLE DU PERSONNEL, SALLE PERSONNEL]}
+  - {key: security_room, label_fr: Poste de sécurité, label_en: Security room, category: ROOM, default_macro_zone: SERVICES, service_core: false,
+     synonyms: [POSTE DE SECURITE, PC SECURITE, PCS, LOCAL SECURITE, LOGE GARDIEN, LOGE DU GARDIEN, GARDIEN, GARDIENNAGE, POSTE DE GARDE]}
+  - {key: first_aid_room, label_fr: Infirmerie, label_en: First-aid room, category: ROOM, default_macro_zone: SERVICES, service_core: false,
+     synonyms: [INFIRMERIE, PREMIERS SECOURS, LOCAL PREMIERS SECOURS, POSTE DE SECOURS]}
+  - {key: quiet_room, label_fr: Salle calme, label_en: Quiet / prayer room, category: ROOM, default_macro_zone: ADMINISTRATIVE, service_core: false,
+     synonyms: [SALLE CALME, ESPACE CALME, SALLE DE RECUEILLEMENT, SALLE DE PRIERE, SALLE DE MEDITATION]}
+  # ---- Retail (ERP type M) ----
+  - {key: sales_area, label_fr: Surface de vente, label_en: Sales floor, category: ROOM, default_macro_zone: PUBLIC, service_core: false,
+     synonyms: [SURFACE DE VENTE, ESPACE DE VENTE, ZONE DE VENTE, VENTE, MAGASIN, BOUTIQUE, COMMERCE, SHOWROOM, SALLE D'EXPOSITION VENTE]}
+  - {key: fitting_room, label_fr: Cabine d'essayage, label_en: Fitting room, category: ROOM, default_macro_zone: PUBLIC, service_core: false,
+     synonyms: [CABINE D'ESSAYAGE, CABINES D'ESSAYAGE, ESSAYAGE, CABINES]}
+  - {key: checkout, label_fr: Caisses, label_en: Checkout, category: ROOM, default_macro_zone: PUBLIC, service_core: false,
+     synonyms: [CAISSE, CAISSES, ZONE DE CAISSE, LIGNE DE CAISSES, ENCAISSEMENT]}
+  - {key: loading_bay, label_fr: Quai / réception marchandises, label_en: Loading bay, category: ROOM, default_macro_zone: SERVICES, service_core: false,
+     synonyms: [QUAI, QUAI DE LIVRAISON, QUAI DE DECHARGEMENT, AIRE DE LIVRAISON, LIVRAISON, LIVRAISONS, RECEPTION MARCHANDISES, RECEPTION DES MARCHANDISES]}
+  # ---- Food service (ERP type N) ----
+  - {key: dining_room, label_fr: Salle de restaurant, label_en: Dining room, category: ROOM, default_macro_zone: PUBLIC, service_core: false,
+     synonyms: [SALLE DE RESTAURANT, RESTAURANT, RESTAURANT D'ENTREPRISE, RIE, RESTAURATION, SALLE A MANGER, REFECTOIRE, CANTINE, SALLE DE RESTAURATION]}
+  - {key: servery, label_fr: Self / distribution, label_en: Servery, category: ROOM, default_macro_zone: PUBLIC, service_core: false,
+     synonyms: [SELF, SELF-SERVICE, SELF SERVICE, DISTRIBUTION, LIGNE DE SELF, ZONE DE DISTRIBUTION, FREE FLOW]}
+  - {key: bar, label_fr: Bar / café, label_en: Bar / café, category: ROOM, default_macro_zone: PUBLIC, service_core: false,
+     synonyms: [BAR, CAFE, BRASSERIE, COMPTOIR, SALON DE THE]}
+  - {key: commercial_kitchen, label_fr: Cuisine, label_en: Commercial kitchen, category: ROOM, default_macro_zone: SERVICES, service_core: false,
+     synonyms: [CUISINE, CUISINE PROFESSIONNELLE, CUISINE CENTRALE, PREPARATION, PREPARATIONS, PLONGE, LAVERIE, LEGUMERIE, PATISSERIE]}
+  - {key: cold_room, label_fr: Chambre froide, label_en: Cold room, category: ROOM, default_macro_zone: SERVICES, service_core: false,
+     synonyms: [CHAMBRE FROIDE, CHAMBRES FROIDES, CHAMBRE FROIDE POSITIVE, CHAMBRE FROIDE NEGATIVE, CF, CONGELATEUR]}
+  # ---- Education (ERP type R) & libraries (type S) ----
+  - {key: classroom, label_fr: Salle de classe, label_en: Classroom, category: ROOM, default_macro_zone: PUBLIC, service_core: false,
+     synonyms: [SALLE DE CLASSE, CLASSE, SALLE DE COURS, SALLE BANALISEE, SALLE D'ENSEIGNEMENT, SALLE DE TD, TD]}
+  - {key: lecture_hall, label_fr: Amphithéâtre, label_en: Lecture hall, category: ROOM, default_macro_zone: PUBLIC, service_core: false,
+     synonyms: [AMPHITHEATRE, AMPHI, AMPHI., SALLE DE CONFERENCES AMPHI]}
+  - {key: laboratory, label_fr: Laboratoire, label_en: Laboratory, category: ROOM, default_macro_zone: PUBLIC, service_core: false,
+     synonyms: [LABORATOIRE, LABO, LABO., SALLE DE TP, TP, SALLE DE SCIENCES, SALLE DE PHYSIQUE, SALLE DE CHIMIE, SALLE DE SVT]}
+  - {key: computer_room, label_fr: Salle informatique, label_en: Computer room, category: ROOM, default_macro_zone: PUBLIC, service_core: false,
+     synonyms: [SALLE INFORMATIQUE, SALLE MULTIMEDIA, SALLE TICE, SALLE NUMERIQUE, LABO DE LANGUES, LABORATOIRE DE LANGUES]}
+  - {key: workshop, label_fr: Atelier, label_en: Workshop, category: ROOM, default_macro_zone: SERVICES, service_core: false,
+     synonyms: [ATELIER, ATELIERS, ATELIER TECHNOLOGIE, SALLE DE TECHNOLOGIE, TECHNOLOGIE, FABLAB, ATELIER DE MAINTENANCE]}
+  - {key: art_room, label_fr: Salle d'arts plastiques, label_en: Art room, category: ROOM, default_macro_zone: PUBLIC, service_core: false,
+     synonyms: [SALLE D'ARTS PLASTIQUES, ARTS PLASTIQUES, SALLE D'ART, ATELIER ARTS PLASTIQUES, ATELIER D'ARTISTE]}
+  - {key: music_room, label_fr: Salle de musique, label_en: Music room, category: ROOM, default_macro_zone: PUBLIC, service_core: false,
+     synonyms: [SALLE DE MUSIQUE, MUSIQUE, EDUCATION MUSICALE, STUDIO DE REPETITION, SALLE DE REPETITION, STUDIO D'ENREGISTREMENT]}
+  - {key: library, label_fr: Bibliothèque / CDI, label_en: Library, category: ROOM, default_macro_zone: PUBLIC, service_core: false,
+     synonyms: [BIBLIOTHEQUE, MEDIATHEQUE, CDI, C.D.I., CENTRE DE DOCUMENTATION, DOCUMENTATION, SALLE DE LECTURE, BU, LEARNING CENTER, LEARNING CENTRE]}
+  - {key: study_room, label_fr: Salle d'étude, label_en: Study room, category: ROOM, default_macro_zone: PUBLIC, service_core: false,
+     synonyms: [SALLE D'ETUDE, SALLE D'ETUDES, ETUDE, PERMANENCE, SALLE DE PERMANENCE, SALLE DE TRAVAIL, SALLE DE TRAVAIL EN GROUPE]}
+  - {key: playroom, label_fr: Salle de jeux / motricité, label_en: Playroom, category: ROOM, default_macro_zone: PUBLIC, service_core: false,
+     synonyms: [SALLE DE JEUX, SALLE DE MOTRICITE, MOTRICITE, SALLE D'ACTIVITES, SALLE D'EVOLUTION, DORTOIR, SALLE DE SIESTE, CRECHE, GARDERIE]}
+  - {key: covered_yard, label_fr: Préau, label_en: Covered playground, category: ROOM, default_macro_zone: PUBLIC, service_core: false,
+     synonyms: [PREAU, COUR COUVERTE]}
+  - {key: common_room, label_fr: Foyer / salle commune, label_en: Common room, category: ROOM, default_macro_zone: PUBLIC, service_core: false,
+     synonyms: [FOYER, FOYER DES ELEVES, SALLE COMMUNE, MAISON DES LYCEENS, MDL, SALLE DES FETES]}
+  # ---- Health (ERP type U) ----
+  - {key: consultation_room, label_fr: Cabinet de consultation, label_en: Consultation room, category: ROOM, default_macro_zone: PUBLIC, service_core: false,
+     synonyms: [CABINET, CABINET MEDICAL, CABINET DE CONSULTATION, CONSULTATION, CONSULTATIONS, BUREAU DE CONSULTATION, BOX DE CONSULTATION, CABINET INFIRMIER, CABINET DENTAIRE]}
+  - {key: treatment_room, label_fr: Salle de soins, label_en: Treatment room, category: ROOM, default_macro_zone: PUBLIC, service_core: false,
+     synonyms: [SALLE DE SOINS, SOINS, SALLE D'EXAMEN, EXAMEN, SALLE DE PRELEVEMENT, PRELEVEMENTS, SALLE D'INTERVENTION, PETITE CHIRURGIE]}
+  - {key: physiotherapy_room, label_fr: Rééducation / kinésithérapie, label_en: Physiotherapy room, category: ROOM, default_macro_zone: PUBLIC, service_core: false,
+     synonyms: [KINESITHERAPIE, KINE, SALLE DE KINE, REEDUCATION, SALLE DE REEDUCATION, BALNEOTHERAPIE, ERGOTHERAPIE, PSYCHOMOTRICITE]}
+  - {key: imaging_room, label_fr: Imagerie médicale, label_en: Imaging room, category: ROOM, default_macro_zone: PUBLIC, service_core: false,
+     synonyms: [RADIOLOGIE, SALLE DE RADIOLOGIE, RADIO, IMAGERIE, ECHOGRAPHIE, IRM, SALLE DE RADIO, MAMMOGRAPHIE]}
+  - {key: bedroom, label_fr: Chambre, label_en: Bedroom / patient room, category: ROOM, default_macro_zone: PUBLIC, service_core: false,
+     synonyms: [CHAMBRE, CHAMBRES, CHAMBRE PATIENT, CHAMBRE INDIVIDUELLE, CHAMBRE DOUBLE, CHAMBRE PMR, CH.]}
+  - {key: pharmacy, label_fr: Pharmacie, label_en: Pharmacy, category: ROOM, default_macro_zone: PUBLIC, service_core: false,
+     synonyms: [PHARMACIE, OFFICINE, PREPARATOIRE]}
+  - {key: clean_utility, label_fr: Local propre, label_en: Clean utility, category: ROOM, default_macro_zone: SERVICES, service_core: false,
+     synonyms: [LOCAL PROPRE, UTILITE PROPRE, LINGE PROPRE, LOCAL LINGE PROPRE, LINGERIE]}
+  - {key: soiled_utility, label_fr: Local sale / vidoir, label_en: Soiled utility, category: ROOM, default_macro_zone: SERVICES, service_core: false,
+     synonyms: [LOCAL SALE, UTILITE SALE, LINGE SALE, LOCAL LINGE SALE, VIDOIR, LOCAL VIDOIR, DASRI, LOCAL DASRI]}
+  - {key: baby_changing, label_fr: Salle de change / allaitement, label_en: Baby changing / nursing room, category: ROOM, default_macro_zone: SERVICES, service_core: false,
+     synonyms: [CHANGE, SALLE DE CHANGE, ESPACE CHANGE, NURSERIE, SALLE D'ALLAITEMENT, ALLAITEMENT, BIBERONNERIE]}
+  # ---- Sport (ERP type X) ----
+  - {key: sports_hall, label_fr: Gymnase / salle de sport, label_en: Sports hall, category: ROOM, default_macro_zone: PUBLIC, service_core: false,
+     synonyms: [GYMNASE, SALLE DE SPORT, SALLE DE SPORTS, SALLE OMNISPORTS, SALLE MULTISPORTS, HALLE DE SPORTS, SALLE DE GYMNASTIQUE]}
+  - {key: fitness_room, label_fr: Salle de fitness, label_en: Fitness room, category: ROOM, default_macro_zone: PUBLIC, service_core: false,
+     synonyms: [FITNESS, SALLE DE FITNESS, MUSCULATION, SALLE DE MUSCULATION, CARDIO, SALLE CARDIO, SALLE DE REMISE EN FORME]}
+  - {key: dance_studio, label_fr: Salle de danse / dojo, label_en: Dance studio / dojo, category: ROOM, default_macro_zone: PUBLIC, service_core: false,
+     synonyms: [SALLE DE DANSE, STUDIO DE DANSE, DANSE, DOJO, SALLE D'ARTS MARTIAUX, SALLE DE COMBAT, SALLE D'EXPRESSION CORPORELLE]}
+  # ---- Culture & assembly (ERP types L, Y) ----
+  - {key: auditorium, label_fr: Auditorium / salle de spectacle, label_en: Auditorium, category: ROOM, default_macro_zone: PUBLIC, service_core: false,
+     synonyms: [AUDITORIUM, SALLE DE SPECTACLE, SALLE DE SPECTACLES, SALLE DE CONCERT, THEATRE, SALLE DE CINEMA, CINEMA, SALLE DE PROJECTION]}
+  - {key: stage, label_fr: Scène, label_en: Stage, category: ROOM, default_macro_zone: PUBLIC, service_core: false,
+     synonyms: [SCENE, PLATEAU SCENIQUE, AVANT-SCENE, AIRE DE JEU SCENIQUE]}
+  - {key: dressing_room, label_fr: Loges artistes, label_en: Dressing room, category: ROOM, default_macro_zone: SERVICES, service_core: false,
+     synonyms: [LOGES, LOGE ARTISTE, LOGE ARTISTES, LOGE D'ARTISTE, LOGES D'ARTISTES, COULISSES, FOYER DES ARTISTES]}
+  - {key: control_room, label_fr: Régie, label_en: Control / projection room, category: ROOM, default_macro_zone: SERVICES, service_core: false,
+     synonyms: [REGIE, REGIE SON, REGIE LUMIERE, CABINE DE PROJECTION, CABINE DE TRADUCTION]}
+  - {key: exhibition_space, label_fr: Salle d'exposition, label_en: Exhibition space, category: ROOM, default_macro_zone: PUBLIC, service_core: false,
+     synonyms: [SALLE D'EXPOSITION, EXPOSITION, EXPOSITIONS, SALLE D'EXPO, ESPACE D'EXPOSITION, GALERIE, SALLE DE MUSEE, MUSEE]}
+  - {key: cloakroom, label_fr: Vestiaire public / consigne, label_en: Cloakroom, category: ROOM, default_macro_zone: PUBLIC, service_core: false,
+     synonyms: [VESTIAIRE PUBLIC, VESTIAIRES PUBLICS, CONSIGNE, CONSIGNES, BAGAGERIE]}
+  - {key: ticket_office, label_fr: Billetterie, label_en: Ticket office, category: ROOM, default_macro_zone: PUBLIC, service_core: false,
+     synonyms: [BILLETTERIE, BILLETERIE, GUICHET BILLETTERIE]}
+  # ---- Services, safety, parking ----
+  - {key: safe_refuge, label_fr: Espace d'attente sécurisé, label_en: Safe refuge area, category: ROOM, default_macro_zone: SERVICES, service_core: true,
+     synonyms: [ESPACE D'ATTENTE SECURISE, ESPACE D'ATTENTE SECURISEE, EAS, ZONE DE REFUGE]}
+  - {key: bicycle_storage, label_fr: Local vélos, label_en: Bicycle storage, category: ROOM, default_macro_zone: SERVICES, service_core: false,
+     synonyms: [LOCAL VELOS, LOCAL VELO, LOCAL CYCLES, LOCAL 2 ROUES, LOCAL DEUX ROUES, GARAGE A VELOS, ABRI VELOS, STATIONNEMENT VELOS]}
+  - {key: parking, label_fr: Parking, label_en: Car park, category: ROOM, default_macro_zone: SERVICES, service_core: false,
+     synonyms: [PARKING, PARC DE STATIONNEMENT, STATIONNEMENT, GARAGE, GARAGES, BOX VEHICULE]}
+  # ---- Outdoor (recognised on reference plans, never generated) ----
+  - {key: outdoor_space, label_fr: Espace extérieur, label_en: Outdoor space, category: SPECIAL, default_macro_zone: null, service_core: false,
+     synonyms: [TERRASSE, TERRASSES, PATIO, COUR, COUR DE RECREATION, JARDIN, BALCON, LOGGIA, PARVIS, TOITURE TERRASSE, ESPACE EXTERIEUR]}
+  # ======================= special =======================
   - key: unknown
     label_fr: Non identifié
     label_en: Unknown

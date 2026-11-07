@@ -1,12 +1,17 @@
 # Ticket 0.2 — Data Contracts · Eval report
 
+Revision 2 (2026-11-07). This revision applies the Router's spec update: taxonomy v1.1.0
+(75 types, SPECIAL = `outdoor_space` and `unknown`); program rooms and rulebook types now
+reject every SPECIAL and CIRCULATION type; T01, T05 and M11 are updated; T03 has 11 new
+rows; A03 is corrected.
+
 Environment: Python 3.13, pydantic 2.14.3, shapely 2.2.0, jsonschema 4.26.0, pytest 9.2,
 hypothesis 6.170, ruff 0.17.4, mypy 2.4.1 (+ types-PyYAML, types-shapely).
 Command: `PYTHONPATH=src pytest --timeout=60 tests/contracts`. There is no `src/ale/__init__.py`
 and no `pyproject.toml` in this tree. Both belong to Ticket 0.1. Implicit namespace packages
 were used, and the suite was run in that state.
 
-**Result: 181 passed, 1 xfailed (documented spec issue, A03), 0 failed, 0 skipped. Wall time about 4 s.**
+**Result: 203 passed, 0 failed, 0 xfailed, 0 skipped. Wall time about 6 s.**
 
 ## Test results
 
@@ -20,8 +25,7 @@ were used, and the suite was run in that state.
 | U06 | `test_units.py::test_U06_no_float_modulo`, `test_U06_checker_detects_planted_violations` (×9) | PASS |
 | A01 | `test_area_rule.py::test_A01_directive_table` (×6), `test_A01_delta_7_5` | PASS |
 | A02 | `test_area_rule.py::test_A02_cap_gap` | PASS |
-| A03 | `test_area_rule.py::test_A03_bounds_exact` | PASS (bounds exact; see spec issue 1 for the rectangles) |
-| A03 | `test_area_rule.py::test_A03_bounds_exact_literal_rects` | XFAIL (strict). Spec issue 1 |
+| A03 | `test_area_rule.py::test_A03_bounds_exact` | PASS (corrected values: 97×10 and 10×112 valid; 19×51 and 19×59 invalid) |
 | A04 | `test_area_rule.py::test_A04_pct_regime` | PASS |
 | A05 | `test_area_rule.py::test_A05_check_fields` | PASS |
 | A06 | `test_area_rule.py::test_A06_narrow_band` | PASS |
@@ -33,11 +37,11 @@ were used, and the suite was run in that state.
 | O02 | `test_orientation.py::test_O02_bearings_rotated` | PASS |
 | O03 | `test_orientation.py::test_O03_bins` (×11) | PASS |
 | O04 | `test_orientation.py::test_O04_normals` | PASS |
-| T01 | `test_taxonomy.py::test_T01_load_valid` | PASS (byte-identical to `taxonomy.v1.yaml`) |
+| T01 | `test_taxonomy.py::test_T01_load_valid` | PASS (75 types, version 1.1.0, SPECIAL = outdoor_space and unknown, byte-identical to `taxonomy.v1.yaml`) |
 | T02 | `test_taxonomy.py::test_T02_integrity_errors` (×8), `test_T02_lists_every_problem` | PASS |
-| T03 | `test_taxonomy.py::test_T03_normalisation_table` (×24) | PASS (all 24 rows match) |
-| T04 | `test_taxonomy.py::test_T04_canonical_forms` (×24), `test_T04_canonical_extra_rules` | PASS |
-| T05 | `test_taxonomy.py::test_T05_room_type_validator` | PASS |
+| T03 | `test_taxonomy.py::test_T03_normalisation_table` (×35) | PASS (all 35 rows match, including the 11 new v1.1 rows) |
+| T04 | `test_taxonomy.py::test_T04_canonical_forms` (×35), `test_T04_canonical_extra_rules` | PASS |
+| T05 | `test_taxonomy.py::test_T05_room_type_validator` | PASS (kitchen, unknown, outdoor_space and circulation rejected) |
 | M01 | `test_models.py::test_M01_roundtrip_json` (×7 models) | PASS |
 | M02 | `test_models.py::test_M02_roundtrip_yaml` (×3), `test_M02_yaml_field_order_and_dates` | PASS |
 | M03 | `test_models.py::test_M03_strict_ints` | PASS |
@@ -48,7 +52,7 @@ were used, and the suite was run in that state.
 | M08 | `test_models.py::test_M08_placed_room`, `test_M08_layout_rules` | PASS |
 | M09 | `test_models.py::test_M09_polish_expression`, `test_M09_polish_valid` (×6), `test_M09_polish_invalid` (×7) | PASS |
 | M10 | `test_models.py::test_M10_plan_geometry`, `test_M10_extraction_parts` | PASS |
-| M11 | `test_models.py::test_M11_rulebook_rules` | PASS |
+| M11 | `test_models.py::test_M11_rulebook_rules` | PASS (`types` keys circulation, outdoor_space, unknown and kitchen rejected) |
 | M12 | `test_models.py::test_M12_rulebook_hash` (subprocess) | PASS |
 | J01 | `test_serialization.py::test_J01_canonical_bytes`, `test_J01_float_rounding` | PASS |
 | J02 | `test_serialization.py::test_J02_schema_no_drift` (subprocess + tmp copy), `test_J02_export_in_process` | PASS |
@@ -67,19 +71,14 @@ Extra tests: `test_area_rule_preconditions`, `test_label_match_model` and
 | `ruff check --line-length 100 --target-version py311 --select E,F,W,I,B,UP,SIM,PTH,RUF src/ale/contracts tests/contracts` | clean |
 | `ruff format --check --line-length 100 src/ale/contracts tests/contracts` | clean (20 files) |
 | `mypy` (`strict = True`, `plugins = pydantic.mypy`), `-p ale.contracts` | 0 errors (14 source files) |
-| Coverage `--cov=ale.contracts --cov-branch` | **99.7 % line** (1160/1163), **98.6 % branch** (339/344) |
-| `python -m ale.contracts.export_schemas --check` | exit 0 |
+| Coverage `--cov=ale.contracts --cov-branch` | **99.7 % line** (1160/1163), **98.5 % branch** (337/342) |
+| `python -m ale.contracts.export_schemas --check` | exit 0 (taxonomy v1.1 does not change any schema, so no files were regenerated) |
 | Ownership | only RD §3 paths plus this report. No `CONTRACTS.lock`, `src/ale/__init__.py` or `pyproject.toml` |
 
 ## Spec issues, ambiguities and decisions
 
-1. **A03 expectation is inconsistent (disagreement).** With `module_mm = 100`, one cell is 0.01 m².
-   The rectangles 97×100, 100×112 and 101×111 modules measure 97 m², 112 m² and 112.11 m². They do
-   not measure 9.70, 11.20 and 11.211 m². Only 19×51 = 9.69 m² is consistent. 11.211 m² cannot be
-   built on a 0.10 m grid at all. The bounds part `(9_700_000, 11_200_000)` passes. To test the
-   intent, `test_A03_bounds_exact` uses rectangles that sit exactly on the bounds: 97×10 = 9.70 m²
-   and 10×112 = 11.20 m² are valid, and 19×51 = 9.69 m² and 19×59 = 11.21 m² are invalid. The
-   literal assertions are kept unchanged in a strict-xfail test.
+1. **A03 (resolved).** The Router confirmed the original rectangles were wrong and corrected eval.md
+   to 97×10, 10×112, 19×51 and 19×59. The strict-xfail test with the old values is deleted.
 2. **Shapely typing.** Shapely 2.2 ships no `py.typed`. Strict mypy passes here because
    `types-shapely` is installed. Ticket 0.1's dev dependencies or mypy config should add
    `types-shapely`, or set `ignore_missing_imports` for `shapely.*`. Without one of these, mypy

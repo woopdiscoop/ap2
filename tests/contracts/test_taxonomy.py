@@ -41,13 +41,26 @@ TABLE = [
     ("Accueil / attente", "ACCUEIL ATTENTE", "reception", "prefix"),
     ("VESTIAIRES H/F", "VESTIAIRES HF", "locker_room", "exact"),
     ("XYZ", "XYZ", "unknown", "none"),
+    ("Chambre froide positive", "CHAMBRE FROIDE POSITIVE", "cold_room", "exact"),
+    ("Chambre 12", "CHAMBRE", "bedroom", "exact"),
+    ("Loge gardien", "LOGE GARDIEN", "security_room", "exact"),
+    ("Salle informatique", "SALLE INFORMATIQUE", "computer_room", "exact"),
+    ("Local informatique", "LOCAL INFORMATIQUE", "it_room", "exact"),
+    ("C.D.I.", "CDI", "library", "exact"),
+    ("Amphi A", "AMPHI A", "lecture_hall", "prefix"),
+    ("Plateau scénique", "PLATEAU SCENIQUE", "stage", "exact"),
+    ("Espace d'attente sécurisé", "ESPACE D ATTENTE SECURISE", "safe_refuge", "exact"),
+    ("Terrasse", "TERRASSE", "outdoor_space", "exact"),
+    ("Salle de classe 103", "SALLE DE CLASSE", "classroom", "exact"),
 ]
 
 
 def test_T01_load_valid(h: SimpleNamespace) -> None:
     tax = load_taxonomy()
-    assert len(tax.types) == 25
-    assert tax.version == "1.0.0"
+    assert len(tax.types) == 75
+    assert tax.version == "1.1.0"
+    special = [t.key for t in tax.types if t.category is TypeCategory.SPECIAL]
+    assert sorted(special) == ["outdoor_space", "unknown"]
     assert TAXONOMY_PATH.read_bytes() == (h.TICKET_DIR / "taxonomy.v1.yaml").read_bytes()
     assert load_taxonomy() is tax  # cached
     assert tax.keys()[0] == "office"
@@ -181,6 +194,6 @@ def _room(type_key: str) -> RoomSpec:
 
 def test_T05_room_type_validator() -> None:
     assert _room("office").type == "office"
-    for bad in ("kitchen", "unknown", "circulation"):
+    for bad in ("kitchen", "unknown", "outdoor_space", "circulation"):
         with pytest.raises(ValidationError):
             _room(bad)
