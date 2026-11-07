@@ -6,7 +6,9 @@
 #
 # HOW TO FILL IT
 #   * Replace every `null` with a number. Nothing else needs to change.
-#   * A room type you do not need yet: delete its whole block under `types:`.
+#   * A room type you do not need yet: delete its line under `types:`.
+#   * 49 more types (retail, food service, education, health, sport, culture...) are listed
+#     commented-out at the end of `types:`; uncomment the ones you need.
 #     ALE then refuses any program that uses that type, and says so.
 #   * Check your work at any time:
 #         python -m ale.contracts.validate rulebook seed_rulebook.yaml
@@ -74,6 +76,66 @@ types:
   # ---------------- VERTICAL (fixed elements; orientation usually 0) ----------------
   stair:               {aspect: {p10: 1.0, p50: 1.4, p90: 2.0}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
   lift:                {aspect: {p10: 1.0, p50: 1.4, p90: 2.0}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+
+  # ======== OPTIONAL TYPES (taxonomy v1.1) — uncomment the ones your programs use ========
+  # Remove the leading '# ' of a line to activate it, then fill its nulls.
+  # ---------------- OFFICES / ADMINISTRATION ----------------
+  # focus_room:          {aspect: {p10: 1.0, p50: 1.4, p90: 2.0}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  # mail_room:           {aspect: {p10: 1.0, p50: 1.4, p90: 2.0}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  # staff_room:          {aspect: {p10: 1.0, p50: 1.4, p90: 2.0}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  # security_room:       {aspect: {p10: 1.0, p50: 1.4, p90: 2.0}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  # first_aid_room:      {aspect: {p10: 1.0, p50: 1.4, p90: 2.0}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  # quiet_room:          {aspect: {p10: 1.0, p50: 1.4, p90: 2.0}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  # ---------------- RETAIL ----------------
+  # sales_area:          {aspect: {p10: 1.0, p50: 1.4, p90: 2.0}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  # fitting_room:        {aspect: {p10: 1.0, p50: 1.4, p90: 2.0}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  # checkout:            {aspect: {p10: 1.0, p50: 1.4, p90: 2.0}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  # loading_bay:         {aspect: {p10: 1.0, p50: 1.4, p90: 2.0}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  # ---------------- FOOD SERVICE ----------------
+  # dining_room:         {aspect: {p10: 1.0, p50: 1.4, p90: 2.0}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  # servery:             {aspect: {p10: 1.0, p50: 1.4, p90: 2.0}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  # bar:                 {aspect: {p10: 1.0, p50: 1.4, p90: 2.0}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  # commercial_kitchen:  {aspect: {p10: 1.0, p50: 1.4, p90: 2.0}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  # cold_room:           {aspect: {p10: 1.0, p50: 1.4, p90: 2.0}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  # ---------------- EDUCATION & LIBRARIES ----------------
+  # classroom:           {aspect: {p10: 1.0, p50: 1.4, p90: 2.0}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  # lecture_hall:        {aspect: {p10: 1.0, p50: 1.4, p90: 2.0}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  # laboratory:          {aspect: {p10: 1.0, p50: 1.4, p90: 2.0}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  # computer_room:       {aspect: {p10: 1.0, p50: 1.4, p90: 2.0}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  # workshop:            {aspect: {p10: 1.0, p50: 1.4, p90: 2.0}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  # art_room:            {aspect: {p10: 1.0, p50: 1.4, p90: 2.0}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  # music_room:          {aspect: {p10: 1.0, p50: 1.4, p90: 2.0}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  # library:             {aspect: {p10: 1.0, p50: 1.4, p90: 2.0}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  # study_room:          {aspect: {p10: 1.0, p50: 1.4, p90: 2.0}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  # playroom:            {aspect: {p10: 1.0, p50: 1.4, p90: 2.0}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  # covered_yard:        {aspect: {p10: 1.0, p50: 1.4, p90: 2.0}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  # common_room:         {aspect: {p10: 1.0, p50: 1.4, p90: 2.0}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  # ---------------- HEALTH ----------------
+  # consultation_room:   {aspect: {p10: 1.0, p50: 1.4, p90: 2.0}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  # treatment_room:      {aspect: {p10: 1.0, p50: 1.4, p90: 2.0}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  # physiotherapy_room:  {aspect: {p10: 1.0, p50: 1.4, p90: 2.0}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  # imaging_room:        {aspect: {p10: 1.0, p50: 1.4, p90: 2.0}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  # bedroom:             {aspect: {p10: 1.0, p50: 1.4, p90: 2.0}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  # pharmacy:            {aspect: {p10: 1.0, p50: 1.4, p90: 2.0}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  # clean_utility:       {aspect: {p10: 1.0, p50: 1.4, p90: 2.0}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  # soiled_utility:      {aspect: {p10: 1.0, p50: 1.4, p90: 2.0}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  # baby_changing:       {aspect: {p10: 1.0, p50: 1.4, p90: 2.0}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  # ---------------- SPORT ----------------
+  # sports_hall:         {aspect: {p10: 1.0, p50: 1.4, p90: 2.0}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  # fitness_room:        {aspect: {p10: 1.0, p50: 1.4, p90: 2.0}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  # dance_studio:        {aspect: {p10: 1.0, p50: 1.4, p90: 2.0}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  # ---------------- CULTURE & ASSEMBLY ----------------
+  # auditorium:          {aspect: {p10: 1.0, p50: 1.4, p90: 2.0}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  # stage:               {aspect: {p10: 1.0, p50: 1.4, p90: 2.0}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  # dressing_room:       {aspect: {p10: 1.0, p50: 1.4, p90: 2.0}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  # control_room:        {aspect: {p10: 1.0, p50: 1.4, p90: 2.0}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  # exhibition_space:    {aspect: {p10: 1.0, p50: 1.4, p90: 2.0}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  # cloakroom:           {aspect: {p10: 1.0, p50: 1.4, p90: 2.0}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  # ticket_office:       {aspect: {p10: 1.0, p50: 1.4, p90: 2.0}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  # ---------------- SERVICES, SAFETY, PARKING ----------------
+  # safe_refuge:         {aspect: {p10: 1.0, p50: 1.4, p90: 2.0}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  # bicycle_storage:     {aspect: {p10: 1.0, p50: 1.4, p90: 2.0}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  # parking:             {aspect: {p10: 1.0, p50: 1.4, p90: 2.0}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
 
 adjacency:
   default_p: null       # REQUIRED — p for unlisted pairs (0.5 = neutral)
