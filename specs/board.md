@@ -14,7 +14,7 @@ Maintained by the Router only. Directive: `specs/DIRECTIVE.md` (v2.2, supersedes
 | 0.2 | Data contracts | **DONE** | — | RD + eval + taxonomy v1 | Frozen at 1.0.0 via `CONTRACTS.lock` once 0.1 and 0.2 are DONE. |
 | 0.3 | Seed rulebook | **READY (user input)** | user values; validation needs 0.2 | template + RD + eval | Aspect pre-filled (U-2); remaining ≈ 196 entries: area + orientation per type, 30 pairs, core offset. Unused types can be deleted. |
 | 0.4 | Guards & test harness | **DONE** | — | RD + eval + fixtures | `ale.guards.bounded`, `ale.proc.run_tool`, fixtures P8/P25/P60 + 3 sites (Router-verified). Dispatch right after 0.1/0.2 merge. |
-| 3.1 | Program & site ingestion | **IN-PROGRESS** | — (0.2, 0.4 done) | RD + eval | Excel → Program with full French error report; site.yaml/DXF → module footprint; feasibility; template + `ale program check`. |
+| 3.1 | Program & site ingestion | **DONE** | — (0.2, 0.4 done) | RD + eval | Excel → Program with full French error report; site.yaml/DXF → module footprint; feasibility; template + `ale program check`. |
 | 3.2 | Topology & seeding | BLOCKED | 3.1, A.1, 0.3 | — | Adjacency graph, planarity diagnostic, seeded force layout → initial **CorridorPlan** (grammar). |
 | 3.3 | Grammar realization | BLOCKED | A.1 (3.1 interface already specified) | — | CorridorPlan → integer-module Layout: block depths, bay/stack widths, end strips; checks overlap, coverage, area, aspect ≤ 2, corridor contact, façade. |
 | 3.4 | SA optimizer | BLOCKED | 3.2, 3.3 | — | Metropolis over grammar moves G1–G6 (U-6). |
@@ -67,6 +67,7 @@ with ground truth. The Router will issue an annotation template before Phase 1.
 ## History
 
 - 2026-11-06 — v2.0 workspace initialised (tickets 1.1, 1.2 specified).
+- 2026-11-07 — 3.1 merged after review (465 tests with extras / 430 dev-only). CI now installs `.[dev,excel,cad]`; 0.1 doctor tests made extras-independent. A.1 in rework (rotation-invariant tie rule).
 - 2026-11-07 — User decision U-6: corridor grammar. Design note written; contract amendment A.1 specified (READY); 3.2/3.3/3.4 re-scoped.
 - 2026-11-07 — **Phase 0 verified on Windows / macOS / Linux × Python 3.11–3.13**: CI runs #4, #5, #6 green on all 9 jobs (408 tests). Ticket 0.1 eval P05 satisfied.
 - 2026-11-07 — CI run #3: Windows ✔ (all 3). One intermittent Ubuntu/3.11 failure: race in 0.4 test cleanup helper (check-then-kill) — fixed test-only, merged. 3.1 Worker dispatched.

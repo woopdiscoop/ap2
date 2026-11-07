@@ -18,3 +18,4 @@ Parked:
 - Accepted: extra codes E_FILE_UNREADABLE / E_SITE_SCHEMA / E_RULEBOOK_INVALID (spec gap); ModuleFootprint in ale/program/models.py.
 - Rework requested: replace `__import__` registration by a normal import + registration (spec over-constrained to one line — Router error, eval P08 amended).
 - Cross-ticket finding: CI installs only `.[dev]` so 3.1 tests skip in CI; 0.1 doctor tests D01/D06/D09 assume extras are absent. Fix routed to the 0.1 Worker (ci.yml extras + extras-independent doctor tests).
+- 2026-11-07 — Attempt 2 (7be5f63): normal import + add_typer. **DONE** (merged with 0.1 CI fix: 465 pass with extras, 430 pass dev-only).
