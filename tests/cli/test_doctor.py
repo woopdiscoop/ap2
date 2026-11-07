@@ -337,3 +337,16 @@ def test_D09_no_network(
     monkeypatch.setattr(socket.socket, "connect_ex", no_network)
     monkeypatch.setattr(socket, "create_connection", no_network)
     body_d01(invoke, make_ws, tmp_path)
+
+
+def test_D01_clean_machine_extras_reported_when_importable(
+    invoke, make_ws, tmp_path: Path, doctor_env: Path, show_extras
+) -> None:
+    """Companion of D01: an importable extra is reported ok (not required)."""
+    show_extras()
+    ws = make_ws(tmp_path / "ws")
+    code, report = doctor_json(invoke, ws)
+    assert code == 0
+    extras = {n: c for n, c in by_name(report).items() if n.startswith("extra ")}
+    assert len(extras) == 6
+    assert all(c["status"] == "ok" and c["required"] is False for c in extras.values())
