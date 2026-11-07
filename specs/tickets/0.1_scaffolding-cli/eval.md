@@ -40,7 +40,7 @@ The Router re-runs the suite on a clean checkout before merging.
 |---|---|---|
 | C01 | defaults | `AleConfig()` field values equal RD §6 exactly (table-driven, every key). |
 | C02 | partial_file | An `ale.toml` containing only `[grid]\nmodule_mm = 300` loads; every other value is default. |
-| C03 | errors_named | Each of these produces exit 4 and a stderr line starting `ale.toml: <key>:` — unknown key `[grid].modul_mm`; `vlm.temperature = 0.2`; `circulation.ratio = -0.1`; `grid.module_mm = 600.5`; `optimizer.cooling = 1.0`; `workspace.format_version = 2`; malformed TOML (line number reported). |
+| C03 | errors_named | Each of these produces exit 4 and a stderr line starting `ale.toml: <key>:` — unknown key `[grid].modul_mm`; `vlm.temperature = 0.2`; `circulation.ratio = -0.1`; `grid.module_mm = 600.5`; `optimizer.cooling = 1.0`; `shape.aspect_max = 0.5`; `workspace.format_version = 2`; malformed TOML (line number reported). |
 | C04 | frozen | Assigning to any `AleConfig` field raises `ValidationError`. |
 | C05 | schema_no_drift | `AleConfig.model_json_schema()` serialised with `json.dumps(..., indent=2, sort_keys=True)` + `"\n"` equals the committed `config.schema.json` byte-for-byte. |
 | C06 | relative_paths_workspace | `tools.oda_file_converter = "bin/ODAFileConverter.exe"` resolves to `<workspace>/bin/ODAFileConverter.exe` regardless of the process CWD (test changes CWD via `monkeypatch.chdir`). |

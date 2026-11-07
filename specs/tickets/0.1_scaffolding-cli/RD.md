@@ -113,6 +113,10 @@ tol_down_pct   = 3.0                    # float 0..20
 tol_up_pct     = 3.0                    # float 0..20
 tol_up_abs_m2  = 1.2                    # float 0..10
 
+[shape]
+aspect_max = 2.0                        # float 1.0..6.0, HARD limit long side / short side for every room
+                                        # (user decision U-2: 1:2 minimum, 2:1 maximum); circulation is exempt
+
 [circulation]
 ratio            = 0.18                 # float 0.05..0.5   (open)
 min_door_edge_m  = 1.2                  # float > 0

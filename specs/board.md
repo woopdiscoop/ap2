@@ -21,8 +21,8 @@ Maintained by the Router only. Directive: `specs/DIRECTIVE.md` (v2.2, supersedes
 | 3.5 | Export & report | BLOCKED | 3.3 (3.4 for final metrics) | — | DXF / SVG / JSON / report.md. |
 | 1.1 | Corpus ingestion & classification | BLOCKED | 0.1, 0.2, 0.4 · **test corpus** | — | `ale ingest`; vector/scanned PDF per page. |
 | 1.2 | CAD reader (DWG + DXF) | BLOCKED | 1.1 · test corpus · decision O-5 | — | ODA File Converter / accoreconsole. |
-| 1.3 | Vector-PDF reader | BLOCKED | 1.1 · test corpus · decision O-8 | — | |
-| 1.4 | Raster reader | BLOCKED | 1.1 · test corpus · decision O-4 | — | |
+| 1.3 | Vector-PDF reader | BLOCKED | 1.1 · test corpus | — | PyMuPDF. |
+| 1.4 | Raster reader | BLOCKED | 1.1 · test corpus | — | CubiCasa5K (v2.0 spec in git history reusable). |
 | 1.5 | Semantic labelling | BLOCKED | 1.2, 1.3, 1.4 · decision O-3 | — | CAD text → PDF text → VLM → manual. |
 | 1.6 | Geometry join & scale | BLOCKED | 1.5 | — | Scale hierarchy, Hungarian label matching. |
 | 2.1 | Topology extraction | BLOCKED | 1.6 | — | |
@@ -37,7 +37,8 @@ with ground truth. The Router will issue an annotation template before Phase 1.
 | ID | Decision | Effect |
 |---|---|---|
 | U-1 | **Planning module 0.10 m** instead of 0.60 m (overrides directive §3.B.4). | `grid.module_mm` default = 100; geometry stays integer modules. On this grid every target from 2 to 60 m² fits a 1:1–1:2 rectangle within +0.11 m², with no undershoot. |
-| U-2 | **Proportions from 1:1 to 1:2, approximately.** | Aspect band 1.0–2.0 is a soft preference (cost), pre-filled for all types in the seed template (p10 1.0, p50 1.4, p90 2.0). Resolves O-2: the area rule is hard, aspect is costed. |
+| U-2 | **Proportions: 1:2 minimum, 2:1 maximum** (hard). | New config key `shape.aspect_max = 2.0`, a hard rule like the area rule (circulation exempt). Seed template pre-filled 1.0 / 1.4 / 2.0, p90 ≤ 2.0 enforced. Both hard rules verified jointly feasible on the 0.10 m grid for every target 0.5–500 m². Resolves O-2. |
+| U-4 | **Academic project, not for commercial use.** | Resolves O-4 (CubiCasa5K usable: attribution + share-alike on any published derived weights/data) and O-8 (PyMuPDF usable). Reference-plan copyright rule of directive §7 still applies: plans stay out of the repo, only derived statistics are kept. |
 | U-3 | **Corridors can be narrow.** | `circulation.min_width_m` default 1.8 → 0.9 m. Exact minimum to confirm. |
 
 ## Open decisions
@@ -45,13 +46,14 @@ with ground truth. The Router will issue an annotation template before Phase 1.
 | ID | Decision | Router recommendation | Blocks |
 |---|---|---|---|
 | O-1 | Default circulation ratio | Keep **0.18** (directive default) as the config default; it is overridable per run. | nothing (default already set) |
-| O-2 | ~~Aspect band vs area rule~~ | **Resolved by U-1/U-2**: area rule hard, aspect soft. | — |
+| O-2 | ~~Aspect band vs area rule~~ | **Resolved by U-1/U-2**: both hard; per-type bands soft inside 2:1. | — |
 | O-3 | VLM provider + model | Choose one with deterministic temperature-0 output, JSON mode, and a bbox convention we can test. | 1.5 |
-| O-4 | Raster model licence (CubiCasa5K is CC BY-NC-SA 4.0) | Since the firm's own DWG/DXF are the core corpus, start raster with classical CV for walls (no licence issue) and decide on a learned model after measuring 1.4 on the test set. | 1.4 |
+| O-4 | ~~Raster model licence~~ | **Resolved by U-4**: CubiCasa5K allowed (non-commercial). | — |
 | O-5 | ODA File Converter vs AutoCAD `accoreconsole` on the target workstation | ODA as primary (free, no AutoCAD licence needed); accoreconsole only where AutoCAD is already installed. Need: which is installed on the workstation. | 1.2 |
 | O-6 | Orientation granularity | 4 bearings (N/E/S/W) in v1 — halves the architect's inputs. | 0.2 (assumed in spec) |
 | O-7 | Macro-zone list | PUBLIC / ADMINISTRATIVE / SERVICES in v1. | 0.2 (assumed in spec) |
-| O-8 | PyMuPDF (AGPL-3.0) for vector PDFs | Acceptable for in-firm use; if ALE may be distributed outside the firm, use `pdfplumber`/`pdfminer.six` (MIT) instead. | 1.3 |
+| O-8 | ~~PyMuPDF licence~~ | **Resolved by U-4**: allowed. | — |
+| O-10 | Repository licence | If the code is published (e.g. with a thesis), AGPL-3.0 is the simplest choice compatible with PyMuPDF; otherwise keep the repo private and unlicensed. Not blocking. | — |
 | O-9 | Taxonomy v1 review | Check the 25 types, their default macro-zones/service-core flags, and synonyms (notably `OFFICE` → kitchenette). | 0.2 (spec uses the draft) |
 
 ## Corrections to the directive found while specifying
@@ -62,5 +64,6 @@ with ground truth. The Router will issue an annotation template before Phase 1.
 ## History
 
 - 2026-11-06 — v2.0 workspace initialised (tickets 1.1, 1.2 specified).
+- 2026-11-07 — U-2 clarified (2:1 is a hard maximum → `shape.aspect_max`); U-4 academic non-commercial use resolves O-4 and O-8.
 - 2026-11-07 — User decisions U-1 (0.10 m module), U-2 (aspect ≈ 1:1–1:2), U-3 (narrow corridors) applied to 0.1, 0.2, 0.3 specs. Spec bug fixed in 0.2: the area helper now rounds **up** (`best_buildable_rect`).
 - 2026-11-07 — Directive v2.2 received; v2.0 tickets retired (kept in git history). `specs/` rebuilt: 0.1 and 0.2 specified and READY, 0.3 template issued (READY, user input), all other tickets BLOCKED.

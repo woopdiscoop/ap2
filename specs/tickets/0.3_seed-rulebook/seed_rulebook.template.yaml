@@ -13,11 +13,11 @@
 #
 # UNITS & MEANINGS
 #   aspect     long side / short side of the room rectangle (1.0 = square, 2.0 = 1:2).
-#              PRE-FILLED from the architect's rule "proportions between 1:1 and 1:2, approximately":
-#              p10 1.0 / p90 2.0 for every type; p50 1.4 is a Router default for the typical shape.
-#              Change any type that differs. Rule: 1.0 <= p10 <= p50 <= p90 <= 6.0.
-#              The band is a preference (cost), not a hard limit; on the 0.10 m grid every
-#              target area from 2 to 60 m2 fits a 1:1-1:2 rectangle within +0.11 m2.
+#              HARD LIMIT (architect rule): never beyond 2:1 — so p90 must be <= 2.0.
+#              PRE-FILLED p10 1.0 / p90 2.0 for every type; p50 1.4 is a Router default for the
+#              typical shape. Narrow a type's band if you wish (e.g. meeting rooms 1.2-1.6): inside the
+#              hard limit the band is a preference. Rule: 1.0 <= p10 <= p50 <= p90 <= 2.0.
+#              On the 0.10 m grid every target area fits within 2:1 and the area tolerance.
 #   area_m2    typical net area of ONE room of that type, in m2 (p10 <= p50 <= p90).
 #              Used for sanity checks and blending, not as targets (targets come from the Excel program).
 #   orientation  preference for the façade a room faces, per compass direction, from

@@ -23,6 +23,13 @@ Compass: `north_angle_deg` = clockwise angle from drawing +y to true north; faç
 (`area_bounds_mm2`, `check_area`, `best_buildable_rect`) with exact integer mm² bounds.
 `best_buildable_rect` rounds **up**: smallest area ≥ target first; only if none exists, the largest area below target (≥ −3 %).
 
+## The proportion rule (user decision U-2)
+
+Every room satisfies `long side / short side ≤ shape.aspect_max` (default **2.0**, i.e. between 1:2 and 2:1).
+This is **hard**, like the area rule; circulation is exempt. Per-type rulebook bands (p10–p90, inside the
+hard limit) are only preferences. On the 0.10 m grid both hard rules can always be met together
+(Router check: every target from 0.5 to 500 m² has a rectangle, never below target, overshoot ≤ 0.18 m²).
+
 ## Models
 
 | Model | Phase | Purpose |

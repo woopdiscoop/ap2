@@ -20,7 +20,7 @@ types should and should not touch; and where the service core usually sits.
 | Block | Per | Values | Rule |
 |---|---|---|---|
 | `author`, `date` | file | 2 | non-empty; `YYYY-MM-DD` |
-| `types.<t>.aspect` | room type | p10, p50, p90 — **pre-filled 1.0 / 1.4 / 2.0** (user rule U-2), review only | 1.0 ≤ p10 ≤ p50 ≤ p90 ≤ 6.0 (long/short side) |
+| `types.<t>.aspect` | room type | p10, p50, p90 — **pre-filled 1.0 / 1.4 / 2.0** (user rule U-2), review only | 1.0 ≤ p10 ≤ p50 ≤ p90 ≤ `shape.aspect_max` (2.0) |
 | `types.<t>.area_m2` | room type | p10, p50, p90 | 0 < p10 ≤ p50 ≤ p90 (m², one room) |
 | `types.<t>.orientation` | room type | N, E, S, W | each in [−1, 1] |
 | `adjacency.default_p` | file | 1 | [0, 1] |
@@ -36,6 +36,6 @@ type is refused at generation time with a message naming the type.
 - The types used by the shared test fixtures of Ticket 0.4 must not be deleted:
   `office, open_office, meeting_room, entrance_hall, reception, sanitary, sanitary_accessible,
   storage, technical_room, it_room, kitchenette, stair, lift`.
-- The aspect band is a preference (soft cost), per the user's "approximately 1:1 to 1:2". Bands narrower
-  than 1.0–2.0 are allowed; on the 0.10 m grid they rarely conflict with the area rule, and when they do the
-  area rule wins and the aspect deviation is costed (decision O-2).
+- 2:1 is a hard maximum (U-2): no room may exceed it, so p90 ≤ 2.0. A narrower band inside it is a preference;
+  if a band cannot meet the area rule for some target, the generator falls back to the hard limit 1.0–2.0
+  (always feasible on the 0.10 m grid) and costs the deviation from the band.
