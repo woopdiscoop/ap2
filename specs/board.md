@@ -10,8 +10,8 @@ Maintained by the Router only. Directive: `specs/DIRECTIVE.md` (v2.2, supersedes
 
 | Ticket | Title | Status | Depends on | Spec | Notes |
 |---|---|---|---|---|---|
-| 0.1 | Scaffolding & CLI | **READY** | — | RD + eval | Owns `pyproject.toml`, CLI, `ale.toml` contract (`AleConfig`). Parallel-safe with 0.2 (disjoint files). |
-| 0.2 | Data contracts | **READY** | — | RD + eval + taxonomy v1 | Frozen at 1.0.0 via `CONTRACTS.lock` once 0.1 and 0.2 are DONE. |
+| 0.1 | Scaffolding & CLI | **IN-PROGRESS** | — | RD + eval | Owns `pyproject.toml`, CLI, `ale.toml` contract (`AleConfig`). Parallel-safe with 0.2 (disjoint files). |
+| 0.2 | Data contracts | **IN-PROGRESS** | — | RD + eval + taxonomy v1 | Frozen at 1.0.0 via `CONTRACTS.lock` once 0.1 and 0.2 are DONE. |
 | 0.3 | Seed rulebook | **READY (user input)** | user values; validation needs 0.2 | template + RD + eval | Aspect pre-filled (U-2); remaining ≈ 196 entries: area + orientation per type, 30 pairs, core offset. Unused types can be deleted. |
 | 0.4 | Guards & test harness | BLOCKED | 0.1, 0.2 | — | `ale.guards.bounded`, subprocess runner, shared fixtures (8/25/60 rooms; rectangle + L sites). |
 | 3.1 | Program & site ingestion | BLOCKED | 0.2, 0.4 · (1.2 only for DWG sites) | — | Excel template, feasibility pre-check. |
@@ -64,6 +64,7 @@ with ground truth. The Router will issue an annotation template before Phase 1.
 ## History
 
 - 2026-11-06 — v2.0 workspace initialised (tickets 1.1, 1.2 specified).
+- 2026-11-07 — Workers dispatched for 0.1 and 0.2 (isolated worktrees, in parallel).
 - 2026-11-07 — U-3 confirmed: corridors 1.2 m minimum.
 - 2026-11-07 — U-2 clarified (2:1 is a hard maximum → `shape.aspect_max`); U-4 academic non-commercial use resolves O-4 and O-8.
 - 2026-11-07 — User decisions U-1 (0.10 m module), U-2 (aspect ≈ 1:1–1:2), U-3 (narrow corridors) applied to 0.1, 0.2, 0.3 specs. Spec bug fixed in 0.2: the area helper now rounds **up** (`best_buildable_rect`).
