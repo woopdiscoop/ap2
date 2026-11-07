@@ -1,0 +1,15 @@
+# Fixture P25 — medium office, 25 room instances, 334.0 m² net. Pairs with site_rect.
+rooms:
+  - {id: H01, name: Hall d'entrée, type: entrance_hall, target_area_m2: 25.0, macro_zone: PUBLIC, needs_facade: true, adjacent_to: [H02, V02]}
+  - {id: H02, name: Accueil, type: reception, target_area_m2: 12.0, macro_zone: PUBLIC, adjacent_to: [M01]}
+  - {id: B01, name: Bureau, type: office, target_area_m2: 12.0, quantity: 10, macro_zone: ADMINISTRATIVE, needs_facade: true, orientation_override: {S: 1.0, E: 0.6, N: 0.2, W: -0.4}}
+  - {id: B02, name: Plateau, type: open_office, target_area_m2: 60.0, macro_zone: ADMINISTRATIVE, needs_facade: true, min_width_m: 4.8}
+  - {id: M01, name: Salle de réunion, type: meeting_room, target_area_m2: 18.0, quantity: 2, macro_zone: ADMINISTRATIVE, needs_facade: true, avoid: [S01]}
+  - {id: K01, name: Office, type: kitchenette, target_area_m2: 8.0, macro_zone: ADMINISTRATIVE, avoid: [S01]}
+  - {id: S01, name: Sanitaires, type: sanitary, target_area_m2: 10.0, quantity: 2, macro_zone: SERVICES, adjacent_to: [S02]}
+  - {id: S02, name: WC PMR, type: sanitary_accessible, target_area_m2: 4.0, macro_zone: SERVICES}
+  - {id: T01, name: Rangement, type: storage, target_area_m2: 6.0, quantity: 2, macro_zone: SERVICES}
+  - {id: T02, name: Local technique, type: technical_room, target_area_m2: 8.0, macro_zone: SERVICES, adjacent_to: [T03]}
+  - {id: T03, name: Local informatique, type: it_room, target_area_m2: 6.0, macro_zone: SERVICES}
+  - {id: V01, name: Escalier, type: stair, target_area_m2: 18.0, macro_zone: SERVICES, adjacent_to: [V02]}
+  - {id: V02, name: Ascenseur, type: lift, target_area_m2: 5.0, macro_zone: SERVICES}

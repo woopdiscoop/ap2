@@ -189,7 +189,7 @@ RoomId = Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9_-]{1,32}$")]
 
 class RoomSpec(BaseModel):                          # immutable input row
     id: RoomId; name: str (1..120 chars, stripped)
-    type: RoomTypeKey                                # must not be "unknown" nor category CIRCULATION
+    type: RoomTypeKey                                # category must not be SPECIAL (unknown, outdoor_space) nor CIRCULATION
     target_area_m2: float                            # 0 < x ≤ 10_000
     quantity: int = 1                                # 1..500
     macro_zone: MacroZone
@@ -351,7 +351,7 @@ class Rulebook(BaseModel):
     date: str | None = None             # YYYY-MM-DD; required when kind == "seed"
     n_plans: int = 0
     source_mix: dict[Fidelity, int] = {}
-    types: dict[RoomTypeKey, TypeStats] # keys must not be "unknown" or category CIRCULATION; may be a subset of the taxonomy
+    types: dict[RoomTypeKey, TypeStats] # keys must not be of category SPECIAL or CIRCULATION; may be a subset of the taxonomy
     adjacency: Adjacency
     core_offset: CoreOffset
     def missing_types(self, needed: Iterable[str]) -> tuple[str, ...]   # sorted

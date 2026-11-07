@@ -1,9 +1,13 @@
 # 0.4 — Router notes
 
-Status: BLOCKED on 0.1 (pyproject, pytest config) and 0.2 (fixtures are `Program`/`SiteSpec` instances).
+Status: BLOCKED on 0.1 and 0.2 being merged (imports `ale.contracts`, `ale.config`, `ale.workspace`, runs `ale init`). Spec complete: RD + eval + fixtures.
 
-To specify:
-- `ale.guards.bounded(max_iter, time_budget_s)` (context manager / iterator), `ConvergenceError(state_snapshot)`; must work on Windows (no SIGALRM — use monotonic-clock checks inside the loop).
-- Subprocess runner with timeout + captured exit report (used by 1.2 for ODA / accoreconsole); kill the whole process tree on Windows.
-- Shared fixtures: programs with 8, 25, 60 rooms and sites rectangle + L-shape. Fixture programs must only use the 13 types guaranteed by the seed rulebook (0.3 RD).
-- pytest-timeout on Windows uses the `thread` method (signals unavailable) — set explicitly.
+## Decisions taken while specifying
+- External-process runner lives in `ale.proc` (`run_tool` → `ProcessReport`), never raises for a failed tool; whole process tree killed on timeout (POSIX process group; Windows `taskkill /T /F`).
+- `bounded(..., on_exhaust="stop")` added so the SA optimizer (3.4) can end cleanly at its time budget and return the best layout found, instead of catching an exception.
+- No threads or signals in guards: identical behaviour on Windows.
+- Fixtures written by the Router (verified: instance counts 8/25/60, net 75/334/962 m², all references valid, no REQUIRED/AVOID contradictions, only the 13 seed-guaranteed types).
+- Third site `site_rect_small` (10 × 10 m) added: P8 on the 24 × 18 m rectangle would fill only 21 % of it. Fill ratios with default config: P8 0.899, P25 0.923, P60 0.936 (≤ max_fill 0.95).
+
+## Review log
+_(empty)_

@@ -1,0 +1,9 @@
+# Fixture P8 — small office, 8 room instances, 75.0 m² net. Pairs with site_rect_small.
+rooms:
+  - {id: R01, name: Hall d'entrée, type: entrance_hall, target_area_m2: 12.0, macro_zone: PUBLIC, needs_facade: true, adjacent_to: [R02]}
+  - {id: R02, name: Accueil, type: reception, target_area_m2: 9.0, macro_zone: PUBLIC}
+  - {id: R03, name: Bureau, type: office, target_area_m2: 12.0, quantity: 2, macro_zone: ADMINISTRATIVE, needs_facade: true}
+  - {id: R04, name: Salle de réunion, type: meeting_room, target_area_m2: 16.0, macro_zone: ADMINISTRATIVE, needs_facade: true, avoid: [R05]}
+  - {id: R05, name: Sanitaires, type: sanitary, target_area_m2: 6.0, macro_zone: SERVICES}
+  - {id: R06, name: Rangement, type: storage, target_area_m2: 4.0, macro_zone: SERVICES}
+  - {id: R07, name: Local technique, type: technical_room, target_area_m2: 4.0, macro_zone: SERVICES, min_width_m: 1.5}

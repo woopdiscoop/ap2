@@ -24,7 +24,7 @@ computed by the Router; if your implementation disagrees, report it — do not c
 |---|---|---|
 | A01 | directive_table | `best_buildable_rect(T, grid, 1.0, 2.0, tol)` returns `(short, long)` = 3 m² → `(3, 3)` (3.24 m²) · 4 → `(3, 4)` (4.32) · 6 → `(3, 6)` (6.48) · 8 → `(4, 6)` (8.64) · 12 → `(5, 7)` (12.60) · 7.5 → `(4, 6)` (8.64, Δ = +1.14). |
 | A02 | cap_gap | `best_buildable_rect(7.43, grid, 1.0, 2.0, tol) is None` (2.4×3.0 = 7.20 < −3 %; 2.4×3.6 = 8.64 > +1.2 m²). This documents the gap 7.423–7.439 m² in the 1:1–1:2 band. |
-| A03 | bounds_exact | `module_mm = 100`, T = 10 m²: `area_bounds_mm2 == (9_700_000, 11_200_000)`; `check_area` valid for rect 97×100 (9.70 m²) and 100×112 (11.20 m²); invalid for 19×51 (9.69 m²) and 101×111 (11.211 m²). |
+| A03 | bounds_exact | `module_mm = 100` (1 cell = 0.01 m²), T = 10 m²: `area_bounds_mm2 == (9_700_000, 11_200_000)`; `check_area` valid for rect 97×10 (9.70 m²) and 10×112 (11.20 m²); invalid for 19×51 (9.69 m²) and 19×59 (11.21 m²). *(Corrected 2026-11-07: the first version used 97×100 etc., which are 100× too large — Router error caught by the Worker.)* |
 | A04 | pct_regime | T = 60 m²: upper bound is `60 + 1.8 = 61.8 m²` (3 % > 1.2 m²) → `area_bounds_mm2(60)[1] == 61_800_000`. |
 | A05 | check_fields | `check_area(ModuleRect(0,0,4,6), grid600, 7.5, tol)`: `valid`, `placed_m2 == 8.64`, `delta_m2 == 1.14` (±1e-9), `overshoot_m2 == 1.14`, `delta_pct ≈ 15.2`. |
 | A06 | narrow_band | `best_buildable_rect(11.9, grid, 1.5, 2.0, tol) is None` (a 1:1.5–1:2 band cannot meet the cap there); `best_buildable_rect(11.9, grid, 1.0, 2.0, tol) == (5, 7)`. |
@@ -46,11 +46,11 @@ computed by the Router; if your implementation disagrees, report it — do not c
 
 | ID | Test | Pass condition |
 |---|---|---|
-| T01 | load_valid | Packaged `taxonomy.yaml` loads; 25 types; `version == "1.0.0"`; byte-identical to `specs/tickets/0.2_contracts/taxonomy.v1.yaml`. |
+| T01 | load_valid | Packaged `taxonomy.yaml` loads; 75 types (2 of category SPECIAL: `outdoor_space`, `unknown`); `version == "1.1.0"`; byte-identical to `specs/tickets/0.2_contracts/taxonomy.v1.yaml`. |
 | T02 | integrity_errors | Synthetic taxonomies with (a) duplicate key, (b) a canonical synonym shared by two types (`"S.REUNION"` in two types), (c) missing `unknown`, (d) bad key `Office` → each raises `ValueError` naming the problem. |
 | T03 | normalisation_table | `normalize_label(raw) → (key, rule)` exactly as below. |
 | T04 | canonical_forms | `canonical_input` equals the middle column below. |
-| T05 | room_type_validator | `RoomSpec(type="office", …)` ok; `type="kitchen"` → `ValidationError`; `type="unknown"` and `type="circulation"` → `ValidationError` (not allowed in a program). |
+| T05 | room_type_validator | `RoomSpec(type="office", …)` ok; `type="kitchen"` → `ValidationError`; `type="unknown"`, `type="outdoor_space"` and `type="circulation"` → `ValidationError` (not allowed in a program). |
 
 | raw | canonical_input | key | rule |
 |---|---|---|---|
@@ -78,6 +78,17 @@ computed by the Router; if your implementation disagrees, report it — do not c
 | `Accueil / attente` | `ACCUEIL ATTENTE` | reception | prefix |
 | `VESTIAIRES H/F` | `VESTIAIRES HF` | locker_room | exact |
 | `XYZ` | `XYZ` | unknown | none |
+| `Chambre froide positive` | `CHAMBRE FROIDE POSITIVE` | cold_room | exact |
+| `Chambre 12` | `CHAMBRE` | bedroom | exact |
+| `Loge gardien` | `LOGE GARDIEN` | security_room | exact |
+| `Salle informatique` | `SALLE INFORMATIQUE` | computer_room | exact |
+| `Local informatique` | `LOCAL INFORMATIQUE` | it_room | exact |
+| `C.D.I.` | `CDI` | library | exact |
+| `Amphi A` | `AMPHI A` | lecture_hall | prefix |
+| `Plateau scénique` | `PLATEAU SCENIQUE` | stage | exact |
+| `Espace d'attente sécurisé` | `ESPACE D ATTENTE SECURISE` | safe_refuge | exact |
+| `Terrasse` | `TERRASSE` | outdoor_space | exact |
+| `Salle de classe 103` | `SALLE DE CLASSE` | classroom | exact |
 
 ## 5. Models
 
@@ -93,7 +104,7 @@ computed by the Router; if your implementation disagrees, report it — do not c
 | M08 | placed_room | `PlacedRoom(rect=ModuleRect(0,0,4,6), target_area_m2=7.5).area_m2(GridSpec(module_mm=600)) == 8.64`; `GridSpec().module_mm == 100`, `aspect_ratio() == 1.5`, `bbox_m == (0.0, 0.0, 2.4, 3.6)`, `area_delta_m2 ≈ 1.14`; circulation room → `area_delta_m2 is None`. |
 | M09 | polish_expression | Valid: `a b V`, `a b V c H`, `a b c V H`, `a b H c H`. Invalid: `a b`, `a V`, `a b V V`, `a b c H H` (not normalised), `a a V` (duplicate leaf). `leaves("a b V c H") == ("a","b","c")`. |
 | M10 | plan_geometry | Scale/method coupling enforced; bad `host_wall` index rejected; `to_metric()` on a Y_DOWN plan with scale 0.01: point (100, 50) → (1.0, −0.5); opening `width_native=90` → `width_m == 0.9`; `to_metric()` with unknown scale raises. |
-| M11 | rulebook_rules | `Quantiles(p10=2, p50=1.5, p90=3)` rejected; aspect p10 < 1 rejected; orientation with 3 bearings rejected; `AdjEntry(a="sanitary", b="office")` is stored as `a="office", b="sanitary"`; pairs given unsorted come back sorted; `(office, sanitary)` + `(sanitary, office)` → duplicate rejected; `kind="seed"` without `author` or with `date="07/11/2026"` rejected; `Adjacency.p("office","meeting_room") == p("meeting_room","office")`; unlisted pair → `default_p`; `types` key `circulation` rejected. |
+| M11 | rulebook_rules | `Quantiles(p10=2, p50=1.5, p90=3)` rejected; aspect p10 < 1 rejected; orientation with 3 bearings rejected; `AdjEntry(a="sanitary", b="office")` is stored as `a="office", b="sanitary"`; pairs given unsorted come back sorted; `(office, sanitary)` + `(sanitary, office)` → duplicate rejected; `kind="seed"` without `author` or with `date="07/11/2026"` rejected; `Adjacency.p("office","meeting_room") == p("meeting_room","office")`; unlisted pair → `default_p`; `types` keys `circulation` and `outdoor_space` rejected. |
 | M12 | rulebook_hash | `content_sha256()` is stable across processes (compute in a subprocess) and changes when any `p` changes. |
 
 ## 6. Serialisation, schemas, helpers
