@@ -1,0 +1,140 @@
+# ALE workspace configuration. Every key is optional: a missing key takes the
+# default shown here. Relative paths are resolved against this workspace folder.
+# Values marked (open) are placeholders pending a decision.
+
+# Workspace metadata.
+[workspace]
+# int, == 1
+format_version = 1
+
+# Planning grid.
+[grid]
+# int, 100..1200; 1 module = module_mm millimetres (user decision U-1: 0.10 m)
+module_mm = 100
+
+# Asymmetric surface tolerance.
+[area]
+# float 0..20, allowed undershoot in percent
+tol_down_pct = 3.0
+# float 0..20, allowed overshoot in percent
+tol_up_pct = 3.0
+# float 0..10, allowed absolute overshoot in square metres
+tol_up_abs_m2 = 1.2
+
+# Room proportions.
+[shape]
+# float 1.0..6.0, HARD limit long side / short side for every room
+# (user decision U-2: 1:2 minimum, 2:1 maximum); circulation is exempt
+aspect_max = 2.0
+
+# Circulation.
+[circulation]
+# float 0.05..0.5 (open)
+ratio = 0.18
+# float > 0
+min_door_edge_m = 1.2
+# float > 0, corridor clear width (user decision U-3)
+min_width_m = 1.2
+
+# Facades.
+[facade]
+# float > 0
+min_facade_len_m = 2.4
+
+# Site.
+[site]
+# float 0.5..1.0, feasibility check (Router-proposed)
+max_fill = 0.95
+
+# Determinism.
+[determinism]
+# int >= 0, default for `ale generate --seed`
+seed = 42
+
+# External tools (never executed by `ale doctor`).
+[tools]
+# str path; "" = auto-detect
+oda_file_converter = ""
+# str path; "" = auto-detect
+accoreconsole = ""
+# float > 0, per external process call (seconds)
+timeout_s = 300.0
+
+# Vision-language model.
+[vlm]
+# str (open); "" = VLM disabled
+provider = ""
+# str (open)
+model_id = ""
+# name of the env var holding the key - never the key itself
+api_key_env = "ALE_VLM_API_KEY"
+# float, MUST equal 0.0 (validator rejects anything else)
+temperature = 0.0
+# prompt version
+prompt_version = "v1"
+# int 0..3
+max_invalid_json_retries = 1
+# float > 0, per VLM call (seconds)
+timeout_s = 120.0
+
+# Extraction.
+[extract]
+# int 72..1200
+raster_dpi = 300
+# int >= 1 (N in the vector/scanned rule, Router-proposed)
+pdf_vector_min_paths = 200
+# float 0..1, below -> `ale review`
+review_confidence = 0.6
+
+# Rulebook.
+[rulebook]
+# int >= 1
+min_support = 5
+# float > 0, seed pseudo-count (Router-proposed)
+blend_k = 10.0
+# float >= 0
+laplace_alpha = 1.0
+
+# Fidelity weight per source kind.
+[rulebook.fidelity_weights]
+# float 0..1
+CAD = 1.0
+# float 0..1
+PDF_VECTOR = 0.8
+# float 0..1
+RASTER = 0.5
+
+# Optimizer.
+[optimizer]
+# int >= 1
+max_iter = 200000
+# float > 0 (seconds)
+time_budget_s = 120.0
+# float 0..1 (T0 chosen so this share of uphill moves is accepted)
+initial_acceptance = 0.8
+# float 0..1 exclusive
+cooling = 0.95
+# int >= 1
+moves_per_temperature = 200
+
+# Objective weights, all float >= 0.
+[optimizer.weights]
+# float >= 0
+required_adjacency = 1000.0
+# float >= 0
+rulebook_adjacency = 1.0
+# float >= 0
+aspect = 1.0
+# float >= 0
+area_overshoot = 1.0
+# float >= 0
+facade_orientation = 1.0
+# float >= 0
+core_distance = 1.0
+# float >= 0
+circulation_length = 1.0
+
+# Logging.
+[logging]
+# DEBUG|INFO|WARNING|ERROR
+level = "INFO"
