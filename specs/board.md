@@ -65,6 +65,7 @@ with ground truth. The Router will issue an annotation template before Phase 1.
 ## History
 
 - 2026-11-06 — v2.0 workspace initialised (tickets 1.1, 1.2 specified).
+- 2026-11-07 — CI run #2: CRLF fix confirmed (Windows 407 pass); 2 Windows-only test bugs remain (0.1 S01 console-script location; 0.4 extra cwd test decoding cp1252 child output). Fixes sent to the owning Workers.
 - 2026-11-07 — CI run #1: Linux ✔ macOS ✔ (9 jobs: 6 green), Windows ✘ — Git CRLF checkout broke byte-exact contract checks. Fixed with `.gitattributes` (eol=lf), verified with a simulated CRLF checkout (327 pass). 0.4 merged after review (408 pass).
 - 2026-11-07 — 0.1 and 0.2 merged after independent Router review (327 tests pass on the merged tree). CONTRACTS.lock committed: contracts frozen at 1.0.0. 0.4 → READY.
 - 2026-11-07 — 0.1 and 0.2 Workers reported back (0.1: 123 pass / 3 platform skips; 0.2: 181 pass, A03 expectation found wrong — Router error, corrected). Taxonomy v1.1 issued (U-5); follow-ups sent to both Workers before merge.
