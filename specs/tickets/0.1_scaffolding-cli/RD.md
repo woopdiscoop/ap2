@@ -106,7 +106,7 @@ Field names below are the TOML keys. All values shown are defaults; values marke
 format_version = 1                      # int, == 1
 
 [grid]
-module_mm = 600                         # int, 100..1200; 1 module = module_mm millimetres
+module_mm = 100                         # int, 100..1200; 1 module = module_mm millimetres (user decision U-1: 0.10 m)
 
 [area]                                  # asymmetric surface tolerance
 tol_down_pct   = 3.0                    # float 0..20
@@ -116,7 +116,7 @@ tol_up_abs_m2  = 1.2                    # float 0..10
 [circulation]
 ratio            = 0.18                 # float 0.05..0.5   (open)
 min_door_edge_m  = 1.2                  # float > 0
-min_width_m      = 1.8                  # float > 0, corridor clear width (Router-proposed)
+min_width_m      = 0.9                  # float > 0, corridor clear width (user: corridors may be narrow; value pending U-3)
 
 [facade]
 min_facade_len_m = 2.4                  # float > 0

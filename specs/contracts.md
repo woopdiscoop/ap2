@@ -10,7 +10,7 @@ Any change goes through a contract-amendment ticket issued by the Router.
 | Where | Unit | Frame |
 |---|---|---|
 | Excel program, `site.yaml`, reports, DXF export | m, m² | site drawing axes, +y up |
-| `ale.geometry`, `Layout`, `PolishExpression` realisation | **integer modules** (1 module = `grid.module_mm`, default 600 mm) | origin = lower-left of the footprint grid, +y up |
+| `ale.geometry`, `Layout`, `PolishExpression` realisation | **integer modules** (1 module = `grid.module_mm`, default **100 mm**, user decision U-1) | origin = lower-left of the footprint grid, +y up |
 | `PlanGeometry` (Phase 1) | source native units (mm, drawing units, px, pt) | `Frame.Y_UP` (CAD) or `Frame.Y_DOWN` (raster, PDF page) |
 | `PlanGeometry.to_metric()` | m | +y up |
 
@@ -20,7 +20,8 @@ Compass: `north_angle_deg` = clockwise angle from drawing +y to true north; faç
 ## The area rule (architect decision D1)
 
 `valid ⇔ −3 % × T ≤ A − T ≤ +max(3 % × T, 1.2 m²)`, implemented once in `ale.contracts.area_rule`
-(`area_bounds_mm2`, `check_area`, `smallest_valid_rect`) with exact integer mm² bounds.
+(`area_bounds_mm2`, `check_area`, `best_buildable_rect`) with exact integer mm² bounds.
+`best_buildable_rect` rounds **up**: smallest area ≥ target first; only if none exists, the largest area below target (≥ −3 %).
 
 ## Models
 

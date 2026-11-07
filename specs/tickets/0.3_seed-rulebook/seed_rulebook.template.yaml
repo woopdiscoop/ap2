@@ -13,11 +13,11 @@
 #
 # UNITS & MEANINGS
 #   aspect     long side / short side of the room rectangle (1.0 = square, 2.0 = 1:2).
-#              p10 / p50 / p90 = "narrow / typical / wide" proportions you accept.
-#              Rule: 1.0 <= p10 <= p50 <= p90 <= 6.0
-#              ! A narrow band (e.g. p10 1.5, p90 2.0) can make some areas impossible
-#              ! on the 0.60 m grid within the -3 % / +1.2 m2 tolerance (about 11 % of
-#              ! targets between 2 and 60 m2 for a 1.5-2.0 band). Including 1.0-2.0 avoids it.
+#              PRE-FILLED from the architect's rule "proportions between 1:1 and 1:2, approximately":
+#              p10 1.0 / p90 2.0 for every type; p50 1.4 is a Router default for the typical shape.
+#              Change any type that differs. Rule: 1.0 <= p10 <= p50 <= p90 <= 6.0.
+#              The band is a preference (cost), not a hard limit; on the 0.10 m grid every
+#              target area from 2 to 60 m2 fits a 1:1-1:2 rectangle within +0.11 m2.
 #   area_m2    typical net area of ONE room of that type, in m2 (p10 <= p50 <= p90).
 #              Used for sanity checks and blending, not as targets (targets come from the Excel program).
 #   orientation  preference for the façade a room faces, per compass direction, from
@@ -33,8 +33,9 @@
 #              0.0 / 0.0 = centred; dx -0.5 = against the left (-x) edge, dy +0.5 = against the
 #              top (+y) edge, in the axes of the site drawing (not compass directions). Range -0.5..+0.5.
 #
-# VALUES TO SUPPLY: 23 types x (3 aspect + 3 area + 4 orientation) = 230,
-#   + 30 listed adjacency p + 1 default_p + 2 core offset + author/date = 265 entries.
+# VALUES TO SUPPLY: 23 types x (3 area + 4 orientation) = 161,
+#   + 30 listed adjacency p + 1 default_p + 2 core offset + author/date = 196 entries
+#   (aspect is pre-filled; review it).
 #   Fill only the types you need for the first projects; the rest can be deleted.
 # ============================================================================
 
@@ -47,32 +48,32 @@ date: null              # REQUIRED — YYYY-MM-DD
 
 types:
   # ---------------- ADMINISTRATIVE ----------------
-  office:            {aspect: {p10: null, p50: null, p90: null}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
-  open_office:       {aspect: {p10: null, p50: null, p90: null}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
-  meeting_room:      {aspect: {p10: null, p50: null, p90: null}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
-  break_room:        {aspect: {p10: null, p50: null, p90: null}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
-  kitchenette:       {aspect: {p10: null, p50: null, p90: null}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
-  print_room:        {aspect: {p10: null, p50: null, p90: null}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  office:            {aspect: {p10: 1.0, p50: 1.4, p90: 2.0}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  open_office:       {aspect: {p10: 1.0, p50: 1.4, p90: 2.0}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  meeting_room:      {aspect: {p10: 1.0, p50: 1.4, p90: 2.0}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  break_room:        {aspect: {p10: 1.0, p50: 1.4, p90: 2.0}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  kitchenette:       {aspect: {p10: 1.0, p50: 1.4, p90: 2.0}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  print_room:        {aspect: {p10: 1.0, p50: 1.4, p90: 2.0}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
   # ---------------- PUBLIC ----------------
-  entrance_hall:     {aspect: {p10: null, p50: null, p90: null}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
-  reception:         {aspect: {p10: null, p50: null, p90: null}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
-  waiting_area:      {aspect: {p10: null, p50: null, p90: null}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
-  training_room:     {aspect: {p10: null, p50: null, p90: null}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
-  multipurpose_room: {aspect: {p10: null, p50: null, p90: null}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  entrance_hall:     {aspect: {p10: 1.0, p50: 1.4, p90: 2.0}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  reception:         {aspect: {p10: 1.0, p50: 1.4, p90: 2.0}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  waiting_area:      {aspect: {p10: 1.0, p50: 1.4, p90: 2.0}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  training_room:     {aspect: {p10: 1.0, p50: 1.4, p90: 2.0}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  multipurpose_room: {aspect: {p10: 1.0, p50: 1.4, p90: 2.0}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
   # ---------------- SERVICES ----------------
-  sanitary:            {aspect: {p10: null, p50: null, p90: null}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
-  sanitary_accessible: {aspect: {p10: null, p50: null, p90: null}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
-  shower:              {aspect: {p10: null, p50: null, p90: null}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
-  locker_room:         {aspect: {p10: null, p50: null, p90: null}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
-  storage:             {aspect: {p10: null, p50: null, p90: null}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
-  archive:             {aspect: {p10: null, p50: null, p90: null}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
-  technical_room:      {aspect: {p10: null, p50: null, p90: null}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
-  it_room:             {aspect: {p10: null, p50: null, p90: null}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
-  cleaning_room:       {aspect: {p10: null, p50: null, p90: null}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
-  waste_room:          {aspect: {p10: null, p50: null, p90: null}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  sanitary:            {aspect: {p10: 1.0, p50: 1.4, p90: 2.0}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  sanitary_accessible: {aspect: {p10: 1.0, p50: 1.4, p90: 2.0}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  shower:              {aspect: {p10: 1.0, p50: 1.4, p90: 2.0}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  locker_room:         {aspect: {p10: 1.0, p50: 1.4, p90: 2.0}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  storage:             {aspect: {p10: 1.0, p50: 1.4, p90: 2.0}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  archive:             {aspect: {p10: 1.0, p50: 1.4, p90: 2.0}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  technical_room:      {aspect: {p10: 1.0, p50: 1.4, p90: 2.0}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  it_room:             {aspect: {p10: 1.0, p50: 1.4, p90: 2.0}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  cleaning_room:       {aspect: {p10: 1.0, p50: 1.4, p90: 2.0}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  waste_room:          {aspect: {p10: 1.0, p50: 1.4, p90: 2.0}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
   # ---------------- VERTICAL (fixed elements; orientation usually 0) ----------------
-  stair:               {aspect: {p10: null, p50: null, p90: null}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
-  lift:                {aspect: {p10: null, p50: null, p90: null}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  stair:               {aspect: {p10: 1.0, p50: 1.4, p90: 2.0}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  lift:                {aspect: {p10: 1.0, p50: 1.4, p90: 2.0}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
 
 adjacency:
   default_p: null       # REQUIRED — p for unlisted pairs (0.5 = neutral)

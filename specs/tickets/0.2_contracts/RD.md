@@ -218,7 +218,7 @@ class SiteSpec(BaseModel):
 ### 9.2 Layout (output of Phase 3)
 
 ```python
-class GridSpec(BaseModel):  module_mm: int = 600   # 100..1200
+class GridSpec(BaseModel):  module_mm: int = 100   # 100..1200 (default 0.10 m, user decision U-1)
 
 class PlacedRoom(BaseModel):
     instance_id: str                                 # from Program.instances(), or "circ-NNN" for circulation
@@ -376,12 +376,18 @@ class AreaCheck(BaseModel):
 
 def check_area(rect: ModuleRect, grid: GridSpec, target_m2: float, tol: AreaTolerance) -> AreaCheck
 
-def smallest_valid_rect(target_m2: float, grid: GridSpec, aspect_min: float, aspect_max: float,
+def best_buildable_rect(target_m2: float, grid: GridSpec, aspect_min: float, aspect_max: float,
                         tol: AreaTolerance, min_short_side_modules: int = 1,
-                        max_side_modules: int = 200) -> tuple[int, int] | None
-    # returns (short, long) in modules with short ≤ long, aspect long/short in [aspect_min, aspect_max],
-    # area within area_bounds_mm2; minimises area, then |long/short − 1|, then short.
-    # None if no rectangle satisfies all constraints.  Bounded loops only (≤ max_side_modules²).
+                        max_side_modules: int | None = None) -> tuple[int, int] | None
+    # Returns (short, long) in modules, short ≤ long, with long/short in [aspect_min, aspect_max]
+    # (compared exactly via Fraction(str(aspect))), area within area_bounds_mm2, short ≥ min_short_side_modules,
+    # and both sides ≤ max_side_modules when given. None if no rectangle qualifies.
+    # Preference ("round up", architect decision D1):
+    #   1. the smallest area ≥ target;  2. if none, the largest area < target (still ≥ −3 %);
+    #   ties: smaller |long/short − 1|, then smaller short side.
+    # Algorithm: iterate the short side s upward while s² ≤ hi_cells; for each s the admissible long sides form an
+    # integer interval, so take the smallest one ≥ target and the largest one < target directly (ceiling division).
+    # O(√cells) iterations; no nested loop over the long side.
 ```
 
 ```python

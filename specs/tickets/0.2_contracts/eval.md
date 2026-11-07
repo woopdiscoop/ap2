@@ -18,18 +18,20 @@ computed by the Router; if your implementation disagrees, report it — do not c
 | U05 | module_range | `module_mm` 99, 1201, `600.0` → `ValueError`/`TypeError`. |
 | U06 | no_float_modulo | AST scan of `src/ale/contracts/**/*.py`: every `BinOp` with `Mod` (and every `divmod`/`math.fmod` call) must sit on a source line ending with the comment `# int-mod` (the author's assertion that both operands are `int`); `math.fmod` is forbidden outright. The checker is unit-tested on a planted violation. |
 
-## 2. Area rule (`area_rule.py`) — default tolerance (−3 % / +max(3 %, 1.2 m²)), `module_mm = 600` unless stated
+## 2. Area rule (`area_rule.py`) — default tolerance (−3 % / +max(3 %, 1.2 m²)); `grid` = `grid600 = GridSpec(module_mm=600)` unless stated (the 0.60 m cases come from the directive's worked examples; the default grid is now 0.10 m, see A10)
 
 | ID | Test | Pass condition |
 |---|---|---|
-| A01 | directive_table | `smallest_valid_rect(T, grid, 1.0, 2.0, tol)` returns `(short, long)` = 3 m² → `(3, 3)` (3.24 m²) · 4 → `(3, 4)` (4.32) · 6 → `(3, 6)` (6.48) · 8 → `(4, 6)` (8.64) · 12 → `(5, 7)` (12.60) · 7.5 → `(4, 6)` (8.64, Δ = +1.14). |
-| A02 | cap_gap | `smallest_valid_rect(7.43, grid, 1.0, 2.0, tol) is None` (2.4×3.0 = 7.20 < −3 %; 2.4×3.6 = 8.64 > +1.2 m²). This documents the gap 7.423–7.439 m² in the 1:1–1:2 band. |
+| A01 | directive_table | `best_buildable_rect(T, grid, 1.0, 2.0, tol)` returns `(short, long)` = 3 m² → `(3, 3)` (3.24 m²) · 4 → `(3, 4)` (4.32) · 6 → `(3, 6)` (6.48) · 8 → `(4, 6)` (8.64) · 12 → `(5, 7)` (12.60) · 7.5 → `(4, 6)` (8.64, Δ = +1.14). |
+| A02 | cap_gap | `best_buildable_rect(7.43, grid, 1.0, 2.0, tol) is None` (2.4×3.0 = 7.20 < −3 %; 2.4×3.6 = 8.64 > +1.2 m²). This documents the gap 7.423–7.439 m² in the 1:1–1:2 band. |
 | A03 | bounds_exact | `module_mm = 100`, T = 10 m²: `area_bounds_mm2 == (9_700_000, 11_200_000)`; `check_area` valid for rect 97×100 (9.70 m²) and 100×112 (11.20 m²); invalid for 19×51 (9.69 m²) and 101×111 (11.211 m²). |
 | A04 | pct_regime | T = 60 m²: upper bound is `60 + 1.8 = 61.8 m²` (3 % > 1.2 m²) → `area_bounds_mm2(60)[1] == 61_800_000`. |
 | A05 | check_fields | `check_area(ModuleRect(0,0,4,6), grid600, 7.5, tol)`: `valid`, `placed_m2 == 8.64`, `delta_m2 == 1.14` (±1e-9), `overshoot_m2 == 1.14`, `delta_pct ≈ 15.2`. |
-| A06 | narrow_band | `smallest_valid_rect(11.9, grid, 1.5, 2.0, tol) is None` (a 1:1.5–1:2 band cannot meet the cap there); `smallest_valid_rect(11.9, grid, 1.0, 2.0, tol) == (5, 7)`. |
-| A07 | min_side | `smallest_valid_rect(3, grid, 1.0, 2.0, tol, min_short_side_modules=4) is None` (the smallest candidate 4×4 = 5.76 m² exceeds 3 + 1.2 m²). |
-| A08 | bounded | `smallest_valid_rect(10_000, grid, 1.0, 1.0, tol, max_side_modules=200) == (165, 165)` (9 801 m²; 164² cells = 9 682.56 m² is below −3 %), returned in < 1 s. With `max_side_modules=160` → `None`. |
+| A06 | narrow_band | `best_buildable_rect(11.9, grid, 1.5, 2.0, tol) is None` (a 1:1.5–1:2 band cannot meet the cap there); `best_buildable_rect(11.9, grid, 1.0, 2.0, tol) == (5, 7)`. |
+| A07 | min_side | `best_buildable_rect(3, grid, 1.0, 2.0, tol, min_short_side_modules=4) is None` (the smallest candidate 4×4 = 5.76 m² exceeds 3 + 1.2 m²). |
+| A08 | bounded | `best_buildable_rect(10_000, grid, 1.0, 1.0, tol, max_side_modules=200) == (167, 167)` (10 040.04 m², the smallest square ≥ target), returned in < 1 s. With `max_side_modules=160` → `None`. |
+| A09 | rounds_up | `best_buildable_rect(3.3, grid600, 1.0, 2.0, tol) == (3, 4)` (4.32 m²) — **not** `(3, 3)` (3.24 m², valid but below target). |
+| A10 | fine_grid | `module_mm = 100`, band 1.0–2.0: `best_buildable_rect(7.43, …) == (24, 31)` (7.44 m²); `best_buildable_rect(10_000, …, 1.0, 1.0, …) == (1000, 1000)`. Scan T = 2.00 … 60.00 m² in 0.01 steps (5 801 targets): every T has a result, none below target, max overshoot ≤ 0.11 m² (Router-computed). Whole scan < 10 s. |
 
 ## 3. Orientation (`orientation.py`)
 
@@ -88,7 +90,7 @@ computed by the Router; if your implementation disagrees, report it — do not c
 | M05 | program_rules | Duplicate ids; unknown reference in `adjacent_to`; self-reference; A requires B while B avoids A; `floor=1` → each `ValidationError`. `Program.instances()` for quantity 12 yields `R1#01 … R1#12`; quantity 1 yields `R1`. |
 | M06 | module_polygon | Non-rectilinear, clockwise, self-intersecting, collinear-vertex, and 3-vertex inputs each rejected; L-shape `[(0,0),(10,0),(10,4),(6,4),(6,8),(0,8)]` accepted with `area_cells() == 64`. |
 | M07 | rect_overlap | `ModuleRect(0,0,4,4).intersection_cells(ModuleRect(2,2,4,4)) == 4`; touching edges → 0; disjoint → 0. |
-| M08 | placed_room | `PlacedRoom(rect=ModuleRect(0,0,4,6), target_area_m2=7.5).area_m2(GridSpec()) == 8.64`, `aspect_ratio() == 1.5`, `bbox_m == (0.0, 0.0, 2.4, 3.6)`, `area_delta_m2 ≈ 1.14`; circulation room → `area_delta_m2 is None`. |
+| M08 | placed_room | `PlacedRoom(rect=ModuleRect(0,0,4,6), target_area_m2=7.5).area_m2(GridSpec(module_mm=600)) == 8.64`; `GridSpec().module_mm == 100`, `aspect_ratio() == 1.5`, `bbox_m == (0.0, 0.0, 2.4, 3.6)`, `area_delta_m2 ≈ 1.14`; circulation room → `area_delta_m2 is None`. |
 | M09 | polish_expression | Valid: `a b V`, `a b V c H`, `a b c V H`, `a b H c H`. Invalid: `a b`, `a V`, `a b V V`, `a b c H H` (not normalised), `a a V` (duplicate leaf). `leaves("a b V c H") == ("a","b","c")`. |
 | M10 | plan_geometry | Scale/method coupling enforced; bad `host_wall` index rejected; `to_metric()` on a Y_DOWN plan with scale 0.01: point (100, 50) → (1.0, −0.5); opening `width_native=90` → `width_m == 0.9`; `to_metric()` with unknown scale raises. |
 | M11 | rulebook_rules | `Quantiles(p10=2, p50=1.5, p90=3)` rejected; aspect p10 < 1 rejected; orientation with 3 bearings rejected; `AdjEntry(a="sanitary", b="office")` is stored as `a="office", b="sanitary"`; pairs given unsorted come back sorted; `(office, sanitary)` + `(sanitary, office)` → duplicate rejected; `kind="seed"` without `author` or with `date="07/11/2026"` rejected; `Adjacency.p("office","meeting_room") == p("meeting_room","office")`; unlisted pair → `default_p`; `types` key `circulation` rejected. |
