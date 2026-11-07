@@ -5,6 +5,7 @@ Every tool is ``sys.executable -c "<code>"`` so the tests run anywhere.
 
 from __future__ import annotations
 
+import contextlib
 import errno
 import json
 import logging
@@ -76,14 +77,17 @@ def wait_dead(pid: int, timeout_s: float) -> bool:
 
 
 def force_kill(pid: int) -> None:
+    """Best-effort cleanup; the process may vanish between the check and the kill."""
     if not pid_alive(pid):
         return
     if sys.platform == "win32":
-        subprocess.run(["taskkill", "/F", "/PID", str(pid)], capture_output=True, check=False)
+        with contextlib.suppress(OSError):
+            subprocess.run(["taskkill", "/F", "/PID", str(pid)], capture_output=True, check=False)
     else:
         import signal
 
-        os.kill(pid, signal.SIGKILL)
+        with contextlib.suppress(ProcessLookupError):
+            os.kill(pid, signal.SIGKILL)
 
 
 def read_pid(path: Path) -> int:
