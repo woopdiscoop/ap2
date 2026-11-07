@@ -39,7 +39,7 @@ Ticket suite: `pytest tests/program` → **56 passed** in ≈ 5 s (budget 60 s).
 | P05 | `test_P05_template_example_reads` | PASS |
 | P06 | `test_P06_cli_check` | PASS |
 | P07 | `test_P07_cli_template` | PASS |
-| P08 | `test_P08_cli_registration_only` | PASS (checks the commit that introduced the line) |
+| P08 | `test_P08_cli_registration_only` | PASS (two added lines: one import, one `add_typer`) |
 
 Additional edge-case tests (all PASS): `test_canon_header`, `test_unreadable_workbook`,
 `test_empty_sheet_and_no_rooms`, `test_cell_type_variants`, `test_bad_cell_types`,
@@ -60,7 +60,7 @@ Every number of eval.md was reproduced exactly (no expectation disputed).
 | `mypy` (strict, `src/ale`) | clean (43 files) |
 | `python -m ale.contracts.lock --check` | exit 0 (`OK`) |
 | Coverage `ale.program` | **99 %** (1019 stmts, 14 missed; 306 branches, 5 partial) — line ≈ 98.6 %, branch ≈ 98.4 % |
-| Ownership | only RD §3 paths + this report; `src/ale/cli/__init__.py`: one added line, nothing removed |
+| Ownership | only RD §3 paths + this report; `src/ale/cli/__init__.py`: two added lines (import + registration), nothing removed |
 
 Whole repository suite:
 
@@ -82,9 +82,9 @@ environment: same 3 failures.
    installs only `.[dev]`. To keep CI green either way, the ticket tests use
    `pytest.importorskip("openpyxl")` / `("ezdxf")` (reported as SKIPPED). Recommended Router action:
    install `.[dev,excel,cad]` in CI and make the doctor tests independent of installed extras.
-2. **One-line CLI registration.** "One added line, no other change" leaves no room for an import
-   statement, so the line is
-   `app.add_typer(__import__("ale.cli.commands.program", fromlist=["app"]).app, name="program")`.
+2. **CLI registration (resolved at review).** The RD now allows two added lines; the
+   `__import__` one-liner was replaced by `from ale.cli.commands import program as program_cmd`
+   plus `app.add_typer(program_cmd.app, name="program")`. P08 checks exactly these two lines.
 3. **Codes not named by the RD.** The frozen list has no code for an unreadable input file, a
    malformed `site.yaml` (both/none of `footprint`/`footprint_dxf`, unknown keys, bad values) or an
    invalid rulebook file. Added (exported as `EXTRA_ERROR_CODES`): `E_FILE_UNREADABLE`,

@@ -339,25 +339,36 @@ def _git(*args: str) -> subprocess.CompletedProcess[str]:
     )
 
 
+_P08_PATTERN = r'(commands import program|name="program")'
+_P08_IMPORT = r"^(from ale\.cli\.commands import program\b|import ale\.cli\.commands\.program\b)"
+
+
 def test_P08_cli_registration_only() -> None:
+    """Base = parent of the first commit touching the registration; tip = last such commit."""
     target = "src/ale/cli/__init__.py"
     if shutil.which("git") is None or _git("rev-parse", "--git-dir").returncode != 0:
         pytest.skip("not a git checkout")
-    log = _git("log", "--format=%H", "-S", "ale.cli.commands.program", "--", target)
-    commits = log.stdout.split()
-    if commits:
-        intro = commits[-1]
-        if _git("rev-parse", "--verify", "--quiet", f"{intro}^").returncode != 0:
-            pytest.skip("shallow clone: parent of the registering commit is unavailable")
-        diff = _git("diff", f"{intro}^", intro, "--", target).stdout
-    else:  # not committed yet: compare the working tree with HEAD
-        diff = _git("diff", "HEAD", "--", target).stdout
-    added = [ln for ln in diff.splitlines() if ln.startswith("+") and not ln.startswith("+++")]
-    removed = [ln for ln in diff.splitlines() if ln.startswith("-") and not ln.startswith("---")]
+    commits = _git("log", "--format=%H", "-G", _P08_PATTERN, "--", target).stdout.split()
+    pending = re.search(_P08_PATTERN, _git("diff", "HEAD", "--", target).stdout) is not None
+    if not commits and not pending:
+        pytest.fail("the program command group is not registered")
+    base = f"{commits[-1]}^" if commits else "HEAD"
+    if _git("rev-parse", "--verify", "--quiet", base).returncode != 0:
+        pytest.skip("shallow clone: the base commit is unavailable")
+    tip = [] if pending else [commits[0]]
+    diff = _git("diff", base, *tip, "--", target).stdout
+    lines = diff.splitlines()
+    added = [ln[1:] for ln in lines if ln.startswith("+") and not ln.startswith("+++")]
+    removed = [ln for ln in lines if ln.startswith("-") and not ln.startswith("---")]
     assert removed == []
-    assert len(added) == 1, added
-    assert "add_typer" in added[0]
-    assert "program" in added[0]
+    assert len(added) == 2, added
+    imports = [ln for ln in added if ln.startswith(("import ", "from "))]
+    assert len(imports) == 1, added
+    assert re.match(_P08_IMPORT, imports[0]), imports
+    registration = next(ln for ln in added if ln not in imports)
+    assert registration.startswith("app.add_typer(")
+    assert 'name="program"' in registration
+    assert "__import__" not in "".join(added)
 
 
 # --------------------------------------------------------------------------- rulebook loading
