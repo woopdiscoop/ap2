@@ -9,7 +9,7 @@
 - A CI matrix (Windows/macOS/Linux × 3.11–3.13) is part of the deliverable: it is the only real evidence for "Windows first" from this Linux environment.
 
 ## 2026-11-07 user decisions
-- `grid.module_mm` default 600 → **100** (U-1). `circulation.min_width_m` default 1.8 → **0.9** (U-3, "corridors can be narrow"; exact minimum to be confirmed).
+- `grid.module_mm` default 600 → **100** (U-1). `circulation.min_width_m` default 1.8 → **1.2 m** (U-3, confirmed by the user).
 
 ## Review log
 _(empty)_

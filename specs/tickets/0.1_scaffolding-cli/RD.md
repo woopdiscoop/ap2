@@ -120,7 +120,7 @@ aspect_max = 2.0                        # float 1.0..6.0, HARD limit long side /
 [circulation]
 ratio            = 0.18                 # float 0.05..0.5   (open)
 min_door_edge_m  = 1.2                  # float > 0
-min_width_m      = 0.9                  # float > 0, corridor clear width (user: corridors may be narrow; value pending U-3)
+min_width_m      = 1.2                  # float > 0, corridor clear width (user decision U-3)
 
 [facade]
 min_facade_len_m = 2.4                  # float > 0
