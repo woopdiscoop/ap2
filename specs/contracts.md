@@ -38,7 +38,8 @@ hard limit) are only preferences. On the 0.10 m grid both hard rules can always 
 | `SiteSpec` | 3 in | Buildable footprint (m), north angle, access edge index, optional core hint. |
 | `GridSpec`, `ModuleRect`, `ModulePolygon` | 3 | Integer geometry; rectilinear CCW footprint. |
 | `PlacedRoom`, `Layout`, `LayoutMetrics`, `Violation` | 3 out | Result; area/bbox methods take `GridSpec`. |
-| `PolishExpression` | 3 | Normalised postfix slicing tree; `a b V` = a left of b, `a b H` = a below b. |
+| `PolishExpression` | 3 | Normalised postfix slicing tree; `a b V` = a left of b, `a b H` = a below b. Since U-6 informational only (report). |
+| `CorridorPlan`, `FootprintPieces` *(1.1.0, amendment A.1)* | 3 | Corridor-grammar plan (pieces → blocks → room bays / finger bays with stacks) and footprint decomposition (rectangle or L, junction J1/J2). The optimiser state of Phase 3. |
 | `PlanGeometry`, `Wall`, `Opening`, `LabelledPolygon`, `TextItem` | 1 out | One per plan (file × page × plan_index). |
 | `Rulebook`, `TypeStats`, `Quantiles`, `Adjacency`, `AdjEntry`, `CoreOffset` | 2 out / 3 in | Seed, mined or blended statistics. |
 | `Taxonomy`, `RoomTypeDef`, `LabelMatch` | all | v1.1: 75 canonical types (offices, retail, food service, education, health, sport, culture, services; based on Uniclass 2015 SL and French ERP types), 500 FR synonyms, deterministic label normalisation (exact, then longest token prefix; no fuzzy matching). Category SPECIAL (`unknown`, `outdoor_space`) is recognised but never allowed in a program or rulebook. |
