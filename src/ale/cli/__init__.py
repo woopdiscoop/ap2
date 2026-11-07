@@ -11,6 +11,7 @@ import typer
 
 from ale import __version__
 from ale.cli.commands import doctor, extract, generate, ingest, init, layers, review, rulebook
+from ale.cli.commands import program as program_cmd
 from ale.cli.commands import status as status_cmd
 from ale.cli.commands._common import LOG_LEVEL_EXPLICIT_KEY
 from ale.logging_setup import configure_logging, shutdown_logging
@@ -77,6 +78,7 @@ app.command("extract")(extract.extract)
 app.command("layers")(layers.layers)
 app.command("review")(review.review)
 app.add_typer(rulebook.app, name="rulebook")
+app.add_typer(program_cmd.app, name="program")
 app.command("generate")(generate.generate)
 app.command("status")(status_cmd.status)
 
