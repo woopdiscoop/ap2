@@ -1,0 +1,99 @@
+{
+  "$defs": {
+    "Polygon": {
+      "additionalProperties": false,
+      "description": "Polygon in native units or metres.\n\nRings are stored open (first point not repeated), with \u2265 3 points each; the polygon\nmust be valid according to shapely ``is_valid``.",
+      "properties": {
+        "exterior": {
+          "items": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "type": "array"
+          },
+          "title": "Exterior",
+          "type": "array"
+        },
+        "holes": {
+          "default": [],
+          "items": {
+            "items": {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            "type": "array"
+          },
+          "title": "Holes",
+          "type": "array"
+        }
+      },
+      "required": [
+        "exterior"
+      ],
+      "title": "Polygon",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Buildable site (metres, y-up).",
+  "properties": {
+    "access_edge": {
+      "title": "Access Edge",
+      "type": "integer"
+    },
+    "core_hint": {
+      "anyOf": [
+        {
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Core Hint"
+    },
+    "footprint": {
+      "$ref": "#/$defs/Polygon"
+    },
+    "north_angle_deg": {
+      "ge": 0.0,
+      "lt": 360.0,
+      "title": "North Angle Deg",
+      "type": "number"
+    }
+  },
+  "required": [
+    "footprint",
+    "north_angle_deg",
+    "access_edge"
+  ],
+  "title": "SiteSpec",
+  "type": "object"
+}
