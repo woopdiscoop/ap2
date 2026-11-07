@@ -41,7 +41,7 @@ hard limit) are only preferences. On the 0.10 m grid both hard rules can always 
 | `PolishExpression` | 3 | Normalised postfix slicing tree; `a b V` = a left of b, `a b H` = a below b. |
 | `PlanGeometry`, `Wall`, `Opening`, `LabelledPolygon`, `TextItem` | 1 out | One per plan (file × page × plan_index). |
 | `Rulebook`, `TypeStats`, `Quantiles`, `Adjacency`, `AdjEntry`, `CoreOffset` | 2 out / 3 in | Seed, mined or blended statistics. |
-| `Taxonomy`, `RoomTypeDef`, `LabelMatch` | all | 25 canonical types, FR synonyms, deterministic label normalisation (exact, then longest token prefix; no fuzzy matching). |
+| `Taxonomy`, `RoomTypeDef`, `LabelMatch` | all | v1.1: 75 canonical types (offices, retail, food service, education, health, sport, culture, services; based on Uniclass 2015 SL and French ERP types), 500 FR synonyms, deterministic label normalisation (exact, then longest token prefix; no fuzzy matching). Category SPECIAL (`unknown`, `outdoor_space`) is recognised but never allowed in a program or rulebook. |
 | `AleConfig` | all | `ale.toml` (Ticket 0.1). |
 
 Enums: `SourceKind, FileStatus, ScaleMethod, LabelSource, MacroZone, Bearing, EdgeKind, ContactKind, OpeningKind, Fidelity, TypeCategory, Frame`.

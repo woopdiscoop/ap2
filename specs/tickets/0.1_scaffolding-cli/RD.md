@@ -23,7 +23,7 @@ No daemon, no server, no network share, no hard-coded paths.
 - Optional extras (declare now, empty implementations come later):
   `cad = ["ezdxf>=1.3"]`, `pdf = ["pymupdf>=1.24"]`, `raster = ["opencv-python-headless>=4.9", "Pillow>=10"]`,
   `excel = ["pandas>=2.1", "openpyxl>=3.1"]`, `vlm = []` (provider chosen later), `all = [...union...]`.
-- Dev extra: `pytest>=8`, `pytest-timeout>=2.3`, `pytest-cov>=5`, `hypothesis>=6.100`, `ruff>=0.6`, `mypy>=1.10`, `types-PyYAML`.
+- Dev extra: `pytest>=8`, `pytest-timeout>=2.3`, `pytest-cov>=5`, `hypothesis>=6.100`, `ruff>=0.6`, `mypy>=1.10`, `types-PyYAML`, `types-shapely` (shapely ships no type hints; needed for `mypy --strict` on `ale.contracts`).
 - No network access at runtime or in tests.
 
 ## 3. File ownership
@@ -143,7 +143,7 @@ api_key_env    = "ALE_VLM_API_KEY"      # name of the env var holding the key â€
 temperature    = 0.0                    # float, MUST equal 0.0 (validator rejects anything else)
 prompt_version = "v1"
 max_invalid_json_retries = 1            # int 0..3
-timeout_s      = 120.0
+timeout_s      = 120.0                  # float > 0 (added 2026-11-07)
 
 [extract]
 raster_dpi           = 300              # int 72..1200
