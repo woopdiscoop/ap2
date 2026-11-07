@@ -85,7 +85,7 @@ class VlmConfig(_Section):
     temperature: float = Field(0.0, description="Must equal 0.0.")
     prompt_version: str = Field("v1", description="Prompt version.")
     max_invalid_json_retries: int = Field(1, ge=0, le=3, description="Retries on invalid JSON.")
-    timeout_s: float = Field(120.0, description="Per VLM call, seconds (no range given in RD 0.1).")
+    timeout_s: float = Field(120.0, gt=0.0, description="Per VLM call, seconds.")
 
     @field_validator("temperature")
     @classmethod

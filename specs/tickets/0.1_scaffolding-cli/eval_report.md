@@ -2,9 +2,9 @@
 
 Environment: Linux (container, uid 0), Python 3.13.18 (main run) and Python 3.11 (second run,
 same result). Installed with `pip install -e ".[dev]"` into a fresh venv; typer 0.28.0,
-pydantic 2.14.3, pytest 9.2.0, ruff 0.17.4, mypy 2.4.1. Windows and macOS were not available.
+pydantic 2.14.3, pytest 9.2.0, ruff 0.17.4, mypy 2.4.1, types-shapely 2.1.0.20261030. Windows and macOS were not available.
 
-Totals: **123 passed, 0 failed, 3 skipped** (pytest node count, parametrised cases counted
+Totals: **124 passed, 0 failed, 3 skipped** (pytest node count, parametrised cases counted
 separately). Suite wall time is about 5 s.
 
 ## 1. Test results by eval ID
@@ -27,7 +27,7 @@ separately). Suite wall time is about 5 s.
 | I07 | `test_I07_awkward_paths[\\]` | SKIP (`windows_only`: the backslash variant needs Windows) |
 | C01 | `test_C01_defaults` (44 parametrised keys, value and type), `test_C01_defaults_complete` | PASS |
 | C02 | `test_C02_partial_file` | PASS |
-| C03 | `test_C03_errors_named` (8 cases through `ale doctor`, exit 4), `test_C03_errors_named_one_line_per_error`, `test_C03_errors_named_unreadable` | PASS |
+| C03 | `test_C03_errors_named` (9 cases through `ale doctor`, exit 4, including the Router-added `vlm.timeout_s = 0`), `test_C03_errors_named_one_line_per_error`, `test_C03_errors_named_unreadable` | PASS |
 | C04 | `test_C04_frozen` (all 60 fields of every model) | PASS |
 | C05 | `test_C05_schema_no_drift`, `test_C05_schema_no_drift_writer` | PASS |
 | C06 | `test_C06_relative_paths_workspace` (`monkeypatch.chdir`, including a decoy file under CWD/bin) | PASS |
@@ -88,9 +88,8 @@ because it only runs in the subprocess tests, which coverage does not trace.
    I implemented it as optional (`ALE_WORKSPACE` env supported). If neither the flag nor the
    env var is given, the command fails with a usage error (exit 2, "no workspace given"),
    not exit 4.
-4. **`vlm.timeout_s` has no range in RD §6.** Following the most literal reading, it is a plain
-   float with no constraint, while `tools.timeout_s` is `> 0`. This probably should be `> 0` too.
-   Changing it would alter the frozen schema, so it is left for the Router to decide.
+4. **`vlm.timeout_s`** (resolved in the Router follow-up): the updated RD §6 makes it a float `> 0`.
+   The model enforces this, `config.schema.json` has been regenerated, and C03 tests `vlm.timeout_s = 0`.
 5. **What counts as an existing workspace** (RD §7 "already an ALE workspace"): both `ale.toml`
    and `corpus.sqlite` must be present. A re-run creates **only missing folders**, as written.
    A missing `layer_map.yaml` is not recreated.
@@ -113,3 +112,10 @@ because it only runs in the subprocess tests, which coverage does not trace.
     `find_tool(..., is_windows=True)`.
 13. **typer 0.28** vendors click, so the code does not import `click`. The test runner helper
     falls back to `CliRunner(mix_stderr=False)` for older typer/click (<8.2) installs.
+
+## 5. Router follow-up (merged `claude/new-session-2hmd3s`, specs only)
+
+- `[vlm].timeout_s` is now `gt=0`; the schema has been regenerated; C03 has the new case.
+- `types-shapely` is in the dev extra (RD §2). It is available on PyPI, so no mypy override was needed.
+- The Router accepted ambiguity resolutions 1-3 and 7-9 as they stand.
+- Re-run: 124 passed, 3 skipped; ruff check, ruff format and mypy are clean; coverage is 97 %.

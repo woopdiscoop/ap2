@@ -409,7 +409,8 @@
         },
         "timeout_s": {
           "default": 120.0,
-          "description": "Per VLM call, seconds (no range given in RD 0.1).",
+          "description": "Per VLM call, seconds.",
+          "exclusiveMinimum": 0.0,
           "title": "Timeout S",
           "type": "number"
         }

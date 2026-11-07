@@ -106,6 +106,7 @@ C03_CASES = [
     ("[optimizer]\ncooling = 1.0\n", "ale.toml: optimizer.cooling:"),
     ("[shape]\naspect_max = 0.5\n", "ale.toml: shape.aspect_max:"),
     ("[workspace]\nformat_version = 2\n", "ale.toml: workspace.format_version:"),
+    ("[vlm]\ntimeout_s = 0\n", "ale.toml: vlm.timeout_s:"),
     # Malformed TOML has no key: the line number takes its place.
     ("[grid]\nmodule_mm 100\n", "ale.toml: line 2, column"),
 ]
