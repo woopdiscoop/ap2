@@ -66,7 +66,7 @@ orientation all 0.0; adjacency `default_p: 0.5`, no pairs; core offset 0/0.
 | P05 | template_example_reads | Reading the `Exemple` sheet (renamed `Programme` in a copy) gives a `Program` equal to P8. |
 | P06 | cli_check | `ale program check` on P8 files → exit 0, prints `fill` ratio; on the X07 workbook → exit 1 and prints each `(row, code)`; `--json` output parses with keys `ok, issues, feasibility`. |
 | P07 | cli_template | `ale program template --out t.xlsx` creates it; second call → non-zero exit unless `--force`. |
-| P08 | cli_registration_only | `git diff` of `src/ale/cli/__init__.py` against the base adds exactly one registration line. |
+| P08 | cli_registration_only | `git diff` of `src/ale/cli/__init__.py` against the base adds exactly two lines: one import of `ale.cli.commands.program` and one `add_typer` registration (amended at review: no `__import__` tricks). |
 
 ## 5. Static gates
 

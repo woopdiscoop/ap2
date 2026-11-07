@@ -15,3 +15,4 @@ Status: BLOCKED on 0.1 and 0.2 being merged (imports `ale.contracts`, `ale.confi
   - `ale` logger has `propagate=False` after any in-process CLI call → hides `ale.*` records from pytest `caplog`. Later tickets must use the same workaround; candidate for a small 0.1 amendment (restore propagation in tests or attach caplog handler directly).
   - 0.1's absolute-path lint flags short command switches like `/T`; `ale.proc` builds them as f-strings. Candidate refinement of P02 regex (require ≥ 2 path characters or a second separator).
   - `bounded_range(..., on_exhaust="raise")` raises when consumed to the cap — intended for convergence loops that must `break`; use `on_exhaust="stop"` for fixed-length loops.
+- 2026-11-07 — Cross-platform verified: CI runs #4–#6 green on windows/macos/ubuntu × 3.11/3.12/3.13 after the `.gitattributes` LF fix and the Windows/race test fixes.

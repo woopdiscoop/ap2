@@ -5,3 +5,6 @@ Status: BLOCKED on 0.2, 0.3, 0.4 (consumes a `PolishExpression`; does not need 3
 O-2 resolved (2026-11-07): **two hard rules** — area (−3 % / +max(3 %, 1.2 m²)) and proportion ≤ `shape.aspect_max` = 2:1 (circulation exempt). Per-type p10–p90 bands are soft inside the hard limit; if a band is infeasible for a target, fall back to 1.0–2.0 and cost the deviation. Verified jointly feasible on the 0.10 m grid for every target 0.5–500 m² (overshoot ≤ 0.18 m², never below target). Residual-strip merges must not push a room past 2:1. Historical analysis at 0.60 m:
 - When no rectangle within a type's aspect band meets the area rule (e.g. 7.43 m² in a 1:1–1:2 band; ~11 % of targets in a 1.5–2.0 band), which constraint gives way: aspect band (soft) or area rule (report violation)?
 - Directive §3.B.5 says the largest overshoot needed in the 1:2 band is +1.14 m²; exact computation gives +1.217 m² at T ≈ 7.423 m² (gap 7.423–7.439 m²). The 1:2.5 band's maximum is +1.04 m², not ≤ 0.9 m² (cap still never reached).
+
+## U-6 (2026-11-07)
+Re-scoped: realises a `CorridorPlan` (contract A.1) instead of a free Polish expression. Spec to follow design note §4; depends on A.1. The area/aspect analysis above still applies per room (room bay: w × D; stack room: w_s × h_i).
