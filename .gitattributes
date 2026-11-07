@@ -1,0 +1,4 @@
+# Keep LF line endings in every checkout, on every OS (Git for Windows would
+# otherwise convert to CRLF and break byte-exact checks: CONTRACTS.lock,
+# schema drift tests, verbatim fixtures).
+* text=auto eol=lf
