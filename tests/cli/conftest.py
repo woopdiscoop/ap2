@@ -6,6 +6,7 @@ import os
 import shutil
 import subprocess
 import sys
+import sysconfig
 from collections.abc import Callable, Iterator, Sequence
 from pathlib import Path
 from typing import Any
@@ -84,6 +85,19 @@ def subprocess_env(**extra: str) -> dict[str, str]:
     return env
 
 
+def find_console_script() -> str | None:
+    """The installed `ale` console script: the scheme's scripts dir (`Scripts\\ale.exe`
+    on Windows), then the interpreter's folder, then PATH."""
+    names = ("ale.exe", "ale") if sys.platform == "win32" else ("ale",)
+    folders = [sysconfig.get_path("scripts"), str(Path(sys.executable).parent)]
+    for folder in folders:
+        for name in names:
+            candidate = Path(folder) / name
+            if candidate.is_file():
+                return str(candidate)
+    return shutil.which("ale")
+
+
 @pytest.fixture
 def run_ale() -> Callable[..., subprocess.CompletedProcess[bytes]]:
     """Run `python -m ale ...` (or the `ale` console script) as a real subprocess."""
@@ -92,8 +106,8 @@ def run_ale() -> Callable[..., subprocess.CompletedProcess[bytes]]:
         args: Sequence[str], script: bool = False, **env: str
     ) -> subprocess.CompletedProcess[bytes]:
         if script:
-            exe = shutil.which("ale", path=str(Path(sys.executable).parent))
-            assert exe is not None, "console script `ale` not installed next to the interpreter"
+            exe = find_console_script()
+            assert exe is not None, "console script `ale` not found (scripts dir or PATH)"
             cmd = [exe, *args]
         else:
             cmd = [sys.executable, "-m", "ale", *args]
