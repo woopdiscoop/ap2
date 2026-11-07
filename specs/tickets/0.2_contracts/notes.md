@@ -22,4 +22,7 @@
 - Disambiguations decided by longest-prefix: CHAMBRE FROIDE (cold_room) vs CHAMBRE (bedroom); LOGE GARDIEN (security_room) vs LOGES (dressing_room); SALLE INFORMATIQUE (computer_room) vs LOCAL INFORMATIQUE (it_room); PLATEAU SCENIQUE (stage) vs PLATEAU (open_office); ESPACE D'ATTENTE SECURISE (safe_refuge) vs ESPACE D'ATTENTE (waiting_area). REFECTOIRE moved from break_room to dining_room.
 
 ## Review log
-_(empty)_
+- 2026-11-07 — Attempt 1 (commit 842722e): 181 pass. Worker correctly flagged eval A03 (Router expectations 100× too large); kept old literals as strict-xfail instead of editing them — correct behaviour.
+- 2026-11-07 — Attempt 2 (commit 00bf5e1): taxonomy v1.1 + SPECIAL rejection + corrected A03; 203 pass.
+- 2026-11-07 — Integration with 0.1 exposed one failure: test_M04 auto-discovered 0.1's config models and required instances for them. Fixed in 44e933d (config models still checked for forbid/frozen, exempt from instance coverage).
+- Merged tree: 327 pass / 3 skip, ruff/format/mypy clean, schemas no drift, coverage 99 %. **DONE** (merge 105bb0b). `CONTRACTS.lock` generated over 23 files → contracts frozen at 1.0.0 (taxonomy 1.1.0).

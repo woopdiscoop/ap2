@@ -12,4 +12,6 @@
 - `grid.module_mm` default 600 → **100** (U-1). `circulation.min_width_m` default 1.8 → **1.2 m** (U-3, confirmed by the user).
 
 ## Review log
-_(empty)_
+- 2026-11-07 — Attempt 1 (commit 9af59a4): 123 pass / 3 skip. Accepted ambiguity resolutions: malformed-TOML message `ale.toml: line N, column M`, `generate --seed` default None (no workspace there), stub without workspace → exit 2, UTC log date, ruff `extend-exclude = ["specs"]`, bare `--version`. Follow-up requested: `vlm.timeout_s > 0`, `types-shapely`.
+- 2026-11-07 — Attempt 2 (commit 2f196f4): Router re-run in a clean checkout + fresh venv: 124 pass / 3 skip (2 Windows-only, 1 root-only chmod), ruff/format/mypy clean, coverage 97 %, all 33 eval IDs present, ownership clean. Manual CLI checks passed (accented path + cp1252, idempotent init, doctor secret hygiene, stub exit 3, config error exit 4).
+- Merged with 0.2: 327 pass / 3 skip, mypy strict clean on 33 modules. **DONE** (merge cafd493). Windows/macOS evidence pending first CI run (P05).
