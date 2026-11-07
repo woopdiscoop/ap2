@@ -14,6 +14,13 @@ from pydantic import BaseModel, ValidationError
 
 import ale.contracts
 from ale.contracts.area_rule import AreaCheck, AreaTolerance
+from ale.contracts.corridor_plan import (
+    BlockPlan,
+    CorridorPlan,
+    FingerBay,
+    PiecePlan,
+    RoomBay,
+)
 from ale.contracts.enums import (
     Bearing,
     Fidelity,
@@ -25,6 +32,7 @@ from ale.contracts.enums import (
     SourceKind,
     fidelity_of,
 )
+from ale.contracts.footprint import decompose_footprint
 from ale.contracts.geometry import (
     LineString,
     ModulePolygon,
@@ -179,6 +187,32 @@ def _instances(h: SimpleNamespace) -> list[BaseModel]:
         tax.normalize_label("BUREAU"),
         AreaTolerance(),
         AreaCheck(valid=True, placed_m2=1.0, delta_m2=0.0, delta_pct=0.0, overshoot_m2=0.0),
+        *_corridor_instances(),
+    ]
+
+
+def _corridor_instances() -> list[BaseModel]:
+    """Instances of the A.1 amendment models (corridor_plan, footprint)."""
+    finger = FingerBay(left=("R2",), right=("R3#01",))
+    block = BlockPlan(bays=(RoomBay(room="R1"), finger))
+    corridor = CorridorPlan(
+        pieces=(
+            PiecePlan(block_a=block, block_b=BlockPlan(bays=(FingerBay(junction=True),))),
+            PiecePlan(block_a=BlockPlan(), block_b=BlockPlan(bays=(RoomBay(room="R4"),))),
+        )
+    )
+    pieces = decompose_footprint(
+        ModulePolygon(exterior=((0, 0), (480, 0), (480, 180), (300, 180), (300, 300), (0, 300)))
+    )
+    return [
+        corridor,
+        corridor.pieces[0],
+        block,
+        block.bays[0],
+        finger,
+        corridor.locate("R3#01"),
+        pieces,
+        pieces.pieces[0],
     ]
 
 

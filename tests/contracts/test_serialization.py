@@ -290,5 +290,5 @@ def test_J06_import_light(h: SimpleNamespace) -> None:
 
 
 def test_version_and_layout_schema_version() -> None:
-    assert CONTRACTS_VERSION == "1.0.0"
+    assert CONTRACTS_VERSION == "1.1.0"
     assert Layout.model_fields["schema_version"].default == "ale.layout/1"

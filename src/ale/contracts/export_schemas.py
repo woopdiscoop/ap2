@@ -13,6 +13,8 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
+from ale.contracts.corridor_plan import CorridorPlan
+from ale.contracts.footprint import FootprintPieces
 from ale.contracts.models import Layout, PlanGeometry, Program, RoomSpec, Rulebook, SiteSpec
 from ale.contracts.taxonomy import Taxonomy
 
@@ -27,6 +29,8 @@ SCHEMA_MODELS: tuple[type[BaseModel], ...] = (
     PlanGeometry,
     Rulebook,
     Taxonomy,
+    CorridorPlan,
+    FootprintPieces,
 )
 
 
