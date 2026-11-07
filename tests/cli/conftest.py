@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import importlib
 import os
 import shutil
 import subprocess
 import sys
 import sysconfig
+import types
 from collections.abc import Callable, Iterator, Sequence
 from pathlib import Path
 from typing import Any
@@ -14,6 +16,7 @@ from typing import Any
 import pytest
 from typer.testing import CliRunner, Result
 
+import ale.doctor
 from ale.cli import app
 from ale.logging_setup import shutdown_logging
 
@@ -71,12 +74,35 @@ def make_ws(invoke: Invoke) -> Callable[[Path], Path]:
 
 @pytest.fixture
 def doctor_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
-    """PATH reduced to the interpreter folder, ProgramFiles pointed at tmp."""
+    """A clean machine: PATH reduced to the interpreter folder, ProgramFiles pointed at
+    tmp, and the optional extras reported missing whatever is installed."""
     program_files = tmp_path / "ProgramFiles"
     program_files.mkdir()
     monkeypatch.setenv("PATH", str(Path(sys.executable).parent))
     monkeypatch.setenv("ProgramFiles", str(program_files))
+    hide_optional_extras(monkeypatch)
     return program_files
+
+
+@pytest.fixture
+def show_extras(monkeypatch: pytest.MonkeyPatch) -> Callable[[], None]:
+    """Call to make the doctor see every optional extra as importable."""
+    return lambda: hide_optional_extras(monkeypatch, hidden=False)
+
+
+def hide_optional_extras(monkeypatch: pytest.MonkeyPatch, hidden: bool = True) -> None:
+    """Make the doctor's import probe see the optional extras as missing (or, with
+    ``hidden=False``, as importable). Patched only inside ``ale.doctor``."""
+    extras = {module for module, _, _ in ale.doctor.EXTRAS}
+
+    def import_module(name: str, package: str | None = None) -> object:
+        if name in extras:
+            if hidden:
+                raise ModuleNotFoundError(f"No module named {name!r}", name=name)
+            return types.ModuleType(name)
+        return importlib.import_module(name, package)
+
+    monkeypatch.setattr(ale.doctor, "importlib", types.SimpleNamespace(import_module=import_module))
 
 
 def subprocess_env(**extra: str) -> dict[str, str]:
