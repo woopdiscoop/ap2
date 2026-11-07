@@ -324,7 +324,8 @@ def test_cwd_and_pathlike_argv(tmp_path: Path) -> None:
     work.mkdir()
     script = work / "s.py"
     script.write_text("import os; print(os.getcwd())", encoding="utf-8")
-    report = run_tool([Path(PY), script], timeout_s=30, cwd=work)
+    # UTF-8 child output: on Windows a pipe would otherwise get the ANSI code page.
+    report = run_tool([Path(PY), script], timeout_s=30, cwd=work, env={"PYTHONUTF8": "1"})
     assert report.ok
     assert Path(report.stdout.strip()).resolve() == work.resolve()
     assert report.cwd == str(work)
