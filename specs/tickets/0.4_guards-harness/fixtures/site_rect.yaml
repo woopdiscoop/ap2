@@ -1,0 +1,7 @@
+# Fixture site_rect — 24.0 × 18.0 m rectangle (432.0 m²), north up, access on the south edge (edge 0).
+footprint:
+  exterior: [[0.0, 0.0], [24.0, 0.0], [24.0, 18.0], [0.0, 18.0]]
+  holes: []
+north_angle_deg: 0.0
+access_edge: 0
+core_hint: null
