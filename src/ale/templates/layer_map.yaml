@@ -1,0 +1,4 @@
+# Map CAD layer names to roles. Proposed by `ale layers`; edit and keep.
+# Roles: wall, door, window, room_label, area_label, zone, furniture, ignore
+version: 1
+layers: {}

@@ -1,0 +1,484 @@
+{
+  "$defs": {
+    "AreaConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "tol_down_pct": {
+          "default": 3.0,
+          "description": "Allowed undershoot, percent.",
+          "maximum": 20.0,
+          "minimum": 0.0,
+          "title": "Tol Down Pct",
+          "type": "number"
+        },
+        "tol_up_abs_m2": {
+          "default": 1.2,
+          "description": "Allowed absolute overshoot, square metres.",
+          "maximum": 10.0,
+          "minimum": 0.0,
+          "title": "Tol Up Abs M2",
+          "type": "number"
+        },
+        "tol_up_pct": {
+          "default": 3.0,
+          "description": "Allowed overshoot, percent.",
+          "maximum": 20.0,
+          "minimum": 0.0,
+          "title": "Tol Up Pct",
+          "type": "number"
+        }
+      },
+      "title": "AreaConfig",
+      "type": "object"
+    },
+    "CirculationConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "min_door_edge_m": {
+          "default": 1.2,
+          "description": "Minimum door edge, metres.",
+          "exclusiveMinimum": 0.0,
+          "title": "Min Door Edge M",
+          "type": "number"
+        },
+        "min_width_m": {
+          "default": 1.2,
+          "description": "Corridor clear width, metres (U-3).",
+          "exclusiveMinimum": 0.0,
+          "title": "Min Width M",
+          "type": "number"
+        },
+        "ratio": {
+          "default": 0.18,
+          "description": "Circulation share (open).",
+          "maximum": 0.5,
+          "minimum": 0.05,
+          "title": "Ratio",
+          "type": "number"
+        }
+      },
+      "title": "CirculationConfig",
+      "type": "object"
+    },
+    "DeterminismConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "seed": {
+          "default": 42,
+          "description": "Default for `ale generate --seed`.",
+          "minimum": 0,
+          "title": "Seed",
+          "type": "integer"
+        }
+      },
+      "title": "DeterminismConfig",
+      "type": "object"
+    },
+    "ExtractConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "pdf_vector_min_paths": {
+          "default": 200,
+          "description": "N in the vector/scanned PDF rule.",
+          "minimum": 1,
+          "title": "Pdf Vector Min Paths",
+          "type": "integer"
+        },
+        "raster_dpi": {
+          "default": 300,
+          "description": "Raster rendering DPI.",
+          "maximum": 1200,
+          "minimum": 72,
+          "title": "Raster Dpi",
+          "type": "integer"
+        },
+        "review_confidence": {
+          "default": 0.6,
+          "description": "Below this confidence an item goes to `ale review`.",
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Review Confidence",
+          "type": "number"
+        }
+      },
+      "title": "ExtractConfig",
+      "type": "object"
+    },
+    "FacadeConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "min_facade_len_m": {
+          "default": 2.4,
+          "description": "Minimum facade length, metres.",
+          "exclusiveMinimum": 0.0,
+          "title": "Min Facade Len M",
+          "type": "number"
+        }
+      },
+      "title": "FacadeConfig",
+      "type": "object"
+    },
+    "FidelityWeightsConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "CAD": {
+          "default": 1.0,
+          "description": "Weight of CAD sources.",
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Cad",
+          "type": "number"
+        },
+        "PDF_VECTOR": {
+          "default": 0.8,
+          "description": "Weight of vector PDF sources.",
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Pdf Vector",
+          "type": "number"
+        },
+        "RASTER": {
+          "default": 0.5,
+          "description": "Weight of raster sources.",
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Raster",
+          "type": "number"
+        }
+      },
+      "title": "FidelityWeightsConfig",
+      "type": "object"
+    },
+    "GridConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "module_mm": {
+          "default": 100,
+          "description": "1 module = module_mm millimetres (U-1: 0.10 m).",
+          "maximum": 1200,
+          "minimum": 100,
+          "title": "Module Mm",
+          "type": "integer"
+        }
+      },
+      "title": "GridConfig",
+      "type": "object"
+    },
+    "LoggingConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "level": {
+          "default": "INFO",
+          "description": "Console log level.",
+          "enum": [
+            "DEBUG",
+            "INFO",
+            "WARNING",
+            "ERROR"
+          ],
+          "title": "Level",
+          "type": "string"
+        }
+      },
+      "title": "LoggingConfig",
+      "type": "object"
+    },
+    "OptimizerConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "cooling": {
+          "default": 0.95,
+          "description": "Cooling factor, 0..1 exclusive.",
+          "exclusiveMaximum": 1.0,
+          "exclusiveMinimum": 0.0,
+          "title": "Cooling",
+          "type": "number"
+        },
+        "initial_acceptance": {
+          "default": 0.8,
+          "description": "Share of uphill moves accepted at T0.",
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Initial Acceptance",
+          "type": "number"
+        },
+        "max_iter": {
+          "default": 200000,
+          "description": "Maximum iterations.",
+          "minimum": 1,
+          "title": "Max Iter",
+          "type": "integer"
+        },
+        "moves_per_temperature": {
+          "default": 200,
+          "description": "Moves per temperature step.",
+          "minimum": 1,
+          "title": "Moves Per Temperature",
+          "type": "integer"
+        },
+        "time_budget_s": {
+          "default": 120.0,
+          "description": "Time budget, seconds.",
+          "exclusiveMinimum": 0.0,
+          "title": "Time Budget S",
+          "type": "number"
+        },
+        "weights": {
+          "$ref": "#/$defs/OptimizerWeightsConfig"
+        }
+      },
+      "title": "OptimizerConfig",
+      "type": "object"
+    },
+    "OptimizerWeightsConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "area_overshoot": {
+          "default": 1.0,
+          "minimum": 0.0,
+          "title": "Area Overshoot",
+          "type": "number"
+        },
+        "aspect": {
+          "default": 1.0,
+          "minimum": 0.0,
+          "title": "Aspect",
+          "type": "number"
+        },
+        "circulation_length": {
+          "default": 1.0,
+          "minimum": 0.0,
+          "title": "Circulation Length",
+          "type": "number"
+        },
+        "core_distance": {
+          "default": 1.0,
+          "minimum": 0.0,
+          "title": "Core Distance",
+          "type": "number"
+        },
+        "facade_orientation": {
+          "default": 1.0,
+          "minimum": 0.0,
+          "title": "Facade Orientation",
+          "type": "number"
+        },
+        "required_adjacency": {
+          "default": 1000.0,
+          "minimum": 0.0,
+          "title": "Required Adjacency",
+          "type": "number"
+        },
+        "rulebook_adjacency": {
+          "default": 1.0,
+          "minimum": 0.0,
+          "title": "Rulebook Adjacency",
+          "type": "number"
+        }
+      },
+      "title": "OptimizerWeightsConfig",
+      "type": "object"
+    },
+    "RulebookConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "blend_k": {
+          "default": 10.0,
+          "description": "Seed pseudo-count.",
+          "exclusiveMinimum": 0.0,
+          "title": "Blend K",
+          "type": "number"
+        },
+        "fidelity_weights": {
+          "$ref": "#/$defs/FidelityWeightsConfig"
+        },
+        "laplace_alpha": {
+          "default": 1.0,
+          "description": "Laplace smoothing alpha.",
+          "minimum": 0.0,
+          "title": "Laplace Alpha",
+          "type": "number"
+        },
+        "min_support": {
+          "default": 5,
+          "description": "Minimum support of a rule.",
+          "minimum": 1,
+          "title": "Min Support",
+          "type": "integer"
+        }
+      },
+      "title": "RulebookConfig",
+      "type": "object"
+    },
+    "ShapeConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "aspect_max": {
+          "default": 2.0,
+          "description": "Hard limit long side / short side for every room; circulation is exempt.",
+          "maximum": 6.0,
+          "minimum": 1.0,
+          "title": "Aspect Max",
+          "type": "number"
+        }
+      },
+      "title": "ShapeConfig",
+      "type": "object"
+    },
+    "SiteConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "max_fill": {
+          "default": 0.95,
+          "description": "Feasibility check fill ratio.",
+          "maximum": 1.0,
+          "minimum": 0.5,
+          "title": "Max Fill",
+          "type": "number"
+        }
+      },
+      "title": "SiteConfig",
+      "type": "object"
+    },
+    "ToolsConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "accoreconsole": {
+          "default": "",
+          "description": "AutoCAD accoreconsole path; \"\" = auto-detect.",
+          "title": "Accoreconsole",
+          "type": "string"
+        },
+        "oda_file_converter": {
+          "default": "",
+          "description": "ODA File Converter path; \"\" = auto-detect.",
+          "title": "Oda File Converter",
+          "type": "string"
+        },
+        "timeout_s": {
+          "default": 300.0,
+          "description": "Per external process call, seconds.",
+          "exclusiveMinimum": 0.0,
+          "title": "Timeout S",
+          "type": "number"
+        }
+      },
+      "title": "ToolsConfig",
+      "type": "object"
+    },
+    "VlmConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "api_key_env": {
+          "default": "ALE_VLM_API_KEY",
+          "description": "Name of the env var holding the key, never the key.",
+          "title": "Api Key Env",
+          "type": "string"
+        },
+        "max_invalid_json_retries": {
+          "default": 1,
+          "description": "Retries on invalid JSON.",
+          "maximum": 3,
+          "minimum": 0,
+          "title": "Max Invalid Json Retries",
+          "type": "integer"
+        },
+        "model_id": {
+          "default": "",
+          "description": "VLM model id (open).",
+          "title": "Model Id",
+          "type": "string"
+        },
+        "prompt_version": {
+          "default": "v1",
+          "description": "Prompt version.",
+          "title": "Prompt Version",
+          "type": "string"
+        },
+        "provider": {
+          "default": "",
+          "description": "VLM provider (open); \"\" = VLM disabled.",
+          "title": "Provider",
+          "type": "string"
+        },
+        "temperature": {
+          "default": 0.0,
+          "description": "Must equal 0.0.",
+          "title": "Temperature",
+          "type": "number"
+        },
+        "timeout_s": {
+          "default": 120.0,
+          "description": "Per VLM call, seconds.",
+          "exclusiveMinimum": 0.0,
+          "title": "Timeout S",
+          "type": "number"
+        }
+      },
+      "title": "VlmConfig",
+      "type": "object"
+    },
+    "WorkspaceConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "format_version": {
+          "const": 1,
+          "default": 1,
+          "description": "Workspace format version, must be 1.",
+          "title": "Format Version",
+          "type": "integer"
+        }
+      },
+      "title": "WorkspaceConfig",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Root of ``ale.toml``.",
+  "properties": {
+    "area": {
+      "$ref": "#/$defs/AreaConfig"
+    },
+    "circulation": {
+      "$ref": "#/$defs/CirculationConfig"
+    },
+    "determinism": {
+      "$ref": "#/$defs/DeterminismConfig"
+    },
+    "extract": {
+      "$ref": "#/$defs/ExtractConfig"
+    },
+    "facade": {
+      "$ref": "#/$defs/FacadeConfig"
+    },
+    "grid": {
+      "$ref": "#/$defs/GridConfig"
+    },
+    "logging": {
+      "$ref": "#/$defs/LoggingConfig"
+    },
+    "optimizer": {
+      "$ref": "#/$defs/OptimizerConfig"
+    },
+    "rulebook": {
+      "$ref": "#/$defs/RulebookConfig"
+    },
+    "shape": {
+      "$ref": "#/$defs/ShapeConfig"
+    },
+    "site": {
+      "$ref": "#/$defs/SiteConfig"
+    },
+    "tools": {
+      "$ref": "#/$defs/ToolsConfig"
+    },
+    "vlm": {
+      "$ref": "#/$defs/VlmConfig"
+    },
+    "workspace": {
+      "$ref": "#/$defs/WorkspaceConfig"
+    }
+  },
+  "title": "AleConfig",
+  "type": "object"
+}
