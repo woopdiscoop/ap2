@@ -5,4 +5,4 @@ Verified expectations: site_L → vertical cut, J2, primary (0,0,300,300) X, sec
 J1 example → vertical cut, primary (0,0,200,300) Y, secondary (200,0,400,120) X, facing block B.
 
 ## Review log
-_(empty)_
+- 2026-11-07 — Attempt 1 (commit a2ba097): 33 tests, 100 % coverage, existing contracts untouched; edited `test_serialization.py` version literal (necessary, accepted). Worker found that Router eval F04 was wrong: with the tie rule "square primary → X", site_L rotated 90°/270° gives J1, not J2. Rule amended rather than the test: square primary takes the spine axis perpendicular to the cut (rotation-invariant). Rework requested.

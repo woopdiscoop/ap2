@@ -121,7 +121,8 @@ def decompose_footprint(fp: ModulePolygon) -> FootprintPieces
 - **L** (6 vertices, one reflex vertex r): candidate cuts through r, horizontal (y = r.y) and vertical
   (x = r.x), each giving two rectangles. Choose the cut minimising the larger of the two pieces' aspect
   ratios (long/short); tie → horizontal. **Primary** = larger area (tie → the piece whose rect has the
-  smaller (y, x) origin). Primary `spine_axis` = its long axis (tie → `"X"`). **Secondary** `spine_axis`
+  smaller (y, x) origin). Primary `spine_axis` = its long axis; **tie (square primary) → the axis perpendicular
+  to the cut line**, so the result does not depend on the drawing's orientation (amended at review 2026-11-07). **Secondary** `spine_axis`
   = perpendicular to the cut line (a vertical cut line → `"X"`; a horizontal one → `"Y"`).
   `junction` = `"J1"` if the cut line is parallel to the primary's spine axis, else `"J2"`.
   `facing_block` (J1): primary axis X → `"B"` if the cut lies on the primary's top edge, else `"A"`;
