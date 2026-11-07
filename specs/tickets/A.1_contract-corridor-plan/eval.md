@@ -14,7 +14,7 @@ Expected values computed by the Router.
 | F01 | rect | `decompose_footprint([(0,0),(240,0),(240,180),(0,180)])` → one piece `rect (0,0,240,180)`, axis `X`, `junction "NONE"`; a 100 × 300 rectangle → axis `Y`; 200 × 200 → `X`. |
 | F02 | site_L_J2 | `[(0,0),(480,0),(480,180),(300,180),(300,300),(0,300)]` → cut **vertical** (max aspect 1.000 vs 2.667 horizontal); primary `(0,0,300,300)` axis `X`; secondary `(300,0,180,180)` axis `X`; `junction "J2"`; `cut ((300,0),(300,180))`; `facing_block None`. |
 | F03 | J1 | `[(0,0),(600,0),(600,120),(200,120),(200,300),(0,300)]` → cut vertical (3.333 vs 5.000); primary `(0,0,200,300)` axis `Y`; secondary `(200,0,400,120)` axis `X`; `junction "J1"`; `cut ((200,0),(200,120))`; `facing_block "B"`. |
-| F04 | rotations | The site_L shape mirrored/rotated in the 4 orientations: always 2 pieces whose areas are 90 000 and 32 400 cells and whose union area equals the polygon area; junction J2. |
+| F04 | rotations | The site_L shape in all 8 orientations (identity, 90°, 180°, 270° rotations, and their mirrors): always 2 pieces of 90 000 and 32 400 cells whose union area equals the polygon area, and **junction J2 in every orientation** (square primary → spine perpendicular to the cut). |
 | F05 | unsupported | An 8-vertex U shape → `ValueError` with the v1 message. |
 | S01 | schemas | `export_schemas --check` passes and includes `CorridorPlan.schema.json`, `FootprintPieces.schema.json`. |
 | S02 | lock | `python -m ale.contracts.lock --check` exits 0 on the committed tree. |
