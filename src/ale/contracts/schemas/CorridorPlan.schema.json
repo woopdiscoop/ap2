@@ -1,0 +1,130 @@
+{
+  "$defs": {
+    "BlockPlan": {
+      "additionalProperties": false,
+      "description": "One side of a spine: bays ordered along the spine from the piece's min coordinate.",
+      "properties": {
+        "bays": {
+          "default": [],
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "finger": "#/$defs/FingerBay",
+                "room": "#/$defs/RoomBay"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/RoomBay"
+              },
+              {
+                "$ref": "#/$defs/FingerBay"
+              }
+            ]
+          },
+          "title": "Bays",
+          "type": "array"
+        }
+      },
+      "title": "BlockPlan",
+      "type": "object"
+    },
+    "FingerBay": {
+      "additionalProperties": false,
+      "description": "A bay holding a corridor finger with a stack of rooms on each side.\n\n``left`` is the stack before the finger along the spine, ``right`` the stack after it;\nboth ordered from the spine outward. ``junction`` is ``True`` only for the L-shape J1\njunction finger. A non-junction finger has at least one room.",
+      "properties": {
+        "junction": {
+          "default": false,
+          "title": "Junction",
+          "type": "boolean"
+        },
+        "kind": {
+          "const": "finger",
+          "default": "finger",
+          "title": "Kind",
+          "type": "string"
+        },
+        "left": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Left",
+          "type": "array"
+        },
+        "right": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Right",
+          "type": "array"
+        }
+      },
+      "title": "FingerBay",
+      "type": "object"
+    },
+    "PiecePlan": {
+      "additionalProperties": false,
+      "description": "The two blocks of a piece: A lower (spine axis X) / left (axis Y), B upper / right.",
+      "properties": {
+        "block_a": {
+          "$ref": "#/$defs/BlockPlan"
+        },
+        "block_b": {
+          "$ref": "#/$defs/BlockPlan"
+        }
+      },
+      "required": [
+        "block_a",
+        "block_b"
+      ],
+      "title": "PiecePlan",
+      "type": "object"
+    },
+    "RoomBay": {
+      "additionalProperties": false,
+      "description": "A bay holding one room that touches the spine.",
+      "properties": {
+        "kind": {
+          "const": "room",
+          "default": "room",
+          "title": "Kind",
+          "type": "string"
+        },
+        "room": {
+          "title": "Room",
+          "type": "string"
+        }
+      },
+      "required": [
+        "room"
+      ],
+      "title": "RoomBay",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Corridor-grammar plan: one :class:`PiecePlan` per footprint piece (1 or 2).\n\n``pieces`` are in the same order as ``FootprintPieces.pieces``. Every instance id appears\nexactly once; at most one junction finger, only in ``pieces[0]`` of a 2-piece plan.",
+  "properties": {
+    "pieces": {
+      "items": {
+        "$ref": "#/$defs/PiecePlan"
+      },
+      "title": "Pieces",
+      "type": "array"
+    },
+    "schema_version": {
+      "const": "ale.corridor_plan/1",
+      "default": "ale.corridor_plan/1",
+      "title": "Schema Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "pieces"
+  ],
+  "title": "CorridorPlan",
+  "type": "object"
+}

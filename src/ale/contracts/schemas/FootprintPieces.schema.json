@@ -1,0 +1,143 @@
+{
+  "$defs": {
+    "ModuleRect": {
+      "additionalProperties": false,
+      "description": "Axis-aligned rectangle in modules covering ``[x, x+w] x [y, y+h]`` (w, h \u2265 1).\n\nAccepts positional arguments ``ModuleRect(x, y, w, h)`` as well as keywords.",
+      "properties": {
+        "h": {
+          "minimum": 1,
+          "title": "H",
+          "type": "integer"
+        },
+        "w": {
+          "minimum": 1,
+          "title": "W",
+          "type": "integer"
+        },
+        "x": {
+          "title": "X",
+          "type": "integer"
+        },
+        "y": {
+          "title": "Y",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "x",
+        "y",
+        "w",
+        "h"
+      ],
+      "title": "ModuleRect",
+      "type": "object"
+    },
+    "Piece": {
+      "additionalProperties": false,
+      "description": "Axis-aligned rectangle of the module footprint with the axis of its spine corridor.",
+      "properties": {
+        "rect": {
+          "$ref": "#/$defs/ModuleRect"
+        },
+        "spine_axis": {
+          "enum": [
+            "X",
+            "Y"
+          ],
+          "title": "Spine Axis",
+          "type": "string"
+        }
+      },
+      "required": [
+        "rect",
+        "spine_axis"
+      ],
+      "title": "Piece",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Result of :func:`decompose_footprint`.\n\n``pieces``: primary first (one piece for a rectangle, two for an L). ``cut``: endpoints of\nthe shared cut segment (lower/left endpoint first), ``None`` for a rectangle.\n``facing_block``: J1 only, the block of the primary (``\"A\"`` lower/left, ``\"B\"``\nupper/right) that faces the cut.",
+  "properties": {
+    "cut": {
+      "anyOf": [
+        {
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "integer"
+                }
+              ],
+              "type": "array"
+            },
+            {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "integer"
+                }
+              ],
+              "type": "array"
+            }
+          ],
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Cut"
+    },
+    "facing_block": {
+      "anyOf": [
+        {
+          "enum": [
+            "A",
+            "B"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Facing Block"
+    },
+    "junction": {
+      "enum": [
+        "NONE",
+        "J1",
+        "J2"
+      ],
+      "title": "Junction",
+      "type": "string"
+    },
+    "pieces": {
+      "items": {
+        "$ref": "#/$defs/Piece"
+      },
+      "title": "Pieces",
+      "type": "array"
+    }
+  },
+  "required": [
+    "pieces",
+    "junction",
+    "cut",
+    "facing_block"
+  ],
+  "title": "FootprintPieces",
+  "type": "object"
+}

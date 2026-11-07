@@ -2,4 +2,4 @@
 
 from typing import Final
 
-CONTRACTS_VERSION: Final = "1.0.0"
+CONTRACTS_VERSION: Final = "1.1.0"
