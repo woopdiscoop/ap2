@@ -1,0 +1,116 @@
+# ============================================================================
+# ALE 2.2 — SEED RULEBOOK (template)                     to be filled by the architect
+# ============================================================================
+# This file is the generator's knowledge before any plan has been mined. Phase 3
+# (layout generation) runs on it alone; later, mined statistics are blended in.
+#
+# HOW TO FILL IT
+#   * Replace every `null` with a number. Nothing else needs to change.
+#   * A room type you do not need yet: delete its whole block under `types:`.
+#     ALE then refuses any program that uses that type, and says so.
+#   * Check your work at any time:
+#         python -m ale.contracts.validate rulebook seed_rulebook.yaml
+#
+# UNITS & MEANINGS
+#   aspect     long side / short side of the room rectangle (1.0 = square, 2.0 = 1:2).
+#              p10 / p50 / p90 = "narrow / typical / wide" proportions you accept.
+#              Rule: 1.0 <= p10 <= p50 <= p90 <= 6.0
+#              ! A narrow band (e.g. p10 1.5, p90 2.0) can make some areas impossible
+#              ! on the 0.60 m grid within the -3 % / +1.2 m2 tolerance (about 11 % of
+#              ! targets between 2 and 60 m2 for a 1.5-2.0 band). Including 1.0-2.0 avoids it.
+#   area_m2    typical net area of ONE room of that type, in m2 (p10 <= p50 <= p90).
+#              Used for sanity checks and blending, not as targets (targets come from the Excel program).
+#   orientation  preference for the façade a room faces, per compass direction, from
+#              -1.0 (avoid) to +1.0 (strongly prefer); 0.0 = indifferent.
+#              Example for an office: S 1.0, E 0.5, N 0.3, W -0.5.
+#   adjacency.pairs   [type_a, type_b, p] = probability, 0.0-1.0, that two such rooms share
+#              a wall or a door when both exist in a plan. 0.5 = neutral;
+#              close to 1 = should touch; close to 0 = should not touch.
+#              Write each pair once, either order. A type may pair with itself (office, office).
+#   adjacency.default_p   p used for every pair you do not list.
+#   core_offset  where the service core (sanitary, technical, IT, stairs, lifts) sits relative
+#              to the footprint centre, as a fraction of footprint width (dx) and depth (dy):
+#              0.0 / 0.0 = centred; dx -0.5 = against the left (-x) edge, dy +0.5 = against the
+#              top (+y) edge, in the axes of the site drawing (not compass directions). Range -0.5..+0.5.
+#
+# VALUES TO SUPPLY: 23 types x (3 aspect + 3 area + 4 orientation) = 230,
+#   + 30 listed adjacency p + 1 default_p + 2 core offset + author/date = 265 entries.
+#   Fill only the types you need for the first projects; the rest can be deleted.
+# ============================================================================
+
+schema_version: "ale.rulebook/1"
+version: "seed-1"
+kind: seed
+n_plans: 0
+author: null            # REQUIRED — free text (name or initials)
+date: null              # REQUIRED — YYYY-MM-DD
+
+types:
+  # ---------------- ADMINISTRATIVE ----------------
+  office:            {aspect: {p10: null, p50: null, p90: null}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  open_office:       {aspect: {p10: null, p50: null, p90: null}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  meeting_room:      {aspect: {p10: null, p50: null, p90: null}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  break_room:        {aspect: {p10: null, p50: null, p90: null}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  kitchenette:       {aspect: {p10: null, p50: null, p90: null}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  print_room:        {aspect: {p10: null, p50: null, p90: null}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  # ---------------- PUBLIC ----------------
+  entrance_hall:     {aspect: {p10: null, p50: null, p90: null}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  reception:         {aspect: {p10: null, p50: null, p90: null}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  waiting_area:      {aspect: {p10: null, p50: null, p90: null}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  training_room:     {aspect: {p10: null, p50: null, p90: null}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  multipurpose_room: {aspect: {p10: null, p50: null, p90: null}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  # ---------------- SERVICES ----------------
+  sanitary:            {aspect: {p10: null, p50: null, p90: null}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  sanitary_accessible: {aspect: {p10: null, p50: null, p90: null}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  shower:              {aspect: {p10: null, p50: null, p90: null}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  locker_room:         {aspect: {p10: null, p50: null, p90: null}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  storage:             {aspect: {p10: null, p50: null, p90: null}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  archive:             {aspect: {p10: null, p50: null, p90: null}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  technical_room:      {aspect: {p10: null, p50: null, p90: null}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  it_room:             {aspect: {p10: null, p50: null, p90: null}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  cleaning_room:       {aspect: {p10: null, p50: null, p90: null}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  waste_room:          {aspect: {p10: null, p50: null, p90: null}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  # ---------------- VERTICAL (fixed elements; orientation usually 0) ----------------
+  stair:               {aspect: {p10: null, p50: null, p90: null}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+  lift:                {aspect: {p10: null, p50: null, p90: null}, area_m2: {p10: null, p50: null, p90: null}, orientation: {N: null, E: null, S: null, W: null}}
+
+adjacency:
+  default_p: null       # REQUIRED — p for unlisted pairs (0.5 = neutral)
+  pairs:
+    # --- should usually touch (expect p > 0.5) ---
+    - {a: entrance_hall, b: reception,           p: null}
+    - {a: reception,     b: waiting_area,        p: null}
+    - {a: entrance_hall, b: waiting_area,        p: null}
+    - {a: meeting_room,  b: reception,           p: null}
+    - {a: office,        b: office,              p: null}
+    - {a: office,        b: meeting_room,        p: null}
+    - {a: office,        b: open_office,         p: null}
+    - {a: meeting_room,  b: open_office,         p: null}
+    - {a: open_office,   b: print_room,          p: null}
+    - {a: archive,       b: office,              p: null}
+    - {a: office,        b: storage,             p: null}
+    - {a: break_room,    b: kitchenette,         p: null}
+    - {a: sanitary,      b: sanitary_accessible, p: null}
+    - {a: locker_room,   b: shower,              p: null}
+    - {a: locker_room,   b: sanitary,            p: null}
+    - {a: cleaning_room, b: sanitary,            p: null}
+    - {a: it_room,       b: technical_room,      p: null}
+    - {a: lift,          b: stair,               p: null}
+    - {a: sanitary,      b: stair,               p: null}
+    - {a: entrance_hall, b: lift,                p: null}
+    - {a: multipurpose_room, b: training_room,   p: null}
+    - {a: entrance_hall, b: training_room,       p: null}
+    # --- should usually NOT touch (expect p < 0.5) ---
+    - {a: meeting_room,  b: sanitary,            p: null}
+    - {a: kitchenette,   b: sanitary,            p: null}
+    - {a: meeting_room,  b: technical_room,      p: null}
+    - {a: office,        b: technical_room,      p: null}
+    - {a: kitchenette,   b: waste_room,          p: null}
+    - {a: reception,     b: waste_room,          p: null}
+    - {a: it_room,       b: sanitary,            p: null}
+    - {a: break_room,    b: meeting_room,        p: null}
+    # --- add any other pair you care about below, same format ---
+
+core_offset:
+  dx_norm: null         # REQUIRED, -0.5..+0.5
+  dy_norm: null         # REQUIRED, -0.5..+0.5

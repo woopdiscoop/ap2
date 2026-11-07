@@ -1,0 +1,187 @@
+# ALE room-type taxonomy v1 — canonical keys (EN), labels (FR/EN), and the
+# synonyms/abbreviations found on French drawings. Matching is done on the
+# canonical form (accents, case and punctuation removed; see 0.2 RD §7), so
+# "S. RÉUNION", "s reunion" and "S.REUNION" are the same synonym.
+#
+# default_macro_zone and service_core are Router proposals — the architect
+# should review them (they are defaults; the Excel program overrides the zone).
+#
+# Known ambiguity: on French drawings "OFFICE" is a pantry/kitchenette, not an
+# office. It is mapped to kitchenette here.
+version: "1.0.0"
+types:
+  - key: office
+    label_fr: Bureau
+    label_en: Office
+    category: ROOM
+    default_macro_zone: ADMINISTRATIVE
+    service_core: false
+    synonyms: [BUREAU, BUR., BUREAU INDIVIDUEL, BUREAU DIRECTION, BUREAU DIRECTEUR, DIRECTION, BUREAU PARTAGE]
+  - key: open_office
+    label_fr: Plateau de bureaux
+    label_en: Open-plan office
+    category: ROOM
+    default_macro_zone: ADMINISTRATIVE
+    service_core: false
+    synonyms: [PLATEAU, OPEN SPACE, OPEN-SPACE, BUREAU PAYSAGER, BUREAUX PAYSAGERS, BUREAUX OUVERTS, ESPACE DE TRAVAIL]
+  - key: meeting_room
+    label_fr: Salle de réunion
+    label_en: Meeting room
+    category: ROOM
+    default_macro_zone: ADMINISTRATIVE
+    service_core: false
+    synonyms: [SALLE DE REUNION, SALLE REUNION, S. REUNION, S. REU., SDR, REUNION, SALLE DE CONFERENCE, CONFERENCE, VISIO, SALLE DU CONSEIL]
+  - key: training_room
+    label_fr: Salle de formation
+    label_en: Training room
+    category: ROOM
+    default_macro_zone: PUBLIC
+    service_core: false
+    synonyms: [SALLE DE FORMATION, S. FORMATION, FORMATION]
+  - key: multipurpose_room
+    label_fr: Salle polyvalente
+    label_en: Multipurpose room
+    category: ROOM
+    default_macro_zone: PUBLIC
+    service_core: false
+    synonyms: [SALLE POLYVALENTE, S. POLYVALENTE, POLYVALENTE, SALLE MULTIFONCTION]
+  - key: reception
+    label_fr: Accueil
+    label_en: Reception
+    category: ROOM
+    default_macro_zone: PUBLIC
+    service_core: false
+    synonyms: [ACCUEIL, BANQUE D'ACCUEIL, BANQUE ACCUEIL, RECEPTION, GUICHET, GUICHETS]
+  - key: waiting_area
+    label_fr: Attente
+    label_en: Waiting area
+    category: ROOM
+    default_macro_zone: PUBLIC
+    service_core: false
+    synonyms: [ATTENTE, SALLE D'ATTENTE, S. ATTENTE, ESPACE ATTENTE, ESPACE D'ATTENTE]
+  - key: entrance_hall
+    label_fr: Hall d'entrée
+    label_en: Entrance hall
+    category: ROOM
+    default_macro_zone: PUBLIC
+    service_core: false
+    synonyms: [HALL, HALL D'ENTREE, HALL ENTREE, ENTREE, SAS, SAS D'ENTREE, VESTIBULE]
+  - key: circulation
+    label_fr: Circulation
+    label_en: Circulation
+    category: CIRCULATION
+    default_macro_zone: null
+    service_core: false
+    synonyms: [CIRCULATION, CIRC., DEGAGEMENT, DGT, DEG., COULOIR, PALIER, CIRCULATION HORIZONTALE]
+  - key: stair
+    label_fr: Escalier
+    label_en: Stair
+    category: VERTICAL
+    default_macro_zone: SERVICES
+    service_core: true
+    synonyms: [ESCALIER, ESC., CAGE D'ESCALIER, CAGE ESCALIER, ESCALIER DE SECOURS]
+  - key: lift
+    label_fr: Ascenseur
+    label_en: Lift
+    category: VERTICAL
+    default_macro_zone: SERVICES
+    service_core: true
+    synonyms: [ASCENSEUR, ASC., GAINE ASCENSEUR, MONTE-CHARGE, MONTE CHARGE]
+  - key: sanitary
+    label_fr: Sanitaires
+    label_en: Toilets
+    category: ROOM
+    default_macro_zone: SERVICES
+    service_core: true
+    synonyms: [SANITAIRES, SANITAIRE, SANIT., SAN., WC, W.C., WC H/F, WC H, WC F, WC HOMMES, WC FEMMES, TOILETTES, BLOC SANITAIRE]
+  - key: sanitary_accessible
+    label_fr: Sanitaire PMR
+    label_en: Accessible toilet
+    category: ROOM
+    default_macro_zone: SERVICES
+    service_core: true
+    synonyms: [WC PMR, SANITAIRE PMR, SANITAIRES PMR, WC HANDICAPES, WC ACCESSIBLE]
+  - key: shower
+    label_fr: Douches
+    label_en: Showers
+    category: ROOM
+    default_macro_zone: SERVICES
+    service_core: true
+    synonyms: [DOUCHE, DOUCHES]
+  - key: locker_room
+    label_fr: Vestiaires
+    label_en: Locker room
+    category: ROOM
+    default_macro_zone: SERVICES
+    service_core: true
+    synonyms: [VESTIAIRE, VESTIAIRES, VEST., VESTIAIRE H, VESTIAIRE F, VESTIAIRES H/F]
+  - key: break_room
+    label_fr: Salle de pause
+    label_en: Break room
+    category: ROOM
+    default_macro_zone: ADMINISTRATIVE
+    service_core: false
+    synonyms: [SALLE DE PAUSE, S. PAUSE, PAUSE, ESPACE PAUSE, CAFETERIA, CAFET., REFECTOIRE, SALLE DE DETENTE, DETENTE]
+  - key: kitchenette
+    label_fr: Office / kitchenette
+    label_en: Kitchenette
+    category: ROOM
+    default_macro_zone: ADMINISTRATIVE
+    service_core: false
+    synonyms: [KITCHENETTE, OFFICE, TISANERIE, COIN CAFE, OFFICE TRAITEUR]
+  - key: storage
+    label_fr: Rangement
+    label_en: Storage
+    category: ROOM
+    default_macro_zone: SERVICES
+    service_core: false
+    synonyms: [RANGEMENT, RGT, RGT., STOCKAGE, STOCK., STOCK, RESERVE, DEPOT, DEBARRAS, LOCAL MATERIEL]
+  - key: archive
+    label_fr: Archives
+    label_en: Archive
+    category: ROOM
+    default_macro_zone: SERVICES
+    service_core: false
+    synonyms: [ARCHIVES, ARCHIVE, ARCH., LOCAL ARCHIVES, SALLE D'ARCHIVES]
+  - key: print_room
+    label_fr: Reprographie
+    label_en: Print / copy room
+    category: ROOM
+    default_macro_zone: ADMINISTRATIVE
+    service_core: false
+    synonyms: [REPROGRAPHIE, REPRO, REPRO., COPIEUR, COPIEURS, IMPRESSION, LOCAL REPRO]
+  - key: technical_room
+    label_fr: Local technique
+    label_en: Technical room
+    category: ROOM
+    default_macro_zone: SERVICES
+    service_core: true
+    synonyms: [LOCAL TECHNIQUE, LOCAL TECH., LOC. TECH., L. TECH., LT, TECHNIQUE, CTA, CHAUFFERIE, TGBT, LOCAL ELECTRIQUE, LOCAL ELEC., SOUS-STATION, GAINE TECHNIQUE]
+  - key: it_room
+    label_fr: Local informatique
+    label_en: IT / server room
+    category: ROOM
+    default_macro_zone: SERVICES
+    service_core: true
+    synonyms: [LOCAL INFORMATIQUE, LOCAL INFO., SALLE SERVEUR, SALLE SERVEURS, SERVEUR, SERVEURS, BAIE, LOCAL BAIE, LOCAL VDI, VDI, LOCAL BRASSAGE]
+  - key: cleaning_room
+    label_fr: Local ménage
+    label_en: Cleaning room
+    category: ROOM
+    default_macro_zone: SERVICES
+    service_core: true
+    synonyms: [LOCAL MENAGE, LOC. MENAGE, L. MENAGE, MENAGE, LOCAL ENTRETIEN, ENTRETIEN]
+  - key: waste_room
+    label_fr: Local déchets
+    label_en: Waste room
+    category: ROOM
+    default_macro_zone: SERVICES
+    service_core: false
+    synonyms: [LOCAL DECHETS, LOCAL POUBELLES, POUBELLES, DECHETS, LOCAL OM, LOCAL ORDURES, LOCAL TRI]
+  - key: unknown
+    label_fr: Non identifié
+    label_en: Unknown
+    category: SPECIAL
+    default_macro_zone: null
+    service_core: false
+    synonyms: []
