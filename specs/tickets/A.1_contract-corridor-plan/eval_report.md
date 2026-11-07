@@ -16,13 +16,13 @@ Base commit: `f08853f`. Environment: Linux, Python 3.13, venv outside the worktr
 | F01 | `test_F01_rect` | PASS |
 | F02 | `test_F02_site_L_J2` | PASS |
 | F03 | `test_F03_J1`, `test_F03_J1_variants`, `test_F03_tie_breaks` | PASS |
-| F04 | `test_F04_rotations[identity, mirror_x, mirror_y, rot180]`, `test_F04_quarter_turns[1, 3]` | PASS |
+| F04 | `test_F04_rotations[rot0, rot90, rot180, rot270, mirror_rot0, mirror_rot90, mirror_rot180, mirror_rot270]` (J2 everywhere), `test_F04_orientations_distinct` | PASS |
 | F05 | `test_F05_unsupported`, `test_F05_models_strict` | PASS |
 | S01 | `test_S01_schemas` | PASS |
 | S02 | `test_S02_lock` | PASS |
 | S03 | `test_S03_gates` (ruff check, ruff format --check, mypy on the new modules) + coverage below | PASS |
 
-Ticket tests: 33 passed. Whole suite: 441 passed, 5 skipped (platform-specific skips that were
+Ticket tests: 36 passed. Whole suite: 444 passed, 5 skipped (platform-specific skips that were
 already there).
 
 ## Gates
@@ -40,12 +40,10 @@ already there).
    `test_version_and_layout_schema_version` asserted `CONTRACTS_VERSION == "1.0.0"`, so the
    version bump RD §2 requires breaks it. I changed only that one literal to `"1.1.0"`. The
    alternative was to leave the whole suite failing.
-2. **F04 "4 orientations".** I read these as identity, mirror in x, mirror in y and 180°
-   rotation. All four keep the cut vertical, and the result is J2 as expected. Under the RD §5
-   rules a **90° / 270° rotation gives J1**, not J2: the square 300×300 primary takes the tie
-   axis "X", and the cut becomes horizontal, so it is parallel to the primary's spine. The
-   tests `test_F04_quarter_turns` record this behaviour. If J2 is wanted there, the rule
-   for the primary's tie axis would need to change, for example to "perpendicular to the cut".
+2. **F04 / square-primary tie (resolved at review).** The first version recorded J1 for
+   90°/270° rotations under the original "tie → X" rule. The Router amended RD §5: a square
+   primary now takes the spine axis perpendicular to the cut line. F04 checks all 8
+   orientations (4 rotations x mirror) and gets J2 in every one. F02 and F03 are unchanged and pass.
 3. **`decompose_footprint` signature.** It takes a `ModulePolygon`, as RD §5 says. eval.md
    shows a bare list of points as shorthand, so the tests wrap the points in `ModulePolygon(exterior=...)`.
 4. **`cut` "on the secondary's side".** I implemented `cut` as the segment the two pieces share

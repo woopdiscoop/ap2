@@ -129,23 +129,22 @@ def test_F03_tie_breaks() -> None:
 # --------------------------------------------------------------------------- F04
 
 
-def _mirror_x(pts: Pts) -> Pts:
-    return tuple(reversed([(480 - x, y) for x, y in pts]))
+def _rotate(pts: Pts, quarter: int) -> Pts:
+    """Rotate by ``quarter`` quarter turns counter-clockwise (keeps counter-clockwise order)."""
+    for _ in range(quarter):
+        pts = tuple((-y, x) for x, y in pts)
+    return pts
 
 
-def _mirror_y(pts: Pts) -> Pts:
-    return tuple(reversed([(x, 300 - y) for x, y in pts]))
-
-
-def _rot180(pts: Pts) -> Pts:
-    return tuple((480 - x, 300 - y) for x, y in pts)
+def _mirror(pts: Pts) -> Pts:
+    """Mirror in x; the vertex order is reversed to stay counter-clockwise."""
+    return tuple(reversed([(-x, y) for x, y in pts]))
 
 
 ORIENTATIONS = {
-    "identity": SITE_L,
-    "mirror_x": _mirror_x(SITE_L),
-    "mirror_y": _mirror_y(SITE_L),
-    "rot180": _rot180(SITE_L),
+    f"{'mirror_' if m else ''}rot{90 * q}": _rotate(_mirror(SITE_L) if m else SITE_L, q)
+    for m in (False, True)
+    for q in range(4)
 }
 
 
@@ -157,26 +156,18 @@ def test_F04_rotations(name: str) -> None:
     assert [p.rect.area_cells() for p in out.pieces] == [90_000, 32_400]
     assert out.junction == "J2"
     assert out.facing_block is None
-    assert [p.spine_axis for p in out.pieces] == ["X", "X"]
-    assert out.cut is not None and out.cut[0][0] == out.cut[1][0]  # vertical cut
-    assert out.cut[0][1] < out.cut[1][1]  # lower endpoint first
+    assert out.cut is not None
+    vertical = out.cut[0][0] == out.cut[1][0]
+    assert vertical != (out.cut[0][1] == out.cut[1][1])  # exactly one axis
+    assert out.cut[0] < out.cut[1]  # lower / left endpoint first
+    perpendicular = "X" if vertical else "Y"
+    assert [p.spine_axis for p in out.pieces] == [perpendicular, perpendicular]
     _check_tiling(pts, out)
 
 
-@pytest.mark.parametrize("quarter", [1, 3])
-def test_F04_quarter_turns(quarter: int) -> None:
-    # A quarter turn makes the cut horizontal; the square primary keeps its tie axis "X",
-    # so the cut is parallel to the primary's spine: J1 under the RD rule.
-    pts = SITE_L
-    for _ in range(quarter):
-        pts = tuple((-y, x) for x, y in pts)
-    out = decompose(pts)
-    assert [p.rect.area_cells() for p in out.pieces] == [90_000, 32_400]
-    assert out.cut is not None and out.cut[0][1] == out.cut[1][1]  # horizontal cut
-    assert out.cut[0][0] < out.cut[1][0]  # left endpoint first
-    assert out.junction == "J1"
-    assert out.pieces[1].spine_axis == "Y"
-    _check_tiling(pts, out)
+def test_F04_orientations_distinct() -> None:
+    assert len(ORIENTATIONS) == 8
+    assert len({frozenset(pts) for pts in ORIENTATIONS.values()}) == 8
 
 
 # --------------------------------------------------------------------------- F05

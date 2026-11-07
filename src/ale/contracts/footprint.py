@@ -111,8 +111,9 @@ def _decompose_l(pts: tuple[ModulePoint, ...]) -> FootprintPieces:
     a, b = h_pair if horizontal else v_pair
 
     primary, secondary = sorted((a, b), key=lambda r: (-r.area_cells(), r.y, r.x))
-    primary_axis = _long_axis(primary)
-    secondary_axis: SpineAxis = "Y" if horizontal else "X"
+    secondary_axis: SpineAxis = "Y" if horizontal else "X"  # perpendicular to the cut line
+    # A square primary takes the axis perpendicular to the cut (orientation-independent).
+    primary_axis = secondary_axis if primary.w == primary.h else _long_axis(primary)
 
     cut: tuple[ModulePoint, ModulePoint]
     if horizontal:
@@ -142,8 +143,8 @@ def decompose_footprint(fp: ModulePolygon) -> FootprintPieces:
     Rectangle: one piece, spine along the long axis (tie → ``"X"``). L: cut through the
     reflex vertex, horizontally or vertically, minimising the larger of the two pieces'
     aspect ratios (tie → horizontal); primary = larger area (tie → smaller ``(y, x)``
-    origin) with its spine on its long axis (tie → ``"X"``); secondary spine perpendicular
-    to the cut line. Raises ``ValueError`` for any other vertex count.
+    origin) with its spine on its long axis (square → perpendicular to the cut line);
+    secondary spine perpendicular to the cut line. Raises ``ValueError`` for any other vertex count.
     """
     pts = fp.exterior
     if len(pts) == 4:
