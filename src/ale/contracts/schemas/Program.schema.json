@@ -1,0 +1,150 @@
+{
+  "$defs": {
+    "Bearing": {
+      "description": "Compass bearing bin (true north based).",
+      "enum": [
+        "N",
+        "E",
+        "S",
+        "W"
+      ],
+      "title": "Bearing",
+      "type": "string"
+    },
+    "MacroZone": {
+      "description": "Functional macro-zone of a room.",
+      "enum": [
+        "PUBLIC",
+        "ADMINISTRATIVE",
+        "SERVICES"
+      ],
+      "title": "MacroZone",
+      "type": "string"
+    },
+    "RoomSpec": {
+      "additionalProperties": false,
+      "description": "One program row (metres, m\u00b2).",
+      "properties": {
+        "adjacent_to": {
+          "default": [],
+          "items": {
+            "pattern": "^[A-Za-z0-9_-]{1,32}$",
+            "type": "string"
+          },
+          "title": "Adjacent To",
+          "type": "array"
+        },
+        "avoid": {
+          "default": [],
+          "items": {
+            "pattern": "^[A-Za-z0-9_-]{1,32}$",
+            "type": "string"
+          },
+          "title": "Avoid",
+          "type": "array"
+        },
+        "floor": {
+          "default": 0,
+          "title": "Floor",
+          "type": "integer"
+        },
+        "id": {
+          "pattern": "^[A-Za-z0-9_-]{1,32}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "macro_zone": {
+          "$ref": "#/$defs/MacroZone"
+        },
+        "min_width_m": {
+          "anyOf": [
+            {
+              "gt": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Min Width M"
+        },
+        "name": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "needs_facade": {
+          "default": false,
+          "title": "Needs Facade",
+          "type": "boolean"
+        },
+        "orientation_override": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "ge": -1.0,
+                "le": 1.0,
+                "type": "number"
+              },
+              "minProperties": 1,
+              "propertyNames": {
+                "$ref": "#/$defs/Bearing"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Orientation Override"
+        },
+        "quantity": {
+          "default": 1,
+          "maximum": 500,
+          "minimum": 1,
+          "title": "Quantity",
+          "type": "integer"
+        },
+        "target_area_m2": {
+          "gt": 0.0,
+          "le": 10000.0,
+          "title": "Target Area M2",
+          "type": "number"
+        },
+        "type": {
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "type",
+        "target_area_m2",
+        "macro_zone"
+      ],
+      "title": "RoomSpec",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "The room program (\u2265 1 room).",
+  "properties": {
+    "rooms": {
+      "items": {
+        "$ref": "#/$defs/RoomSpec"
+      },
+      "minItems": 1,
+      "title": "Rooms",
+      "type": "array"
+    }
+  },
+  "required": [
+    "rooms"
+  ],
+  "title": "Program",
+  "type": "object"
+}

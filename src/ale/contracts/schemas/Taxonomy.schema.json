@@ -1,0 +1,99 @@
+{
+  "$defs": {
+    "MacroZone": {
+      "description": "Functional macro-zone of a room.",
+      "enum": [
+        "PUBLIC",
+        "ADMINISTRATIVE",
+        "SERVICES"
+      ],
+      "title": "MacroZone",
+      "type": "string"
+    },
+    "RoomTypeDef": {
+      "additionalProperties": false,
+      "description": "One room type of the taxonomy.",
+      "properties": {
+        "category": {
+          "$ref": "#/$defs/TypeCategory"
+        },
+        "default_macro_zone": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MacroZone"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "key": {
+          "title": "Key",
+          "type": "string"
+        },
+        "label_en": {
+          "title": "Label En",
+          "type": "string"
+        },
+        "label_fr": {
+          "title": "Label Fr",
+          "type": "string"
+        },
+        "service_core": {
+          "title": "Service Core",
+          "type": "boolean"
+        },
+        "synonyms": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Synonyms",
+          "type": "array"
+        }
+      },
+      "required": [
+        "key",
+        "label_fr",
+        "label_en",
+        "category",
+        "default_macro_zone",
+        "service_core",
+        "synonyms"
+      ],
+      "title": "RoomTypeDef",
+      "type": "object"
+    },
+    "TypeCategory": {
+      "description": "Category of a room type in the taxonomy.",
+      "enum": [
+        "ROOM",
+        "CIRCULATION",
+        "VERTICAL",
+        "SPECIAL"
+      ],
+      "title": "TypeCategory",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "The room-type taxonomy (validated at load time).",
+  "properties": {
+    "types": {
+      "items": {
+        "$ref": "#/$defs/RoomTypeDef"
+      },
+      "title": "Types",
+      "type": "array"
+    },
+    "version": {
+      "title": "Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "version",
+    "types"
+  ],
+  "title": "Taxonomy",
+  "type": "object"
+}

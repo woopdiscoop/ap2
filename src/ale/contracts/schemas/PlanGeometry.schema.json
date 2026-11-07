@@ -1,0 +1,470 @@
+{
+  "$defs": {
+    "Frame": {
+      "description": "Native coordinate frame of a plan geometry.",
+      "enum": [
+        "Y_UP",
+        "Y_DOWN"
+      ],
+      "title": "Frame",
+      "type": "string"
+    },
+    "LabelSource": {
+      "description": "Origin of a room label.",
+      "enum": [
+        "CAD_TEXT",
+        "CAD_ZONE",
+        "PDF_TEXT",
+        "VLM",
+        "MANUAL"
+      ],
+      "title": "LabelSource",
+      "type": "string"
+    },
+    "LabelledPolygon": {
+      "additionalProperties": false,
+      "description": "A room polygon of a plan (native units) with its label.",
+      "properties": {
+        "area_text_m2": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Area Text M2"
+        },
+        "confidence": {
+          "default": 0.0,
+          "ge": 0.0,
+          "le": 1.0,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "label_source": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LabelSource"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "polygon": {
+          "$ref": "#/$defs/Polygon"
+        },
+        "raw_label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Raw Label"
+        },
+        "type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Type"
+        }
+      },
+      "required": [
+        "id",
+        "polygon"
+      ],
+      "title": "LabelledPolygon",
+      "type": "object"
+    },
+    "LineString": {
+      "additionalProperties": false,
+      "description": "Polyline in native units or metres: \u2265 2 points, no consecutive duplicates.",
+      "properties": {
+        "coords": {
+          "items": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "type": "array"
+          },
+          "minItems": 2,
+          "title": "Coords",
+          "type": "array"
+        }
+      },
+      "required": [
+        "coords"
+      ],
+      "title": "LineString",
+      "type": "object"
+    },
+    "Opening": {
+      "additionalProperties": false,
+      "description": "A door or window along a host wall (native units; ``width_m`` in metres).",
+      "properties": {
+        "host_wall": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Host Wall"
+        },
+        "kind": {
+          "$ref": "#/$defs/OpeningKind"
+        },
+        "segment": {
+          "$ref": "#/$defs/LineString"
+        },
+        "width_m": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Width M"
+        },
+        "width_native": {
+          "gt": 0.0,
+          "title": "Width Native",
+          "type": "number"
+        }
+      },
+      "required": [
+        "kind",
+        "segment",
+        "width_native"
+      ],
+      "title": "Opening",
+      "type": "object"
+    },
+    "OpeningKind": {
+      "description": "Kind of a wall opening.",
+      "enum": [
+        "DOOR",
+        "WINDOW"
+      ],
+      "title": "OpeningKind",
+      "type": "string"
+    },
+    "Polygon": {
+      "additionalProperties": false,
+      "description": "Polygon in native units or metres.\n\nRings are stored open (first point not repeated), with \u2265 3 points each; the polygon\nmust be valid according to shapely ``is_valid``.",
+      "properties": {
+        "exterior": {
+          "items": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "type": "array"
+          },
+          "title": "Exterior",
+          "type": "array"
+        },
+        "holes": {
+          "default": [],
+          "items": {
+            "items": {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            "type": "array"
+          },
+          "title": "Holes",
+          "type": "array"
+        }
+      },
+      "required": [
+        "exterior"
+      ],
+      "title": "Polygon",
+      "type": "object"
+    },
+    "ScaleMethod": {
+      "description": "How the metres-per-native-unit scale of a plan was determined.",
+      "enum": [
+        "DRAWING_UNITS",
+        "META_CSV",
+        "TITLE_BLOCK",
+        "SCALE_BAR",
+        "DIMENSION_TEXT",
+        "DOOR_MEDIAN",
+        "UNKNOWN"
+      ],
+      "title": "ScaleMethod",
+      "type": "string"
+    },
+    "SourceKind": {
+      "description": "Kind of source file a plan was read from.",
+      "enum": [
+        "DWG",
+        "DXF",
+        "PDF_VECTOR",
+        "PDF_SCANNED",
+        "RASTER"
+      ],
+      "title": "SourceKind",
+      "type": "string"
+    },
+    "TextItem": {
+      "additionalProperties": false,
+      "description": "A text entity of a plan (native units; rotation in degrees).",
+      "properties": {
+        "height": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Height"
+        },
+        "insert": {
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Insert",
+          "type": "array"
+        },
+        "layer": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Layer"
+        },
+        "rotation_deg": {
+          "default": 0.0,
+          "title": "Rotation Deg",
+          "type": "number"
+        },
+        "source": {
+          "enum": [
+            "CAD",
+            "PDF",
+            "OCR"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "text",
+        "insert",
+        "source"
+      ],
+      "title": "TextItem",
+      "type": "object"
+    },
+    "Wall": {
+      "additionalProperties": false,
+      "description": "A wall centreline (native units).",
+      "properties": {
+        "centerline": {
+          "$ref": "#/$defs/LineString"
+        },
+        "thickness": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Thickness"
+        }
+      },
+      "required": [
+        "centerline"
+      ],
+      "title": "Wall",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Phase 1 extraction result for one plan, in the source's native units and frame.",
+  "properties": {
+    "frame": {
+      "$ref": "#/$defs/Frame"
+    },
+    "openings": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/Opening"
+      },
+      "title": "Openings",
+      "type": "array"
+    },
+    "page": {
+      "minimum": 0,
+      "title": "Page",
+      "type": "integer"
+    },
+    "plan_index": {
+      "minimum": 0,
+      "title": "Plan Index",
+      "type": "integer"
+    },
+    "rooms": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/LabelledPolygon"
+      },
+      "title": "Rooms",
+      "type": "array"
+    },
+    "scale_confidence": {
+      "default": 0.0,
+      "ge": 0.0,
+      "le": 1.0,
+      "title": "Scale Confidence",
+      "type": "number"
+    },
+    "scale_m_per_unit": {
+      "anyOf": [
+        {
+          "gt": 0.0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Scale M Per Unit"
+    },
+    "scale_method": {
+      "$ref": "#/$defs/ScaleMethod",
+      "default": "UNKNOWN"
+    },
+    "schema_version": {
+      "const": "ale.plan/1",
+      "default": "ale.plan/1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "source_kind": {
+      "$ref": "#/$defs/SourceKind"
+    },
+    "source_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Source Sha256",
+      "type": "string"
+    },
+    "texts": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/TextItem"
+      },
+      "title": "Texts",
+      "type": "array"
+    },
+    "units_label": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Units Label"
+    },
+    "walls": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/Wall"
+      },
+      "title": "Walls",
+      "type": "array"
+    },
+    "warnings": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Warnings",
+      "type": "array"
+    }
+  },
+  "required": [
+    "source_sha256",
+    "page",
+    "plan_index",
+    "source_kind",
+    "frame"
+  ],
+  "title": "PlanGeometry",
+  "type": "object"
+}

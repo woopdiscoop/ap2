@@ -1,0 +1,256 @@
+{
+  "$defs": {
+    "GridSpec": {
+      "additionalProperties": false,
+      "description": "Module grid; ``module_mm`` in millimetres (100..1200, default 100 = 0.10 m).",
+      "properties": {
+        "module_mm": {
+          "default": 100,
+          "maximum": 1200,
+          "minimum": 100,
+          "title": "Module Mm",
+          "type": "integer"
+        }
+      },
+      "title": "GridSpec",
+      "type": "object"
+    },
+    "LayoutMetrics": {
+      "additionalProperties": false,
+      "description": "Cost and quality metrics of a layout (areas in m\u00b2).",
+      "properties": {
+        "circulation_area_m2": {
+          "title": "Circulation Area M2",
+          "type": "number"
+        },
+        "cost_breakdown": {
+          "additionalProperties": {
+            "type": "number"
+          },
+          "title": "Cost Breakdown",
+          "type": "object"
+        },
+        "residue_area_m2": {
+          "title": "Residue Area M2",
+          "type": "number"
+        },
+        "total_cost": {
+          "title": "Total Cost",
+          "type": "number"
+        },
+        "total_overshoot_m2": {
+          "title": "Total Overshoot M2",
+          "type": "number"
+        },
+        "violations": {
+          "items": {
+            "$ref": "#/$defs/Violation"
+          },
+          "title": "Violations",
+          "type": "array"
+        }
+      },
+      "required": [
+        "total_cost",
+        "cost_breakdown",
+        "total_overshoot_m2",
+        "circulation_area_m2",
+        "residue_area_m2",
+        "violations"
+      ],
+      "title": "LayoutMetrics",
+      "type": "object"
+    },
+    "ModulePolygon": {
+      "additionalProperties": false,
+      "description": "Rectilinear polygon in modules.\n\nEvery edge is axis-parallel; vertices are counter-clockwise; the polygon is simple;\n\u2265 4 vertices; no two consecutive edges are collinear. Stored open (first vertex not\nrepeated).",
+      "properties": {
+        "exterior": {
+          "items": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "type": "array"
+          },
+          "title": "Exterior",
+          "type": "array"
+        }
+      },
+      "required": [
+        "exterior"
+      ],
+      "title": "ModulePolygon",
+      "type": "object"
+    },
+    "ModuleRect": {
+      "additionalProperties": false,
+      "description": "Axis-aligned rectangle in modules covering ``[x, x+w] x [y, y+h]`` (w, h \u2265 1).\n\nAccepts positional arguments ``ModuleRect(x, y, w, h)`` as well as keywords.",
+      "properties": {
+        "h": {
+          "minimum": 1,
+          "title": "H",
+          "type": "integer"
+        },
+        "w": {
+          "minimum": 1,
+          "title": "W",
+          "type": "integer"
+        },
+        "x": {
+          "title": "X",
+          "type": "integer"
+        },
+        "y": {
+          "title": "Y",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "x",
+        "y",
+        "w",
+        "h"
+      ],
+      "title": "ModuleRect",
+      "type": "object"
+    },
+    "PlacedRoom": {
+      "additionalProperties": false,
+      "description": "A room (or circulation strip) placed on the module grid.",
+      "properties": {
+        "instance_id": {
+          "title": "Instance Id",
+          "type": "string"
+        },
+        "rect": {
+          "$ref": "#/$defs/ModuleRect"
+        },
+        "spec_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Spec Id"
+        },
+        "target_area_m2": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Target Area M2"
+        }
+      },
+      "required": [
+        "instance_id",
+        "spec_id",
+        "rect",
+        "target_area_m2"
+      ],
+      "title": "PlacedRoom",
+      "type": "object"
+    },
+    "Violation": {
+      "additionalProperties": false,
+      "description": "A rule violation reported for a layout.",
+      "properties": {
+        "code": {
+          "title": "Code",
+          "type": "string"
+        },
+        "detail": {
+          "title": "Detail",
+          "type": "string"
+        },
+        "instance_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Instance Ids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "code",
+        "instance_ids",
+        "detail"
+      ],
+      "title": "Violation",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Output of Phase 3: placed rooms on the module grid (+y up, 1 unit = 1 module).",
+  "properties": {
+    "circulation": {
+      "items": {
+        "$ref": "#/$defs/PlacedRoom"
+      },
+      "title": "Circulation",
+      "type": "array"
+    },
+    "footprint": {
+      "$ref": "#/$defs/ModulePolygon"
+    },
+    "grid": {
+      "$ref": "#/$defs/GridSpec"
+    },
+    "metrics": {
+      "$ref": "#/$defs/LayoutMetrics"
+    },
+    "residue": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/ModuleRect"
+      },
+      "title": "Residue",
+      "type": "array"
+    },
+    "rooms": {
+      "items": {
+        "$ref": "#/$defs/PlacedRoom"
+      },
+      "title": "Rooms",
+      "type": "array"
+    },
+    "rulebook_version": {
+      "title": "Rulebook Version",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "ale.layout/1",
+      "default": "ale.layout/1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "seed": {
+      "title": "Seed",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "grid",
+    "footprint",
+    "rooms",
+    "circulation",
+    "seed",
+    "rulebook_version",
+    "metrics"
+  ],
+  "title": "Layout",
+  "type": "object"
+}

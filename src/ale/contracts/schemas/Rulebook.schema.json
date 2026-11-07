@@ -1,0 +1,259 @@
+{
+  "$defs": {
+    "AdjEntry": {
+      "additionalProperties": false,
+      "description": "Adjacency probability of an unordered pair of room types (stored with ``a <= b``).",
+      "properties": {
+        "a": {
+          "title": "A",
+          "type": "string"
+        },
+        "b": {
+          "title": "B",
+          "type": "string"
+        },
+        "n_support": {
+          "default": 0,
+          "title": "N Support",
+          "type": "integer"
+        },
+        "p": {
+          "ge": 0.0,
+          "le": 1.0,
+          "title": "P",
+          "type": "number"
+        }
+      },
+      "required": [
+        "a",
+        "b",
+        "p"
+      ],
+      "title": "AdjEntry",
+      "type": "object"
+    },
+    "Adjacency": {
+      "additionalProperties": false,
+      "description": "Adjacency probabilities; ``default_p`` applies to pairs not listed.",
+      "properties": {
+        "default_p": {
+          "ge": 0.0,
+          "le": 1.0,
+          "title": "Default P",
+          "type": "number"
+        },
+        "pairs": {
+          "items": {
+            "$ref": "#/$defs/AdjEntry"
+          },
+          "title": "Pairs",
+          "type": "array"
+        }
+      },
+      "required": [
+        "default_p",
+        "pairs"
+      ],
+      "title": "Adjacency",
+      "type": "object"
+    },
+    "Bearing": {
+      "description": "Compass bearing bin (true north based).",
+      "enum": [
+        "N",
+        "E",
+        "S",
+        "W"
+      ],
+      "title": "Bearing",
+      "type": "string"
+    },
+    "CoreOffset": {
+      "additionalProperties": false,
+      "description": "Normalised offset of the service core from the footprint centroid (unitless).",
+      "properties": {
+        "dx_norm": {
+          "ge": -0.5,
+          "le": 0.5,
+          "title": "Dx Norm",
+          "type": "number"
+        },
+        "dy_norm": {
+          "ge": -0.5,
+          "le": 0.5,
+          "title": "Dy Norm",
+          "type": "number"
+        },
+        "n": {
+          "default": 0,
+          "title": "N",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "dx_norm",
+        "dy_norm"
+      ],
+      "title": "CoreOffset",
+      "type": "object"
+    },
+    "Fidelity": {
+      "description": "Source fidelity class.",
+      "enum": [
+        "CAD",
+        "PDF_VECTOR",
+        "RASTER"
+      ],
+      "title": "Fidelity",
+      "type": "string"
+    },
+    "Quantiles": {
+      "additionalProperties": false,
+      "description": "10th / 50th / 90th percentiles of a statistic; ``n`` = sample size.",
+      "properties": {
+        "n": {
+          "default": 0,
+          "minimum": 0,
+          "title": "N",
+          "type": "integer"
+        },
+        "p10": {
+          "title": "P10",
+          "type": "number"
+        },
+        "p50": {
+          "title": "P50",
+          "type": "number"
+        },
+        "p90": {
+          "title": "P90",
+          "type": "number"
+        }
+      },
+      "required": [
+        "p10",
+        "p50",
+        "p90"
+      ],
+      "title": "Quantiles",
+      "type": "object"
+    },
+    "TypeStats": {
+      "additionalProperties": false,
+      "description": "Statistics of one room type: aspect (long/short), area (m\u00b2), orientation preference.",
+      "properties": {
+        "area_m2": {
+          "$ref": "#/$defs/Quantiles"
+        },
+        "aspect": {
+          "$ref": "#/$defs/Quantiles"
+        },
+        "orientation": {
+          "additionalProperties": {
+            "ge": -1.0,
+            "le": 1.0,
+            "type": "number"
+          },
+          "propertyNames": {
+            "$ref": "#/$defs/Bearing"
+          },
+          "title": "Orientation",
+          "type": "object"
+        }
+      },
+      "required": [
+        "aspect",
+        "area_m2",
+        "orientation"
+      ],
+      "title": "TypeStats",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Per-type statistics and adjacency priors (areas in m\u00b2).",
+  "properties": {
+    "adjacency": {
+      "$ref": "#/$defs/Adjacency"
+    },
+    "author": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Author"
+    },
+    "core_offset": {
+      "$ref": "#/$defs/CoreOffset"
+    },
+    "date": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Date"
+    },
+    "kind": {
+      "enum": [
+        "seed",
+        "mined",
+        "blended"
+      ],
+      "title": "Kind",
+      "type": "string"
+    },
+    "n_plans": {
+      "default": 0,
+      "title": "N Plans",
+      "type": "integer"
+    },
+    "schema_version": {
+      "const": "ale.rulebook/1",
+      "default": "ale.rulebook/1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "source_mix": {
+      "additionalProperties": {
+        "type": "integer"
+      },
+      "default": {},
+      "propertyNames": {
+        "$ref": "#/$defs/Fidelity"
+      },
+      "title": "Source Mix",
+      "type": "object"
+    },
+    "types": {
+      "additionalProperties": {
+        "$ref": "#/$defs/TypeStats"
+      },
+      "title": "Types",
+      "type": "object"
+    },
+    "version": {
+      "minLength": 1,
+      "title": "Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "version",
+    "kind",
+    "types",
+    "adjacency",
+    "core_offset"
+  ],
+  "title": "Rulebook",
+  "type": "object"
+}
