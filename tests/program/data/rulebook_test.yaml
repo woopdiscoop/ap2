@@ -1,0 +1,63 @@
+# Test rulebook of Ticket 3.1 (eval.md section 0): the 13 fixture types, uniform statistics.
+schema_version: ale.rulebook/1
+version: test-3.1
+kind: seed
+author: test
+date: "2026-11-07"
+types:
+  entrance_hall:
+    aspect: {p10: 1.0, p50: 1.4, p90: 2.0}
+    area_m2: {p10: 2, p50: 12, p90: 80}
+    orientation: {N: 0.0, E: 0.0, S: 0.0, W: 0.0}
+  reception:
+    aspect: {p10: 1.0, p50: 1.4, p90: 2.0}
+    area_m2: {p10: 2, p50: 12, p90: 80}
+    orientation: {N: 0.0, E: 0.0, S: 0.0, W: 0.0}
+  office:
+    aspect: {p10: 1.0, p50: 1.4, p90: 2.0}
+    area_m2: {p10: 2, p50: 12, p90: 80}
+    orientation: {N: 0.0, E: 0.0, S: 0.0, W: 0.0}
+  open_office:
+    aspect: {p10: 1.0, p50: 1.4, p90: 2.0}
+    area_m2: {p10: 2, p50: 12, p90: 80}
+    orientation: {N: 0.0, E: 0.0, S: 0.0, W: 0.0}
+  meeting_room:
+    aspect: {p10: 1.0, p50: 1.4, p90: 2.0}
+    area_m2: {p10: 2, p50: 12, p90: 80}
+    orientation: {N: 0.0, E: 0.0, S: 0.0, W: 0.0}
+  kitchenette:
+    aspect: {p10: 1.0, p50: 1.4, p90: 2.0}
+    area_m2: {p10: 2, p50: 12, p90: 80}
+    orientation: {N: 0.0, E: 0.0, S: 0.0, W: 0.0}
+  sanitary:
+    aspect: {p10: 1.0, p50: 1.4, p90: 2.0}
+    area_m2: {p10: 2, p50: 12, p90: 80}
+    orientation: {N: 0.0, E: 0.0, S: 0.0, W: 0.0}
+  sanitary_accessible:
+    aspect: {p10: 1.0, p50: 1.4, p90: 2.0}
+    area_m2: {p10: 2, p50: 12, p90: 80}
+    orientation: {N: 0.0, E: 0.0, S: 0.0, W: 0.0}
+  storage:
+    aspect: {p10: 1.0, p50: 1.4, p90: 2.0}
+    area_m2: {p10: 2, p50: 12, p90: 80}
+    orientation: {N: 0.0, E: 0.0, S: 0.0, W: 0.0}
+  technical_room:
+    aspect: {p10: 1.0, p50: 1.4, p90: 2.0}
+    area_m2: {p10: 2, p50: 12, p90: 80}
+    orientation: {N: 0.0, E: 0.0, S: 0.0, W: 0.0}
+  it_room:
+    aspect: {p10: 1.0, p50: 1.4, p90: 2.0}
+    area_m2: {p10: 2, p50: 12, p90: 80}
+    orientation: {N: 0.0, E: 0.0, S: 0.0, W: 0.0}
+  stair:
+    aspect: {p10: 1.0, p50: 1.4, p90: 2.0}
+    area_m2: {p10: 2, p50: 12, p90: 80}
+    orientation: {N: 0.0, E: 0.0, S: 0.0, W: 0.0}
+  lift:
+    aspect: {p10: 1.0, p50: 1.4, p90: 2.0}
+    area_m2: {p10: 2, p50: 12, p90: 80}
+    orientation: {N: 0.0, E: 0.0, S: 0.0, W: 0.0}
+adjacency:
+  default_p: 0.5
+  pairs: []
+core_offset: {dx_norm: 0.0, dy_norm: 0.0}

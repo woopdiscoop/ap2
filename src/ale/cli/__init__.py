@@ -77,6 +77,7 @@ app.command("extract")(extract.extract)
 app.command("layers")(layers.layers)
 app.command("review")(review.review)
 app.add_typer(rulebook.app, name="rulebook")
+app.add_typer(__import__("ale.cli.commands.program", fromlist=["app"]).app, name="program")
 app.command("generate")(generate.generate)
 app.command("status")(status_cmd.status)
 
