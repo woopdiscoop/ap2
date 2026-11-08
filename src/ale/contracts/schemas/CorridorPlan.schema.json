@@ -27,6 +27,7 @@
           "items": {
             "discriminator": {
               "mapping": {
+                "connector": "#/$defs/ConnectorBay",
                 "finger": "#/$defs/FingerBay",
                 "room": "#/$defs/RoomBay"
               },
@@ -38,6 +39,9 @@
               },
               {
                 "$ref": "#/$defs/FingerBay"
+              },
+              {
+                "$ref": "#/$defs/ConnectorBay"
               }
             ]
           },
@@ -46,6 +50,20 @@
         }
       },
       "title": "BlockPlan",
+      "type": "object"
+    },
+    "ConnectorBay": {
+      "additionalProperties": false,
+      "description": "Marker for the crossing of an ``\"inner\"`` connector in a block (holds no room).\n\nBays before the marker lie before the connector along the spine, bays after it beyond.",
+      "properties": {
+        "kind": {
+          "const": "connector",
+          "default": "connector",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "title": "ConnectorBay",
       "type": "object"
     },
     "FingerBay": {
@@ -85,7 +103,7 @@
     },
     "PiecePlan": {
       "additionalProperties": false,
-      "description": "The bands of a piece, ordered from the piece's min v (across the spine axis) upward.\n\n``connector``: where the connector corridor lies along the spine axis (``\"start\"`` at\n``u \u2208 [0, s)``, ``\"end\"`` at ``u \u2208 [L - s, L)``); a 1-band piece must have ``\"none\"``.",
+      "description": "The bands of a piece, ordered from the piece's min v (across the spine axis) upward.\n\n``connector``: where the connector corridor lies along the spine axis (``\"start\"`` at\n``u \u2208 [0, s)``, ``\"end\"`` at ``u \u2208 [L - s, L)``, ``\"inner\"`` at ``u \u2208 [u_c, u_c + s)``\nwith ``u_c`` chosen by realisation); a 1-band piece must have ``\"none\"``. With\n``\"inner\"`` every block of every band holds exactly one :class:`ConnectorBay`; with any\nother value no block holds one.",
       "properties": {
         "bands": {
           "items": {
@@ -101,7 +119,8 @@
           "enum": [
             "none",
             "start",
-            "end"
+            "end",
+            "inner"
           ],
           "title": "Connector",
           "type": "string"

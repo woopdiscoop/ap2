@@ -1,7 +1,8 @@
-"""Tests K01-K07, S01-S03 (Ticket A.1) and B01-B10 (Ticket A.2): CorridorPlan contract."""
+"""Tests K01-K07, S01-S03 (A.1), B01-B10 (A.2) and I01-I07 (A.3): CorridorPlan contract."""
 
 from __future__ import annotations
 
+import hashlib
 import json
 import shutil
 import subprocess
@@ -17,6 +18,7 @@ from ale.contracts import export_schemas, lock
 from ale.contracts.corridor_plan import (
     BandPlan,
     BlockPlan,
+    ConnectorBay,
     CorridorPlan,
     FingerBay,
     PiecePlan,
@@ -87,7 +89,7 @@ def fp(pts: tuple[tuple[int, int], ...]) -> FootprintPieces:
 
 
 def test_K01_version() -> None:
-    assert CONTRACTS_VERSION == "1.2.0"
+    assert CONTRACTS_VERSION == "1.3.0"  # superseded by A.3 (I01)
 
 
 # SHA-256 of the contract files as frozen at 1.0.0 (CONTRACTS.lock before amendment A.1),
@@ -345,7 +347,7 @@ BASE_REV = "3dcd970"  # spec commit of Ticket A.2, before the amendment
 
 
 def test_B01_version_schema() -> None:
-    assert CONTRACTS_VERSION == "1.2.0"
+    assert CONTRACTS_VERSION == "1.3.0"  # superseded by A.3 (I01)
     # ``pieces`` is required, so the default is read from the field (CorridorPlan() is invalid).
     assert CorridorPlan.model_fields["schema_version"].default == "ale.corridor_plan/2"
     assert plan(piece([room("R1")])).schema_version == "ale.corridor_plan/2"
@@ -661,4 +663,207 @@ def test_B10_gates() -> None:
     proc = _tool("ruff", "format", "--check", *files)
     assert proc.returncode == 0, proc.stdout + proc.stderr
     proc = _tool("mypy", "src/ale/contracts/corridor_plan.py", "src/ale/contracts/version.py")
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+
+
+# --------------------------------------------------------------------------- I01-I07 (A.3)
+
+
+def conn() -> ConnectorBay:
+    return ConnectorBay()
+
+
+def inner_plan() -> CorridorPlan:
+    """A valid 2-band ``inner`` piece; one block holds just the marker."""
+    return plan(
+        bands(
+            band([room("R1"), conn(), room("R2")], [conn(), finger(left=("R3",))]),
+            band([conn()], [room("R4"), conn()]),
+            connector="inner",
+        )
+    )
+
+
+def inner2(a0: list[Any], a1: list[Any]) -> PiecePlan:
+    """A 2-band ``inner`` piece: ``a0`` / ``a1`` = block A of band 0 / 1 (each with its marker),
+    blocks B hold just the marker."""
+    return bands(band(a0, [conn()]), band(a1, [conn()]), connector="inner")
+
+
+def test_I01_version_schema() -> None:
+    assert CONTRACTS_VERSION == "1.3.0"
+    assert export_schemas.main(["--check"]) == 0
+    assert lock.main(["--check"]) == 0
+    schema = json.loads(
+        (export_schemas.SCHEMA_DIR / "CorridorPlan.schema.json").read_text(encoding="utf-8")
+    )
+    data = json.loads(canonical_json(inner_plan()))
+    jsonschema.Draft202012Validator(schema).validate(data)
+    assert data["pieces"][0]["connector"] == "inner"
+    assert data["pieces"][0]["bands"][0]["block_a"]["bays"][1] == {"kind": "connector"}
+
+
+# canonical_json SHA-256 of the plans as serialised by the 1.2.0 contract (pre-A.3).
+GOLDEN_1_2_0 = {
+    "sample_plan": "2295742c8710c3e16870ede1b98f1427c7e6da6990268671bedfc66457bc99e0",
+    "b03_plan": "73925cb933e9352159c4fb38613efb2eba3eb23d519fe4140bd54929dcce7a9a",
+}
+
+EXISTING_PLANS: dict[str, Any] = {
+    "sample_plan": sample_plan,
+    "b03_plan": b03_plan,
+    "k05": lambda: plan(
+        piece([room("R1"), finger(left=("R2", "R3"), right=("R4",))], [room("R5")])
+    ),
+    "k07_j1": lambda: plan(
+        piece([room("R1")], [finger(left=("R2",), junction=True)]), piece([room("R3")])
+    ),
+    "b04_six": lambda: plan(
+        bands(*[band() for _ in range(5)], band([room("R1")]), connector="start")
+    ),
+    "b08_good": lambda: plan(
+        bands(band([room("R1")]), band([room("R2")]), connector="end"),
+        bands(band([room("R3")]), band([room("R4")])),
+    ),
+    "b09_band2": lambda: plan(
+        bands(
+            band([room("R1")]),
+            band([room("R3")]),
+            band([], [finger(left=("R2",), junction=True)]),
+            connector="start",
+        ),
+        piece([room("R4")]),
+    ),
+}
+
+
+@pytest.mark.parametrize("name", sorted(EXISTING_PLANS))
+def test_I02_backward(name: str) -> None:
+    x = EXISTING_PLANS[name]()
+    raw = canonical_json(x)
+    assert b'"connector"}' not in raw  # no marker bays
+    back = CorridorPlan.model_validate_json(raw)
+    assert back == x
+    assert canonical_json(back) == raw
+    assert load_yaml(CorridorPlan, dump_yaml(x)) == x
+    assert CorridorPlan.model_validate(x.model_dump(mode="json")) == x
+    if name in GOLDEN_1_2_0:
+        assert hashlib.sha256(raw).hexdigest() == GOLDEN_1_2_0[name]
+
+
+@pytest.mark.parametrize(
+    ("build", "match"),
+    [
+        (
+            lambda: PiecePlan(bands=(band([conn(), room("R1")]),), connector="inner"),
+            "1-band piece",
+        ),
+        (
+            lambda: bands(band([room("R1"), conn()], [conn()]), band(), connector="start"),
+            "only allowed in an inner-connector piece",
+        ),
+        (
+            lambda: bands(band([room("R1"), conn()]), band(), connector="none"),
+            "only allowed in an inner-connector piece",
+        ),
+        (
+            lambda: bands(band([room("R1"), conn()], [conn()]), band([conn()]), connector="inner"),
+            "got 0 in band 1 block B",
+        ),
+        (
+            lambda: inner2([conn(), room("R1"), conn()], [conn()]),
+            "got 2 in band 0 block A",
+        ),
+    ],
+    ids=["one_band", "marker_in_start", "marker_in_none", "block_lacks_marker", "two_markers"],
+)
+def test_I03_validators(build: Any, match: str) -> None:
+    with pytest.raises(ValidationError, match=match):
+        build()
+
+
+def test_I03_validators_ok() -> None:
+    x = inner_plan()
+    assert x.pieces[0].connector == "inner"
+    back = CorridorPlan.model_validate_json(canonical_json(x))
+    assert back == x
+    assert isinstance(back.pieces[0].bands[1].block_a.bays[0], ConnectorBay)
+    assert load_yaml(CorridorPlan, dump_yaml(x)) == x
+    with pytest.raises(ValidationError):
+        ConnectorBay(kind="room")  # type: ignore[arg-type]
+    with pytest.raises(ValidationError):
+        ConnectorBay(room="R1")  # type: ignore[call-arg]
+
+
+def test_I04_locate_and_ids() -> None:
+    x = inner_plan()
+    assert x.room_ids() == ("R1", "R2", "R3", "R4")
+    assert x.locate("R1") == RoomPosition(piece=0, band=0, block="A", bay=0, stack=None, index=None)
+    assert x.locate("R2") == RoomPosition(piece=0, band=0, block="A", bay=2, stack=None, index=None)
+    assert x.locate("R3") == RoomPosition(piece=0, band=0, block="B", bay=1, stack="left", index=0)
+    r2 = x.locate("R2")
+    assert x.pieces[0].bands[0].block_a.bays[r2.bay] == room("R2")
+    with pytest.raises(KeyError):
+        x.locate("connector")
+
+
+def test_I05_zones() -> None:
+    def one_block(bays: list[Any]) -> CorridorPlan:
+        return plan(inner2(bays, [conn()]))
+
+    across = one_block([room("R1"), conn(), room("R2")])
+    assert across.zone_violations({"R1": P, "R2": P}) == ()
+    around = one_block([room("R1"), room("R2"), conn(), room("R3"), finger(left=("R4",))])
+    assert around.zone_violations({"R1": P, "R2": A, "R3": A, "R4": P}) == ()
+    before = one_block([room("R1"), room("R2"), room("R3"), conn(), room("R4")])
+    assert before.zone_violations({"R1": P, "R2": A, "R3": P, "R4": P}) == (
+        "zone PUBLIC split in piece 0 band 0 block A",
+    )
+    after = one_block([room("R0"), conn(), room("R1"), room("R2"), room("R3")])
+    assert after.zone_violations({"R0": S, "R1": P, "R2": A, "R3": P}) == (
+        "zone PUBLIC split in piece 0 band 0 block A",
+    )
+    # Reported once even when split on both sides.
+    rooms6 = [room(f"R{i}") for i in range(1, 7)]
+    both = one_block([*rooms6[:3], conn(), *rooms6[3:]])
+    zones = {"R1": P, "R2": A, "R3": P, "R4": P, "R5": A, "R6": P}
+    assert both.zone_violations(zones) == ("zone PUBLIC split in piece 0 band 0 block A",)
+
+
+def test_I06_J2() -> None:
+    j2 = fp(J2_POLY)
+    ids = ["R1", "R2", "R3", "R4"]
+    inner_a = inner2([room("R1"), conn()], [conn(), room("R2")])
+    inner_b = inner2([room("R3"), conn()], [conn(), room("R4")])
+    inner_primary = plan(inner_a, piece([room("R3")], [room("R4")]))
+    assert inner_primary.check_against(ids, j2) == (
+        "primary connector must be on the cut side (end)",
+    )
+    # Secondary rule: "inner" does not satisfy the cut-side requirement either.
+    inner_secondary = plan(piece([room("R1")], [room("R2")]), inner_b)
+    assert inner_secondary.check_against(ids, j2) == (
+        "secondary connector must be on the cut side (start)",
+    )
+    # Allowed where no cut-side connector is required: a J2 secondary when the primary carries
+    # it, and a multi-band piece of a rectangle (it counts as having a connector).
+    ok_secondary = plan(bands(band([room("R1")]), band([room("R2")]), connector="end"), inner_b)
+    assert ok_secondary.check_against(ids, j2) == ()
+    rect = plan(inner2([room("R1"), conn()], [conn(), room("R2")]))
+    assert rect.check_against(["R1", "R2"], fp(RECT)) == ()
+
+
+@pytest.mark.slow
+@pytest.mark.timeout(120)
+def test_I07_gates() -> None:
+    """ruff / format on the A.3 files, mypy strict on the contracts package (suite and coverage
+    gates run outside)."""
+    if shutil.which("ruff") is None and _tool("ruff", "--version").returncode != 0:
+        pytest.skip("ruff not installed")  # pragma: no cover
+    files = ["src/ale/contracts/corridor_plan.py", "tests/contracts/test_corridor_plan.py"]
+    files.append("src/ale/contracts/version.py")
+    proc = _tool("ruff", "check", *files)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    proc = _tool("ruff", "format", "--check", *files)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    proc = _tool("mypy", "src/ale/contracts")
     assert proc.returncode == 0, proc.stdout + proc.stderr
