@@ -1,5 +1,23 @@
 {
   "$defs": {
+    "BandPlan": {
+      "additionalProperties": false,
+      "description": "One band of a piece: A lower (spine axis X) / left (axis Y), B upper / right.",
+      "properties": {
+        "block_a": {
+          "$ref": "#/$defs/BlockPlan"
+        },
+        "block_b": {
+          "$ref": "#/$defs/BlockPlan"
+        }
+      },
+      "required": [
+        "block_a",
+        "block_b"
+      ],
+      "title": "BandPlan",
+      "type": "object"
+    },
     "BlockPlan": {
       "additionalProperties": false,
       "description": "One side of a spine: bays ordered along the spine from the piece's min coordinate.",
@@ -67,18 +85,30 @@
     },
     "PiecePlan": {
       "additionalProperties": false,
-      "description": "The two blocks of a piece: A lower (spine axis X) / left (axis Y), B upper / right.",
+      "description": "The bands of a piece, ordered from the piece's min v (across the spine axis) upward.\n\n``connector``: where the connector corridor lies along the spine axis (``\"start\"`` at\n``u \u2208 [0, s)``, ``\"end\"`` at ``u \u2208 [L - s, L)``); a 1-band piece must have ``\"none\"``.",
       "properties": {
-        "block_a": {
-          "$ref": "#/$defs/BlockPlan"
+        "bands": {
+          "items": {
+            "$ref": "#/$defs/BandPlan"
+          },
+          "maxItems": 6,
+          "minItems": 1,
+          "title": "Bands",
+          "type": "array"
         },
-        "block_b": {
-          "$ref": "#/$defs/BlockPlan"
+        "connector": {
+          "default": "none",
+          "enum": [
+            "none",
+            "start",
+            "end"
+          ],
+          "title": "Connector",
+          "type": "string"
         }
       },
       "required": [
-        "block_a",
-        "block_b"
+        "bands"
       ],
       "title": "PiecePlan",
       "type": "object"
@@ -106,7 +136,7 @@
     }
   },
   "additionalProperties": false,
-  "description": "Corridor-grammar plan: one :class:`PiecePlan` per footprint piece (1 or 2).\n\n``pieces`` are in the same order as ``FootprintPieces.pieces``. Every instance id appears\nexactly once; at most one junction finger, only in ``pieces[0]`` of a 2-piece plan.",
+  "description": "Corridor-grammar plan: one :class:`PiecePlan` per footprint piece (1 or 2).\n\n``pieces`` are in the same order as ``FootprintPieces.pieces``. Every instance id appears\nexactly once; at most one junction finger, only in ``pieces[0]`` (any band) of a 2-piece\nplan.",
   "properties": {
     "pieces": {
       "items": {
@@ -116,8 +146,8 @@
       "type": "array"
     },
     "schema_version": {
-      "const": "ale.corridor_plan/1",
-      "default": "ale.corridor_plan/1",
+      "const": "ale.corridor_plan/2",
+      "default": "ale.corridor_plan/2",
       "title": "Schema Version",
       "type": "string"
     }

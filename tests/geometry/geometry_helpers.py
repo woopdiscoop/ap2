@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import random
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
@@ -9,7 +10,14 @@ from typing import Any
 from fixtures import ProgramName, SiteName, load_program, load_site
 
 from ale.config import AleConfig
-from ale.contracts.corridor_plan import BlockPlan, CorridorPlan, FingerBay, PiecePlan, RoomBay
+from ale.contracts.corridor_plan import (
+    BandPlan,
+    BlockPlan,
+    CorridorPlan,
+    FingerBay,
+    PiecePlan,
+    RoomBay,
+)
 from ale.contracts.enums import MacroZone
 from ale.contracts.geometry import Polygon
 from ale.contracts.models import GridSpec, Program, RoomSpec, Rulebook, SiteSpec
@@ -97,8 +105,19 @@ def fixture_prepared(program: ProgramName, site: SiteName) -> PreparedInput:
     return prepared_from(load_program(program), load_site(site))
 
 
+def band(a: Sequence[AnyBay] = (), b: Sequence[AnyBay] = ()) -> BandPlan:
+    return BandPlan(block_a=BlockPlan(bays=tuple(a)), block_b=BlockPlan(bays=tuple(b)))
+
+
 def piece(a: Sequence[AnyBay] = (), b: Sequence[AnyBay] = ()) -> PiecePlan:
-    return PiecePlan(block_a=BlockPlan(bays=tuple(a)), block_b=BlockPlan(bays=tuple(b)))
+    """A one-band piece (no connector)."""
+    return PiecePlan(bands=(band(a, b),))
+
+
+def bands_piece(bands: Sequence[BandPlan], connector: str = "start") -> PiecePlan:
+    """A piece with the given bands (connector ``"none"`` forced for a single band)."""
+    conn = "none" if len(bands) == 1 else connector
+    return PiecePlan.model_validate({"bands": tuple(bands), "connector": conn})
 
 
 def one_piece(a: Sequence[AnyBay] = (), b: Sequence[AnyBay] = ()) -> CorridorPlan:
@@ -116,3 +135,27 @@ def fb(left: Sequence[str] = (), right: Sequence[str] = (), junction: bool = Fal
 def rect_tuple(p: Any) -> tuple[int, int, int, int]:
     r = p.rect
     return (r.x, r.y, r.w, r.h)
+
+
+def random_plan(prepared: PreparedInput, rng: random.Random) -> CorridorPlan:
+    """A random valid one-piece plan: 1-3 bands, random connector, random bays."""
+    ids = [iid for iid, _ in prepared.instances]
+    rng.shuffle(ids)
+    n = rng.randint(1, 3)
+    blocks: list[list[AnyBay]] = [[] for _ in range(2 * n)]
+    i = 0
+    while i < len(ids):  # consumes at least one id per iteration
+        target = blocks[rng.randrange(2 * n)]
+        if rng.random() < 0.5:
+            target.append(rb(ids[i]))
+            i += 1
+            continue
+        nl, nr = rng.randint(0, 3), rng.randint(0, 3)
+        if nl + nr == 0:
+            nl = 1
+        left = ids[i : i + nl]
+        right = ids[i + nl : i + nl + nr]
+        i += nl + nr
+        target.append(fb(left, right) if left or right else rb(ids[i - 1]))
+    bands = [band(blocks[2 * k], blocks[2 * k + 1]) for k in range(n)]
+    return CorridorPlan(pieces=(bands_piece(bands, rng.choice(["start", "end"])),))
