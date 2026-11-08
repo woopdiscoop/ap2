@@ -33,11 +33,19 @@ def read_cad(path: Path, *, source_sha256: str, layer_map: LayerMap, config: Ale
 ```
 
 ## 3. Rules
-- **Layer proposal** (canonical match: accents/case/punctuation removed, then substring keywords; first match wins in
-  this order): IGNORE (`COTE`, `DIM`, `HACH` when not zone, `AXE`, `MOBILIER`→FURNITURE, `DEFPOINTS`, `VIEWPORT`),
-  ZONE (`ZONE`, `LOCAUX`, `ROOM`, `A-AREA`, `ESPACE`), AREA_LABEL (`SURFACE`, `AREA`, `M2`), ROOM_LABEL
-  (`TEXTE`, `TEXT`, `NOM`, `A-ANNO`, `LIBELLE`), DOOR (`PORTE`, `DOOR`, `A-DOOR`), WINDOW (`FENETRE`, `MENUISERIE`,
-  `WINDOW`, `A-GLAZ`, `CHASSIS`), WALL (`MUR`, `CLOISON`, `WALL`, `A-WALL`, `VOILE`, `MACONNERIE`, `BETON`);
+- **Layer proposal** *(amended at review 2026-11-08 — whole-word matching)*. Canonicalise the layer name
+  (accents removed, upper case, every non-alphanumeric char → space) and split into tokens. A keyword (itself
+  canonicalised, possibly several tokens) matches when its tokens appear **consecutively** in the name's tokens,
+  each name token equal to the keyword token or to it plus a trailing `S` or `X` (plural). No substring matching
+  (`PORTEUR` is not `PORTE`). Roles are tried in this order, first match wins:
+  1. IGNORE: `COTE`, `COTATION`, `DIM`, `DIMENSION`, `AXE`, `DEFPOINTS`, `VIEWPORT`, `HACHURE` (when the name has no zone keyword);
+  2. FURNITURE: `MOBILIER`, `EQUIPEMENT`, `FURN`, `A FURN`;
+  3. AREA_LABEL: `SURFACE`, `AREA`, `M2`;
+  4. ROOM_LABEL: `TEXTE`, `TEXT`, `NOM`, `LIBELLE`, `A ANNO`, `ETIQUETTE`;
+  5. ZONE: `ZONE`, `LOCAL`, `ROOM`, `A AREA`, `ESPACE`;
+  6. DOOR: `PORTE`, `DOOR`, `A DOOR`;
+  7. WINDOW: `FENETRE`, `MENUISERIE`, `WINDOW`, `A GLAZ`, `CHASSIS`, `BAIE`;
+  8. WALL: `MUR`, `CLOISON`, `WALL`, `A WALL`, `VOILE`, `MACONNERIE`, `BETON`, `PORTEUR`;
   anything else IGNORE. Existing entries are kept (user decisions win).
 - **Model space only**; paper space ignored; XREFs: bound if the file sits next to the drawing, else warning
   `missing xref <name>`. Blocks are exploded virtually (`ezdxf` virtual entities) with their transforms.
