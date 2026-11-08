@@ -69,7 +69,9 @@ def test_O03_improves(name: str, seeded: Seeded, rulebook: Rulebook) -> None:
         f"{res.stopped_by}, {res.elapsed_s:.1f} s"
     )
     assert (res.initial_hard, res.initial_cost) == start_score
-    assert start_score[0] > 0
+    # Q.1: the P8 seed-3 start's 6 hard violations were all AREA_OVER / ASPECT, which
+    # realisation no longer emits: it now starts (and ends) at 0 hard.
+    assert start_score[0] > 0 or name == "P8"
     # The (lexicographic) energy never increases from start to best.
     assert (res.final_hard, res.final_cost) <= start_score
     assert res.final_hard <= res.initial_hard

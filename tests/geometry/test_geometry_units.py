@@ -95,11 +95,16 @@ def test_stack_rules() -> None:
     assert one is not None and (one.w, one.heights, one.rest) == (18, (36,), 4)
     # Three rooms cannot fit a depth of 30 (3 x 12 > 30).
     assert solver.stack((six, six, six), 30) is None
-    # Infeasible areas → fallback: wmin width, heights >= c filling the depth.
+    # Q.1: no compliant width (80 m² cannot reach its area at depth 30) → None, no fallback.
     huge = k.req(room("h", 80.0))
-    fallback = solver.stack((huge, six), 30)
-    assert fallback is not None and fallback.w == 12 and sum(fallback.heights) == 30
-    assert min(fallback.heights) >= 12 and fallback.rest == 0
+    assert solver.stack((huge, six), 30) is None
+    assert solver.stack((six,), 0) is None
+    # Q.1: no width reaches both targets at depth 28, but w = 28, h = 14 gives 392 cells,
+    # inside the area rule of a 4 m² room (lo 388): the undershoot pass accepts it.
+    four = k.req(room("f", 4.0))
+    assert four.lo <= 28 * 14 < four.target
+    under = solver.stack((four, four), 28)
+    assert under is not None and (under.w, under.heights, under.rest) == (28, (14, 14), 0)
 
 
 def test_room_bay_branches() -> None:
@@ -108,8 +113,10 @@ def test_room_bay_branches() -> None:
     # Smallest w >= ceil(T / D) within hi with aspect <= 2: 12 m² at D = 41 → w = 30.
     assert solver.room_bay_width(k.req(room("a", 12.0)), 41) == 30
     # 12 m² at D = 59: w = 21 (1239) aspect 2.81 ... w = 22 (1298) aspect 2.68 fail; down
-    # w = 20 (1180 >= 1164) aspect 2.95 fails → last fallback ceil(1200 / 59) = 21.
-    assert solver.room_bay_width(k.req(room("b", 12.0)), 59) == 21
+    # w = 20 (1180 >= 1164) aspect 2.95 fails → no compliant width (Q.1: None).
+    assert solver.room_bay_width(k.req(room("b", 12.0)), 59) is None
+    # Depth below wmin → None.
+    assert solver.room_bay_width(k.req(room("c", 2.0)), 11) is None
     # Down branch (undershoot inside the tolerance) with amax 1.5: 13.8 m² at D = 30:
     # up w = 46..50 have aspect > 1.5; down w = 45 (1350 >= lo 1339) aspect 1.5 → 45.
     tight = Consts.from_config(AleConfig.model_validate({"shape": {"aspect_max": 1.5}}))
@@ -150,16 +157,18 @@ def test_stack_too_shallow_and_shallow_piece() -> None:
     rooms = [room("s1", 2.0), room("s2", 2.0), room("s3", 2.0)]
     prepared = prepared_rect(100, 42, rooms)
     real = realize(prepared, one_piece(b=[fb(["s1", "s2", "s3"])]), RULEBOOK, CONFIG)
-    assert [f.code for f in real.failures] == ["STACK_TOO_SHALLOW"]
+    # Q.1: a stack too shallow for its rooms is STACK_INFEASIBLE (was STACK_TOO_SHALLOW).
+    assert [f.code for f in real.failures] == ["STACK_INFEASIBLE"]
+    assert "s1, s2, s3" in real.failures[0].detail
     assert real.depths == ((0, 30),)
-    # P - s = 18 < 2 x 12: both blocks get 9 modules, rooms flagged MIN_WIDTH / ASPECT.
+    # P - s = 18 < 2 x 12: both blocks get 9 modules < wmin → ROOM_INFEASIBLE (Q.1; was a
+    # layout with MIN_WIDTH / ASPECT violations).
     prepared = prepared_rect(80, 30, [room("a", 2.0), room("b", 2.0)])
     real = realize(prepared, one_piece(a=[rb("a")], b=[rb("b")]), RULEBOOK, CONFIG)
     assert real.depths == ((9, 9),)
-    assert real.layout is not None
-    codes = {v.code for v in real.layout.metrics.violations}
-    assert {"MIN_WIDTH", "ASPECT"} <= codes
-    assert check_layout(real.layout, prepared, CONFIG) == ()
+    assert real.layout is None
+    assert [f.code for f in real.failures] == ["ROOM_INFEASIBLE", "ROOM_INFEASIBLE"]
+    assert real.failures[0].detail == ("a in piece 0 band 0 block A: no compliant width at depth 9")
 
 
 def test_block_a_only() -> None:
@@ -275,7 +284,25 @@ def test_evaluate_core_hint_override_and_missing_type() -> None:
     del data["types"]["open_office"]
     rulebook = Rulebook.model_validate(data)
     prepared = prepared_rect(80, 52, rooms, rulebook, core_hint=(1.5, 2.6))
-    real = realize(prepared, one_piece(b=[rb("r1"), rb("r2")]), rulebook, CONFIG)
+    # Q.1: realize no longer emits r2 narrower than its 4.5 m minimum (depth 40 < 45), so
+    # the layout is realised without the minimum width and evaluated against it.
+    loose = [rooms[0], room("r2", 12.0, rtype="open_office")]
+    real = realize(
+        prepared_rect(80, 52, loose, rulebook, core_hint=(1.5, 2.6)),
+        one_piece(b=[rb("r1"), rb("r2")]),
+        rulebook,
+        CONFIG,
+    )
+    assert real.layout is not None
+    strict = realize(prepared, one_piece(b=[rb("r1"), rb("r2")]), rulebook, CONFIG)
+    assert [f.code for f in strict.failures] == ["ROOM_INFEASIBLE"]
+    real = real.model_copy(
+        update={
+            "layout": real.layout.model_copy(
+                update={"metrics": evaluate(real.layout, prepared, rulebook, CONFIG)}
+            )
+        }
+    )
     assert real.layout is not None
     assert core_target(real.layout, prepared, rulebook) == pytest.approx((15.0, 26.0))
     m = real.layout.metrics
@@ -300,7 +327,9 @@ def test_evaluate_plan_with_unknown_room_and_no_rooms() -> None:
 
 def test_greedy_single_zone_rect() -> None:
     rooms = [room(f"o{i}", 12.0, zone=MacroZone.ADMINISTRATIVE) for i in range(3)]
-    prepared = prepared_rect(120, 60, rooms)
+    # Q.1: a 60-module piece leaves no depth where every 12 m² room bay complies (the
+    # greedy plan puts 2 rooms in block A, 1 in B); 64 modules does (26 / 26).
+    prepared = prepared_rect(120, 64, rooms)
     plan = greedy_plan(prepared, RULEBOOK, CONFIG)
     assert sorted(plan.room_ids()) == ["o0", "o1", "o2"]
     real = realize(prepared, plan, RULEBOOK, CONFIG)
