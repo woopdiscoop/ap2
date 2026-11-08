@@ -63,7 +63,7 @@ Convert to footprint coordinates at the end (spine axis X: `x = u, y = v`; axis 
 - Empty block → depth 0 (spine against that side). Both empty → the piece is spine + one end strip.
 - Otherwise search `D_A` over every integer in `[wmin_block, P − s − wmin_block]` (wmin_block = smallest room
   `wmin` in that block), realise both blocks for each, and keep the depth with the lowest
-  `(n_failures, Σ overshoot cells + Σ circulation strip cells, |D_A − D_B|, D_A)`. Wrap the loop in
+  `(n_failures, Σ |placed − target| cells + Σ stack-end strip cells, |D_A − D_B|, D_A)` *(amended at review 2026-11-08: end-strip area is fixed by the depths, so the original criterion let the tie-break pick balanced depths with overshooting rooms — counter-example found by G03)*; a block holding a k-room stack has depth floor k·c. Wrap the loop in
   `ale.guards.bounded(max_iter=P + 1, time_budget_s=5.0, label="depth-search")`.
 
 ### 5.2 Room bay (depth D)

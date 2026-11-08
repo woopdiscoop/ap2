@@ -11,3 +11,7 @@ Re-scoped: realises a `CorridorPlan` (contract A.1) instead of a free Polish exp
 
 ## Spec (2026-11-08)
 RD + eval written for the corridor-grammar realisation. E01/E02/E05 values verified with an independent implementation of RD §5. Inverse-generation property tests (G01–G04) guarantee the realiser reaches known-optimal geometry.
+
+## Review log
+- 2026-11-08 — Attempt 1 (7fbaed4): Router re-run: tests/geometry 38/38, 99 % coverage, whole suite 539, gates clean, ownership clean. Worker found RD 5.1 depth criterion wrong (Router error) — amended. Extra failure codes accepted (PIECE_TOO_SMALL, FOOTPRINT_UNSUPPORTED, BLOCK_TOO_SHALLOW, STACK_TOO_SHALLOW, DEPTH_SEARCH_TIMEOUT). **DONE** (merged).
+- Manual fixture run (greedy plan): P25 valid layout (checks pass, 0.03 s); P8 overflows by 12 modules; P60 overflows by 86 / 84 modules (0.09 s). Risk for 3.2: grammar circulation (spine + fingers + strips) may exceed the 18 % budget at 0.93 fill — 3.2 must include a grammar-aware feasibility estimate.
