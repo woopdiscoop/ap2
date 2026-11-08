@@ -51,6 +51,6 @@ P8 demand = 10.3 m ≤ 17.6 m → no warning.
 6. A footprint outside the v1 grammar (neither rectangle nor L, `decompose_footprint` raises) does not raise in
    feasibility: `facade_usable_m` falls back to the raw perimeter (needed by an existing geometry test that prepares a
    U-shaped footprint).
-7. `W_FACADE_TIGHT` is not added to `WARNING_CODES` (the frozen RD 3.1 §4 list; `test_X10_never_raises` pins it);
-   severity comes from the `W_` prefix via `make_issue`.
+7. `W_FACADE_TIGHT` is added to `WARNING_CODES` (router review); `FROZEN_CODES` in `test_program_excel.py`
+   (`test_X10_never_raises` enumerates the catalogue) gets the same code.
 8. `FeasibilityReport.facade_usable_m` is a required field (no default).

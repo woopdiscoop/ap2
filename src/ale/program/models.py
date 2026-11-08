@@ -72,8 +72,10 @@ EXTRA_ERROR_CODES: frozenset[str] = frozenset(
     {"E_FILE_UNREADABLE", "E_SITE_SCHEMA", "E_RULEBOOK_INVALID"}
 )
 
-#: Warning codes of RD 3.1 section 4.
-WARNING_CODES: frozenset[str] = frozenset({"W_SHEET_NAME", "W_UNKNOWN_COLUMN", "W_ZONE_DEFAULTED"})
+#: Warning codes of RD 3.1 section 4, plus ``W_FACADE_TIGHT`` (Q.2a).
+WARNING_CODES: frozenset[str] = frozenset(
+    {"W_SHEET_NAME", "W_UNKNOWN_COLUMN", "W_ZONE_DEFAULTED", "W_FACADE_TIGHT"}
+)
 
 Severity = Literal["error", "warning"]
 
