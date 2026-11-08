@@ -23,16 +23,17 @@ Maintained by the Router only. Directive: `specs/DIRECTIVE.md` (v2.2, supersedes
 | A.2 | Contract amendment: bands | **DONE** | — | RD + eval | Contracts 1.2.0 (CorridorPlan /2). |
 | Q.1 | Realisation never emits rule-breaking rooms | **IN-PROGRESS** | — | RD + eval | ROOM_INFEASIBLE / STACK_INFEASIBLE instead of fallbacks. |
 | A.3 | Contract: inner connector | **IN-PROGRESS** | — | RD + eval | Contracts 1.3.0, backward compatible. |
+| Q.2a | Façade capacity in feasibility | **IN-PROGRESS** | — | RD + eval | W_FACADE_TIGHT warning. |
 | Q.2 | Façade-aware layouts | BLOCKED | Q.1, A.3 | — | Inner connectors in geometry/seeding/moves; façade-pull move; grammar façade capacity in feasibility. |
 | Q.3 | Cache into geometry + P8 reliability | BLOCKED | Q.2 | — | |
 | 1.1 | Corpus ingestion & classification | **DONE** | — | RD + eval | Real corpus: 439 files → 1734 units (DWG 17 NEEDS_TOOL, PDF_VECTOR 879, PDF_SCANNED 436, RASTER 402), 0 failed, idempotent. |
 | 1.2 | CAD reader (DXF; DWG via converter) | **DONE** (library) | — | RD + eval | Layers (whole-word), units, walls, rooms, labels, openings, multi-plan, DWG→DXF via ODA/accoreconsole. Follow-up 1.2c: wire `ale layers` / `ale extract --kind dxf\|dwg` to the corpus DB. Real DWGs need ODA on the user's workstation. |
 | 1.2c | CAD → corpus CLI (`ale layers`, `ale extract` dxf/dwg) | **DONE** | — | RD + eval | Empty layer map → in-memory proposal + warning; NEEDS_TOOL DWGs retried. |
-| 1.3 | Vector-PDF reader | BLOCKED | 1.1 · test corpus | — | PyMuPDF. |
-| 1.4 | Raster reader | BLOCKED | 1.1 · test corpus | — | CubiCasa5K (v2.0 spec in git history reusable). |
-| 1.5 | Semantic labelling | BLOCKED | 1.2, 1.3, 1.4 · decision O-3 | — | CAD text → PDF text → VLM → manual. |
-| 1.6 | Geometry join & scale | BLOCKED | 1.5 | — | Scale hierarchy, Hungarian label matching. |
-| 2.1 | Topology extraction | BLOCKED | 1.6 | — | |
+| 1.3 | Vector-PDF reader (library) | **IN-PROGRESS** | — | RD + eval | Walls/doors/rooms from PDF paths, PDF_TEXT labels, title-block scale, plan-likeness score. |
+| 1.4 | Raster reader (classical CV v1, library) | **IN-PROGRESS** | — | RD + eval | No model weights needed; CubiCasa can be added later behind the same API. |
+| 1.5 | Semantic labelling (library) | **IN-PROGRESS** | — | RD + eval | Text-first; provider-agnostic VLM interface + cache, fake providers in tests; real provider = O-3. |
+| 1.6 | Scale reconciliation & review flags (library) | **IN-PROGRESS** | — | RD + eval | Hierarchy incl. dimension text and door median. |
+| 2.1 | Topology extraction (library) | **IN-PROGRESS** | — | RD + eval | PlanGeometry → contacts (WALL/DOOR), façade lengths. |
 | 2.2 | Rulebook build | BLOCKED | 2.1, 0.3 | — | Fidelity-weighted, blended with seed. |
 
 **External blocker for all Phase 1 tickets:** the annotated test set (directive §7) — ≥ 12 plans
@@ -74,6 +75,7 @@ with ground truth. The Router will issue an annotation template before Phase 1.
 ## History
 
 - 2026-11-06 — v2.0 workspace initialised (tickets 1.1, 1.2 specified).
+- 2026-11-08 — User: "launch all". Dispatched in parallel (libraries, no CLI wiring): 1.3, 1.4 (classical CV), 1.5 (fake VLM providers), 1.6, 2.1, Q.2a. Integration ticket I.1 (wire extract/review) to follow.
 - 2026-11-08 — Q.1 attempt 1: geometry refuses rule-breaking shapes, but seeding then fails on P25/P60 (room bays in a block share depth; mixed room sizes have disjoint depth intervals). Scope extended to depth-interval-aware seeding (RD §4). Worker interrupted by the account usage limit, resumed 20:27 UTC. A.3 accepted (held for merge with Q.2).
 - 2026-11-08 — User: go on the quality wave. Q.1 and A.3 specified and dispatched in parallel; Q.2, Q.3 queued.
 - 2026-11-08 — 3.4 merged after review (777 tests). **End-to-end pipeline works: Excel → plan → optimised layout → DXF/SVG/report.** Quality gap on large programs (P60, 60 s): 22 hard breaks = 11 NO_FACADE (inner bands have no façade; connector at a piece end uses façade), 8 ASPECT/AREA/MIN_WIDTH (degenerate stack fallbacks in realisation), 2 REQUIRED_ADJ. Next wave: quality tickets Q.1–Q.3 (see notes).
