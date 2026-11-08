@@ -15,9 +15,9 @@ Maintained by the Router only. Directive: `specs/DIRECTIVE.md` (v2.2, supersedes
 | 0.3 | Seed rulebook | **READY (user input)** | user values; validation needs 0.2 | template + RD + eval | Aspect pre-filled (U-2); remaining ≈ 196 entries: area + orientation per type, 30 pairs, core offset. Unused types can be deleted. |
 | 0.4 | Guards & test harness | **DONE** | — | RD + eval + fixtures | `ale.guards.bounded`, `ale.proc.run_tool`, fixtures P8/P25/P60 + 3 sites (Router-verified). Dispatch right after 0.1/0.2 merge. |
 | 3.1 | Program & site ingestion | **DONE** | — (0.2, 0.4 done) | RD + eval | Excel → Program with full French error report; site.yaml/DXF → module footprint; feasibility; template + `ale program check`. |
-| 3.2 | Topology & seeding | **IN-PROGRESS** | — (3.3b done) | RD + eval | Graph + planarity report + seeded embedding → capacity-aware plan + repair + restarts; must produce **valid** plans for P8/P25/P60 (P60 ≤ 20 s). |
+| 3.2 | Topology & seeding | **DONE** | — | RD + eval | Valid first plan at attempt 1 for P8 (0.07 s), P25 (0.49 s), P60 (1.55 s); adjacency far better than random. |
 | 3.3 | Grammar realization (+3.3b bands) | **DONE** | — | RD + eval (+ bands) | Bands, connectors, J1/J2; 99 % coverage; P60 realisation 0.10 s. |
-| 3.4 | SA optimizer + `ale generate` | BLOCKED (spec ready) | 3.2 | RD + eval | Moves G1–G7, Metropolis, best-of; `ale generate` → variants + exports + summary.md. Dispatch when 3.2 merges. |
+| 3.4 | SA optimizer + `ale generate` | **IN-PROGRESS** | — | RD + eval | Energy = cost + 1000 × hard violations (area, 2:1, min width, façade, required/avoid adjacency, corridor access). |
 | 3.5 | Export & report | **DONE** | — | RD + eval | layout.json, layered DXF (audit clean), SVG preview, French report.md. `ale generate` wiring in 3.4. |
 | A.1 | Contract amendment: CorridorPlan + footprint decomposition | **DONE** | — | RD + eval | Contracts 1.0.0 → 1.1.0; adds `corridor_plan.py`, `footprint.py`; regenerates lock. |
 | A.2 | Contract amendment: bands | **DONE** | — | RD + eval | Contracts 1.2.0 (CorridorPlan /2). |
@@ -70,6 +70,7 @@ with ground truth. The Router will issue an annotation template before Phase 1.
 ## History
 
 - 2026-11-06 — v2.0 workspace initialised (tickets 1.1, 1.2 specified).
+- 2026-11-08 — 3.2 merged after review (732 tests). Router check seed 3: valid geometry on all fixtures but hard-rule violations remain (area, aspect, min width, façade, required adj.) → 3.4 energy amended to penalise all hard rules. 3.4 dispatched.
 - 2026-11-08 — 3.2 Worker stopped by an account usage limit; resumed after reset (work preserved). 3.4 specified.
 - 2026-11-08 — 1.2c merged after review (710 tests).
 - 2026-11-08 — A.2 + 3.3b merged together (686 tests, contracts 1.2.0). Router feasibility probe (random plans, scratch): valid grammar plans exist for P8 (2906/5390), P25 (522/1264), P60 (22/672, bands [4,1]) → risk R-G1 closed; greedy plan is the weak part → 3.2 must find valid plans.

@@ -42,8 +42,10 @@ def anneal(prepared, rulebook, config, start: CorridorPlan, *, seed: int) -> Ann
   stop by `bounded(optimizer.max_iter, optimizer.time_budget_s, on_exhaust="stop")`, or `converged` when no
   improvement of the best for 20 consecutive temperature steps. Return the **best** plan seen.
 - RNG: `random.Random(seed)` only; same inputs + seed → identical result.
-- Hard constraints (`REQUIRED_ADJ`, `NO_CIRCULATION_ACCESS`, `NO_FACADE`) are already weighted in the cost by
-  `[optimizer.weights]`; nothing else special.
+- **Hard rules** (user decisions D1/U-2 and the directive): energy = `total_cost + H × n_hard`, where `n_hard` =
+  number of violations with codes `AREA_UNDER`, `AREA_OVER`, `ASPECT`, `MIN_WIDTH`, `NO_FACADE`, `REQUIRED_ADJ`,
+  `AVOID_ADJ`, `NO_CIRCULATION_ACCESS`, and `H = optimizer.weights.required_adjacency` (default 1000). Lexicographic
+  in practice: fewer hard violations always win. `AnnealResult` also reports `initial_hard`, `final_hard`.
 
 ## 4. Generate (`generate.py`, `ale generate`)
 ```python
