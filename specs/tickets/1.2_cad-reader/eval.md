@@ -5,7 +5,7 @@ corpus is never committed; DWG conversion is tested with a fake converter.
 
 | ID | Test | Pass condition |
 |---|---|---|
-| D01 | layer_proposal | 20 layer names (`MUR`, `A-WALL`, `Cloisons`, `PORTES`, `A-DOOR`, `Menuiseries ext`, `TEXTE LOCAUX`, `Surfaces`, `ZONES`, `COTATIONS`, `Mobilier`, `0`, `Defpoints`, …) → expected roles (table in the test); an existing mapping `{"0": "WALL"}` is preserved. |
+| D01 | layer_proposal | (amended) Must include: `MUR PORTEUR` → wall, `TEXTE LOCAUX` → room_label, `Portes` → door, `PORTEUR` → wall, `Locaux techniques` → zone, `COTATIONS` → ignore, `A-WALL-FULL` → wall, `Baies vitrées` → window. Plus 20 layer names (`MUR`, `A-WALL`, `Cloisons`, `PORTES`, `A-DOOR`, `Menuiseries ext`, `TEXTE LOCAUX`, `Surfaces`, `ZONES`, `COTATIONS`, `Mobilier`, `0`, `Defpoints`, …) → expected roles (table in the test); an existing mapping `{"0": "WALL"}` is preserved. |
 | D02 | units | `$INSUNITS` 4/5/6/1 → 0.001 / 0.01 / 1.0 / 0.0254 m per unit. No INSUNITS + door blocks 900 wide → mm inferred (confidence 0.6, warning). No INSUNITS, no doors, override `"cm"` → 0.01. |
 | D03 | walls_pairs | Two-room plan (8 × 5 m outer, 0.20 m exterior walls drawn as parallel lines, 0.10 m partition) → recovered wall count equals ground truth; thickness within ±5 mm; centrelines within 5 mm. |
 | D04 | walls_width_polyline | Same plan drawn as LWPOLYLINEs with constant width → same result. |
