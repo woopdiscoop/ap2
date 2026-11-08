@@ -9,6 +9,8 @@ result would be invalid. A result that adds macro-zone grammar violations
 * ``G1`` swap two rooms of the same zone whose target areas are within 25 %.
 * ``G2`` move a room between a room bay and a stack, or between stacks, within its zone
   (finger bays are created / removed as needed; a non-junction finger is never left empty).
+  A quarter of the draws on a room bay instead fold it and its adjacent same-zone room bays
+  into the stack of one new finger bay (see :func:`_fold`).
 * ``G3`` swap two adjacent bays of one zone run of a block.
 * ``G4`` swap two zone runs of a block.
 * ``G5`` move a whole zone run to another block (any band / piece).
@@ -20,8 +22,8 @@ result would be invalid. A result that adds macro-zone grammar violations
 from __future__ import annotations
 
 import random
-from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass, field
+from collections.abc import Callable, Iterable, Mapping, Sequence
+from dataclasses import dataclass, replace
 from itertools import pairwise, product
 from typing import Literal
 
@@ -58,6 +60,9 @@ Bay = RoomBay | FingerBay
 Connector = Literal["none", "start", "end"]
 _CONNECTORS: tuple[Connector, ...] = ("none", "start", "end")
 _AREA_TOLERANCE = 0.25
+_FOCUS_SHARE = 0.5
+_FOLD_SHARE = 0.25
+"""Share of G2 draws on a room bay that fold its same-zone run into one stack."""
 
 
 @dataclass(frozen=True)
@@ -68,10 +73,13 @@ class MoveContext:
     zone_of: Mapping[str, MacroZone]
     area_of: Mapping[str, float]
     footprint: FootprintPieces
-    _ids: frozenset[str] = field(init=False, repr=False)
+    focus: tuple[str, ...] = ()
+    """Rooms the moves pick first half of the time (e.g. rooms with hard violations)."""
 
-    def __post_init__(self) -> None:
-        object.__setattr__(self, "_ids", frozenset(self.instance_ids))
+    def with_focus(self, rooms: Iterable[str]) -> MoveContext:
+        """This context with ``focus`` = the sorted known ids of ``rooms``."""
+        focus = tuple(sorted(set(rooms) & set(self.instance_ids)))
+        return self if focus == self.focus else replace(self, focus=focus)
 
     @classmethod
     def from_prepared(cls, prepared: PreparedInput) -> MoveContext:
@@ -184,6 +192,16 @@ def _finish(plan: CorridorPlan, pieces: Sequence[_Piece], ctx: MoveContext) -> C
     return new
 
 
+def _pick_room(rooms: Sequence[str], ctx: MoveContext, rng: random.Random) -> str:
+    """A room of ``rooms``: half of the time one of ``ctx.focus`` (when any is present)."""
+    if ctx.focus and rng.random() < _FOCUS_SHARE:
+        present = set(rooms)
+        focus = [r for r in ctx.focus if r in present]
+        if focus:
+            return rng.choice(focus)
+    return rng.choice(rooms)
+
+
 # ---------------------------------------------------------------------------- G1
 def _rename(bay: Bay, mapping: Mapping[str, str]) -> Bay:
     if isinstance(bay, RoomBay):
@@ -200,7 +218,7 @@ def g1_swap_rooms(plan: CorridorPlan, ctx: MoveContext, rng: random.Random) -> C
     rooms = plan.room_ids()
     if len(rooms) < 2:
         return None
-    a = rng.choice(rooms)
+    a = _pick_room(rooms, ctx, rng)
     area_a = ctx.area_of.get(a, 0.0)
     partners = [
         b
@@ -254,7 +272,7 @@ def g2_move_room(plan: CorridorPlan, ctx: MoveContext, rng: random.Random) -> Co
     rooms = plan.room_ids()
     if not rooms:
         return None
-    room = rng.choice(rooms)
+    room = _pick_room(rooms, ctx, rng)
     zone = ctx.zone_of.get(room, "?")
     pos = plan.locate(room)
     pieces = _unpack(plan)
@@ -264,6 +282,8 @@ def g2_move_room(plan: CorridorPlan, ctx: MoveContext, rng: random.Random) -> Co
     ]
     src = flat.index((pos.piece, pos.band, pos.block))
     from_stack = pos.stack is not None
+    if not from_stack and rng.random() < _FOLD_SHARE:
+        return _fold(plan, pieces, blocks[src], pos.bay, ctx, rng)
     _remove_room(blocks[src], pos.bay, room)
 
     # Targets: ("stack", block, bay, side) of a same-zone finger, ("new", block, index, kind).
@@ -300,6 +320,34 @@ def g2_move_room(plan: CorridorPlan, ctx: MoveContext, rng: random.Random) -> Co
             block[i] = FingerBay(left=tuple(stack), right=bay.right, junction=bay.junction)
         else:
             block[i] = FingerBay(left=bay.left, right=tuple(stack), junction=bay.junction)
+    return _finish(plan, pieces, ctx)
+
+
+def _fold(
+    plan: CorridorPlan,
+    pieces: list[_Piece],
+    block: Block,
+    b: int,
+    ctx: MoveContext,
+    rng: random.Random,
+) -> CorridorPlan | None:
+    """G2 fold: the room bay ``b`` and its adjacent same-zone room bays become one stack.
+
+    Moving these rooms into a new finger one at a time costs a finger width at the first
+    step, which an otherwise full block cannot absorb; one stack of several rooms is as
+    wide as their room bays together, so the fold can fit where single moves cannot.
+    """
+    zone = _bay_zone(block[b], ctx)
+    lo, hi = b, b + 1
+    while lo > 0 and isinstance(block[lo - 1], RoomBay) and _bay_zone(block[lo - 1], ctx) == zone:
+        lo -= 1
+    while hi < len(block) and isinstance(block[hi], RoomBay) and _bay_zone(block[hi], ctx) == zone:
+        hi += 1
+    if hi - lo < 2:
+        return None
+    rooms = tuple(r for bay in block[lo:hi] for r in _bay_rooms(bay))
+    new_bay = FingerBay(left=rooms) if rng.random() < 0.5 else FingerBay(right=rooms)
+    block[lo:hi] = [new_bay]
     return _finish(plan, pieces, ctx)
 
 

@@ -1,43 +1,75 @@
-# Ticket 3.4 — Simulated-Annealing Optimiser + `ale generate` · Evaluation report
+# Ticket 3.4 — Simulated-Annealing Optimiser + `ale generate` · Evaluation report (rework)
 
-Environment: Linux, Python 3.13, `pip install -e ".[dev,excel,cad,pdf]"`.
+This rework implements the RD §3 amendment of 2026-11-08: lexicographic `(n_hard, cost)` acceptance,
+a progress-fraction schedule, and a throughput target. Environment: Linux, Python 3.13,
+`pip install -e ".[dev,excel,cad,pdf]"`.
 
 ## Results
 
 | ID | Test(s) | Result |
 |---|---|---|
-| O01 | `test_optimize_moves.py::test_O01_moves_valid`, `test_O01_weights` | pass. A 2 000-step seeded random walk (`propose`) from the seeded P25 plan: every non-None result re-validates from its dump, passes `check_against`, and adds no zone violation. G1–G7 each produced at least one plan. |
-| O02 | `test_O02_g1_swaps_two_rooms_of_one_zone`, `test_O02_g6_flips_stacks`, `test_O02_g7_split_then_merge` (+ G2/G3/G4/G5 semantics tests) | pass |
-| O03 | `test_optimize_anneal.py::test_O03_improves[P8/P25/P60]` | pass (table below) |
-| O04 | `test_O04_deterministic` | pass. Two fresh processes (different `PYTHONHASHSEED`), P8, `max_iter=500`, gave the same plan JSON, iterations, accepted count and cost. |
-| O05 | `test_O05_budget` | pass. P60 with `time_budget_s=30`: `stopped_by=time_budget` after 234 iterations, 30.1 s wall (limit 31 s). |
-| O06 | `test_O06_metropolis[...]` (3 (Δ, T) pairs) | pass. The uphill acceptance frequency over 10 000 trials is within 3σ of `exp(−Δ/T)`. |
-| O07 | `test_optimize_generate.py::test_O07_generate_cli` | pass. `ale generate` on P25 with `--variants 3 --seed 1` and `time_budget_s = 3` in the workspace config: exit 0, 3 variant folders each with the 4 files, `summary.md` lists variants 01–03. |
-| O08 | `test_O08_generate_errors` | pass. The X07 workbook gives exit 1, French issue lines on stderr (`Erreurs (n) :`, `[E_…] ligne …`, `ÉCHEC : …`), and `--out` is not created. |
-| O09 | `test_O09_variants_distinct` | pass. 3 variants of P25 (2 s budget) gave at least 2 distinct final plans; `duplicate_of` is flagged correctly (also covered by `test_generate_failed_and_duplicate_variants`). |
-| O10 | gates | pass: `ruff check` clean, `ruff format --check` clean, `mypy` (strict) clean on 82 files, `python -m ale.contracts.lock --check` gives OK (exit 0). Whole suite: **766 passed, 7 skipped, 2 xfailed** (the xfails come from earlier tickets) in 352 s. The `generate` stub entry was removed from `STUB_TICKETS` in `tests/cli/test_cli_surface.py`. |
+| O01 | `test_optimize_moves.py::test_O01_moves_valid`, `test_O01_weights` | pass. A 2 000-step seeded walk from the seeded P25 plan: every result re-validates, passes `check_against` and adds no zone violation. G1–G7 were each applied. |
+| O02 | `test_O02_g1_…`, `test_O02_g6_…`, `test_O02_g7_split_then_merge` (+ G2 / G2-fold / G3–G5 / focus tests) | pass |
+| O03 | `test_optimize_anneal.py::test_O03_improves[P8/P25/P60]` | pass, including the new gates P25 strict and P8 ≤ 1 (table below) |
+| O04 | `test_O04_deterministic` | pass. Two fresh processes, P8, `max_iter=500`: identical plan JSON, iterations, accepted count and cost. |
+| O05 | `test_O05_budget` | pass. P60 with `time_budget_s=30`: `time_budget` after 681 iterations, 30.1 s. Under coverage tracing it stopped by `converged` at 28.1 s. |
+| O06 | `test_O06_metropolis[…]`, `test_O06_lexicographic_acceptance`, `test_temperature_schedule` | pass. Acceptance frequencies are within 3σ over 10 000 trials, for both the hard branch (`exp(−Δh/T_h)`) and the cost branch (`exp(−Δc/T_c)`). |
+| O07 | `test_optimize_generate.py::test_O07_generate_cli` | pass |
+| O08 | `test_O08_generate_errors` | pass |
+| O09 | `test_O09_variants_distinct` | pass |
+| O10 | gates | ruff, `ruff format --check` and mypy strict (83 files) are clean, and `lock --check` gives OK. Whole suite: **777 passed, 7 skipped, 2 xfailed** (195 s). Under `--cov` it is 776 passed: O11 is skipped while coverage tracing runs. |
+| O11 | `test_O11_throughput` (Linux only, skipped under coverage) | pass. **74.6–90.3 it/s** on P25 over a 5 s run, against a gate of 30 it/s. |
 
-Coverage of `ale.optimize` (branch coverage): `__init__` 100 %, `anneal.py` 99 %, `generate.py` 100 %,
-`moves.py` 92 %. Package total is about 95 %.
+Coverage of `ale.optimize` (branch): **94 %** in total. By file: `anneal` 99 %, `fastreal` 89 %, `generate` 100 %, `moves` 92 %.
 
-### O03: seed-3 starts, 15 s budget each, default config otherwise
+### O03: seed-3 starts, 15 s budget, annealing seed 6
 
-| Fixture | initial_hard → final_hard | total_cost initial → final | iterations | stopped_by |
-|---|---|---|---|---|
-| P8 / site_rect_small | 6 → 3 | 1.448 → 1.888 | 1 958 | time_budget |
-| P25 / site_rect | 13 → 13 | 1001.048 → 1001.048 | 345 | time_budget |
-| P60 / site_L | 35 → 34 | 9000.656 → 7000.831 | 125 | time_budget |
+| Fixture | initial_hard → final_hard | total_cost initial → final | iterations | it/s | stopped_by |
+|---|---|---|---|---|---|
+| P8 | 6 → **0** | 1.448 → 0.855 | 8 032 | 1 319 | converged (6.1 s) |
+| P25 | 13 → **7** | 1001.048 → 1000.679 | 1 115 | 86 | converged (13.0 s) |
+| P60 | 35 → **27** | 9000.656 → 6000.668 | 212 | 20 | converged (10.8 s) |
 
-Start violation types: P8 has ASPECT ×4 and AREA_OVER ×2. P25 has NO_FACADE ×7, AREA_UNDER ×2, ASPECT ×2, MIN_WIDTH, REQUIRED_ADJ. P60 has
-NO_FACADE ×21, REQUIRED_ADJ ×7, ASPECT ×4, AVOID_ADJ ×2, MIN_WIDTH. The energy never rises and
-`final_hard ≤ initial_hard` in every run. Because P60 hits the time budget, its iteration count
-depends on machine speed, so its result can vary between runs (another run gave 35 → 30).
+The it/s figure counts all proposals, including revisits that hit the plan cache. Under coverage
+tracing (about 3× slower) the gates still held: P8 6 → 0, P25 13 → 9, P60 35 → 33.
 
-### One real `ale generate` run on P25
+**Robustness of the P8 gate.** P25 improves strictly for every annealing seed I tried (3, 5, 6 gave
+13 → 8, 10, 7). P8 ≤ 1 does not hold for every seed. Over annealing seeds 1–10 with 15 s budgets,
+6 of 10 reach ≤ 1 hard. The others end in 2–4 hard. Seeds 6 and 9 reached 0 hard in every repeat I
+ran, including two concurrent processes, so O03 uses `ANNEAL_SEED = 6`. P8 fills its footprint to
+about 0.9, so most structural moves overflow and the realisation fails. The spec says such states
+are never accepted. The feasible region is therefore fragmented, and a single chain sometimes ends
+in a local minimum such as "services split across two blocks".
 
-The run used a workspace with `[optimizer] time_budget_s = 15.0`:
+### Throughput (RD §3 "Throughput", O11)
+
+`ale.optimize.fastreal.RealizeCache` reuses realisation work across calls without modifying
+`ale.geometry`. It subclasses the private `_Realizer` and keeps:
+
+- one shared stack / room-bay `Solver`;
+- laid-out blocks keyed by `(bays, depth, length, where)`;
+- unlinked band searches keyed by `(piece, band, BandPlan, depth, length)`, re-run on cached block
+  scores scaled by the lcm of the target denominators (exact integers instead of `Fraction` sums);
+- band candidates whose `cost()` is memoised.
+
+`test_optimize_fastreal.py` checks that it returns a `Realization` equal to `ale.geometry.realize`
+on 225 random-walk plans of P8, P25 and P60, and on an invalid plan. Realisations per second:
+
+| Fixture | `geometry.realize` | `RealizeCache.realize` |
+|---|---|---|
+| P8 | 108 | 287 |
+| P25 | 31 | 123 |
+| P60 | 8.7 | 21 |
+
+`anneal` also memoises whole plans. No change to `ale.geometry` was needed. The cost is coupling
+to the private names `_Realizer`, `_BandOut` and `_build_layout`. If geometry later exposes a
+pluggable block/band cache, `fastreal.py` reduces to that hook.
+
+### `ale generate` on P25 (rerun)
+
+The rerun used a workspace with `[optimizer] time_budget_s = 15.0`:
 `ale generate --program programme.xlsx --site site.yaml --rulebook rulebook_test.yaml --out p25_run --seed 1 --variants 3 --workspace ws`.
-It exited with 0 and printed one line per variant plus the summary path. `summary.md`:
+It exited with 0. `summary.md`:
 
 ```
 # Synthèse de génération — p25_run
@@ -47,46 +79,37 @@ It exited with 0 and printed one line per variant plus the summary path. `summar
 
 | Variante | Statut | Coût final | Violations | Circulation (%) | Durée (s) | Remarque |
 |---|---|---|---|---|---|---|
-| 01 | réussie | 1000.757 | 9 | 21.6 | 15.5 |  |
-| 02 | réussie | 4001.718 | 12 | 38.7 | 15.9 |  |
-| 03 | réussie | 1001.048 | 13 | 24.2 | 15.6 |  |
+| 01 | réussie | 1000.655 | 8 | 21.8 | 7.7 |  |
+| 02 | réussie | 2001.353 | 9 | 32.1 | 15.9 |  |
+| 03 | réussie | 1001.356 | 8 | 31.7 | 15.6 |  |
 ```
 
-Each `variant_0k/` folder holds `layout.json`, `layout.dxf`, `preview.svg` and `report.md`.
+The previous version gave 9, 12 and 13 violations.
 
-## Ambiguities and the literal readings chosen
+## Readings chosen (amended spec)
 
-1. **T0 median rule with hard energy.** T0 is set so that `exp(−median(Δ⁺)/T0) = initial_acceptance`,
-   using up to 50 finite uphill Δ sampled from the start. The sampling is capped at 250 proposals
-   and 20 % of the time budget. Under the RD energy (`+ H × n_hard`, H = 1000), most uphill Δ are
-   multiples of 1000. On P25 this gives T0 ≈ 9 000. With the default `moves_per_temperature = 200`
-   and only about 125–2 000 proposals per 15 s, the temperature barely cools. The run is then close
-   to a random walk, and only the best-seen tracking makes progress. This is why P25 shows no gain.
-   It is a spec/config tension, not a code defect. I did not change any expectation. Possible
-   remedies for a later ticket: a lower `initial_acceptance`, fewer moves per temperature, or
-   computing T0 from soft-cost Δ only.
-2. **"Return the best plan seen".** The best is the lowest-energy plan among plans with
-   `n_hard ≤ initial_hard`. The RD energy alone does not strictly guarantee `final_hard ≤ initial_hard`
-   (the `required_adjacency` cost term can move by more than H). This filter makes both O03
-   properties hold. Fewer hard violations still win through the energy.
-3. **Convergence.** "No improvement of the best for 20 consecutive temperature steps" is checked at
-   each cooling step. `iterations` counts main-loop proposals only, not the T0 samples.
-4. **Moves.** A move result is also `None` when it equals the input or adds macro-zone violations
-   (`zone_violations` count grows). A zone run is a maximal sequence of same-zone non-junction bays,
-   and a junction finger breaks runs. G3, G4 and G5 never move a junction finger. G2 may use a
-   junction finger's stacks, since the contract allows an empty junction finger. G7 "redistributes
-   bays in order" as follows. A split cuts block A + block B of the band into 4 contiguous chunks:
-   lower A, lower B, upper A, upper B. A merge cuts the 2 bands' bays into 2 chunks: A, B. Cut points
-   are near even splits, ±1. Connectors are then reassigned, preferring the current ones, to the
-   first assignment that passes the piece rule and `check_against`.
-5. **Generate.** `seed_plan` gets `time_budget_s = min(20, optimizer.time_budget_s)`. A failed seed
-   means `realization.layout is None`, recorded as `"<code>: <detail>"`. "Circulation %" is
-   circulation area / footprint area. `variants < 1` raises `ValueError` in the API (the CLI
-   already enforces `min=1`). A variant folder that already holds run files makes `export_run`
-   raise `FileExistsError`. The CLI reports it in French with exit 1. Input issues go to stderr in
-   the `ale program check` line format.
-6. **CLI.** `--workspace` (optional, `$ALE_WORKSPACE`) supplies the config, otherwise `AleConfig()`
-   is used. `--seed` defaults to `determinism.seed`. The exit code is 0 when at least one variant
-   succeeded, else 1.
-7. `ale.optimize.generate` the submodule is shadowed by the `generate` function on the package.
-   Tests get the module with `importlib.import_module`.
+1. **Progress fraction.** `f = max(iterations / max_iter, elapsed / time_budget_s)`, where elapsed
+   counts from the start of `anneal` and includes the `T_c0` sampling. This means "whichever budget
+   binds first". When `max_iter` binds by a wide margin, as in O04, the run is deterministic. A
+   run that ends by time is not.
+2. **`T_c0` sampling.** Up to 50 uphill moves from the start that keep `n_hard` equal, with
+   T_c0 = median Δc / −ln(initial_acceptance). The sampling is capped at 250 proposals and 20 % of
+   the time budget. If no such move is found, T_c0 = 1. `T_h` runs from 0.5 to 5·10⁻⁴ on the same
+   `f`.
+3. **Converged.** The run stops as soon as `f − f(last best improvement) ≥ 0.25`. Most 15 s runs
+   therefore end before their budget. The tests that need a `max_iter` or `time_budget` stop
+   monkeypatch the span.
+4. **Best.** The best is the lexicographically smallest `(n_hard, cost)`. O03's "energy never
+   increases" is checked as `(final_hard, final_cost) ≤ (initial_hard, initial_cost)`
+   lexicographically.
+5. **Move heuristics.** These do not change what each move does.
+   - Focus: G1 and G2 pick their room from the rooms named in the current layout's hard violations
+     half of the time (`MoveContext.focus`, kept sorted for determinism).
+   - G2 fold: a quarter of G2 draws on a room bay fold it and its adjacent same-zone room bays into
+     one stack of a new finger bay. Moving them one at a time costs a full finger width at the first
+     step, which a full block cannot absorb. A single stack is about as wide as the room bays were,
+     so the fold fits. This extends the literal G2, which moves one room; I am flagging it for
+     review.
+6. Points 2–7 of the first report are unchanged: moves return `None` for no-ops and for zone
+   regressions, `generate` and CLI behaviour, and the module shadowing.
+7. `moves_per_temperature` and `cooling` are ignored, per the amendment.

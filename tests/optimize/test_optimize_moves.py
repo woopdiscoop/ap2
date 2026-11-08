@@ -269,3 +269,46 @@ def test_move_context_shapes() -> None:
         )
     )
     assert plan.check_against(ctx.instance_ids, ctx.footprint) == ()
+
+
+def test_g2_fold_run_into_one_stack() -> None:
+    zones = {"a1": "SERVICES", "a2": "SERVICES", "a3": "SERVICES", "b": "PUBLIC"}
+    ctx = _ctx(zones)
+    plan = _plan(((room("b"), room("a1"), room("a2"), room("a3")), ()))
+    folded = []
+    for new in _results(g2_move_room, plan, ctx, 400):
+        _valid(new, ctx)
+        bays = new.pieces[0].bands[0].block_a.bays
+        stacks = [st for bay in bays if isinstance(bay, FingerBay) for st in (bay.left, bay.right)]
+        if ("a1", "a2", "a3") in stacks:
+            folded.append(new)
+            assert bays[0] == RoomBay(room="b") and len(bays) == 2
+    assert folded
+
+
+def test_g2_fold_needs_a_run() -> None:
+    zones = {"a1": "SERVICES", "b": "PUBLIC"}
+    ctx = _ctx(zones)
+    plan = _plan(((room("b"), room("a1")), ()))
+    for new in _results(g2_move_room, plan, ctx, 200):
+        _valid(new, ctx)
+        for bay in new.pieces[0].bands[0].block_a.bays:
+            if isinstance(bay, FingerBay):
+                assert len(bay.left) + len(bay.right) == 1
+
+
+def test_focus_biases_room_choice() -> None:
+    zones = {f"r{i}": "PUBLIC" for i in range(8)}
+    ctx = _ctx(zones)
+    plan = _plan(
+        (tuple(room(f"r{i}") for i in range(4)), tuple(room(f"r{i}") for i in range(4, 8)))
+    )
+    focused = ctx.with_focus({"r0", "zzz"})
+    assert focused.focus == ("r0",)
+    assert focused.with_focus({"r0"}) is focused
+
+    def share(c: MoveContext) -> float:
+        res = _results(g1_swap_rooms, plan, c, 600)
+        return sum(1 for p in res if p.room_ids()[0] != "r0") / len(res)
+
+    assert share(focused) > 0.4 > share(ctx)

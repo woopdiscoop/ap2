@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 import math
 import os
 import random
@@ -17,15 +18,20 @@ from ale.contracts.models import Rulebook
 from ale.geometry import check_layout, realize
 from ale.optimize import HARD_CODES, anneal
 from ale.optimize.anneal import (
-    Energy,
+    Scorer,
+    accept_move,
     hard_count,
+    hard_rooms,
     initial_temperature,
     metropolis_accept,
+    temperature_at,
 )
 from ale.program.models import PreparedInput
 from ale.topology import SeedResult
 
 TESTS = Path(__file__).resolve().parent.parent
+# ``ale.optimize.anneal`` the module (the package attribute is the function).
+anneal_mod = importlib.import_module("ale.optimize.anneal")
 Seeded = dict[str, tuple[PreparedInput, SeedResult]]
 
 
@@ -43,32 +49,40 @@ def test_hard_codes() -> None:
 
 
 # ------------------------------------------------------------------------------ O03
+#: Annealing seed of O03/O05 (the start plans are the seed-3 plans of ``conftest.seeded``).
+ANNEAL_SEED = 6
+
+
 @pytest.mark.slow
 @pytest.mark.timeout(120)
 @pytest.mark.parametrize("name", ["P8", "P25", "P60"])
 def test_O03_improves(name: str, seeded: Seeded, rulebook: Rulebook) -> None:
     prep, start = seeded[name]
     cfg = optimizer_config(time_budget_s=15.0)
-    h = cfg.optimizer.weights.required_adjacency
     layout0 = start.realization.layout
     assert layout0 is not None
-    e_start = layout0.metrics.total_cost + h * hard_count(layout0)
-    res = anneal(prep, rulebook, cfg, start.plan, seed=3)
-    e_best = res.final_cost + h * res.final_hard
+    start_score = (hard_count(layout0), layout0.metrics.total_cost)
+    res = anneal(prep, rulebook, cfg, start.plan, seed=ANNEAL_SEED)
     print(
         f"{name}: hard {res.initial_hard} -> {res.final_hard}, cost {res.initial_cost:.3f} -> "
-        f"{res.final_cost:.3f}, {res.iterations} it, {res.stopped_by}, {res.elapsed_s:.1f} s"
+        f"{res.final_cost:.3f}, {res.iterations} it, {res.iterations / res.elapsed_s:.0f} it/s, "
+        f"{res.stopped_by}, {res.elapsed_s:.1f} s"
     )
-    assert res.initial_hard == hard_count(layout0) > 0
-    assert e_best <= e_start + 1e-9
+    assert (res.initial_hard, res.initial_cost) == start_score
+    assert start_score[0] > 0
+    # The (lexicographic) energy never increases from start to best.
+    assert (res.final_hard, res.final_cost) <= start_score
     assert res.final_hard <= res.initial_hard
     assert res.final_cost == pytest.approx(res.layout.metrics.total_cost)
     assert hard_count(res.layout) == res.final_hard
     assert check_layout(res.layout, prep, cfg) == ()
-    # The returned plan is the one that was laid out.
-    again = realize(prep, res.plan, rulebook, cfg, seed=3)
+    again = realize(prep, res.plan, rulebook, cfg, seed=ANNEAL_SEED)
     assert again.layout is not None
     assert again.layout.metrics.total_cost == pytest.approx(res.final_cost)
+    if name == "P25":
+        assert res.final_hard < res.initial_hard
+    if name == "P8":
+        assert res.final_hard <= 1
 
 
 # ------------------------------------------------------------------------------ O04
@@ -117,7 +131,7 @@ def test_O05_budget(seeded: Seeded, rulebook: Rulebook) -> None:
     prep, start = seeded["P60"]
     cfg = optimizer_config(time_budget_s=30.0)
     t0 = time.monotonic()
-    res = anneal(prep, rulebook, cfg, start.plan, seed=3)
+    res = anneal(prep, rulebook, cfg, start.plan, seed=ANNEAL_SEED)
     wall = time.monotonic() - t0
     print(f"P60: stopped_by={res.stopped_by} after {res.iterations} it, {wall:.1f} s")
     assert wall <= 31.0
@@ -141,6 +155,50 @@ def test_O06_metropolis(delta: float, temperature: float) -> None:
     assert abs(hits - n * p) <= 3 * sigma
 
 
+def test_O06_lexicographic_acceptance() -> None:
+    rng = random.Random(9)
+    n = 10_000
+    assert all(accept_move(-1, 1e9, 1e-9, 1e-9, rng) for _ in range(100))  # fewer hard
+    # More hard by 2 at T_h = 1.5: exp(-2 / 1.5), whatever the cost change.
+    hits = sum(accept_move(2, -100.0, 1.5, 1e9, rng) for _ in range(n))
+    p = math.exp(-2 / 1.5)
+    assert abs(hits - n * p) <= 3 * math.sqrt(n * p * (1 - p))
+    # Equal hard: Metropolis on cost with T_c.
+    hits = sum(accept_move(0, 0.3, 1e9, 0.5, rng) for _ in range(n))
+    p = math.exp(-0.3 / 0.5)
+    assert abs(hits - n * p) <= 3 * math.sqrt(n * p * (1 - p))
+    assert accept_move(0, -0.1, 0.0, 0.0, rng)
+
+
+def test_temperature_schedule() -> None:
+    assert temperature_at(0.5, 0.0) == pytest.approx(0.5)
+    assert temperature_at(0.5, 1.0) == pytest.approx(0.5e-3)
+    assert temperature_at(2.0, 0.5) == pytest.approx(2.0 * math.sqrt(1e-3))
+    assert temperature_at(2.0, 7.0) == pytest.approx(2e-3)  # clamped
+    assert temperature_at(2.0, -1.0) == pytest.approx(2.0)
+
+
+# ------------------------------------------------------------------------------ O11
+def _measuring_coverage() -> bool:
+    """Whether coverage.py is recording this run (its tracing slows Python down ~3x)."""
+    cov = sys.modules.get("coverage")
+    return cov is not None and cov.Coverage.current() is not None
+
+
+@pytest.mark.skipif(not sys.platform.startswith("linux"), reason="throughput gated on Linux")
+@pytest.mark.skipif(_measuring_coverage(), reason="throughput is not measured under coverage")
+@pytest.mark.timeout(120)
+def test_O11_throughput(
+    seeded: Seeded, rulebook: Rulebook, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(anneal_mod, "CONVERGED_SPAN", 2.0)  # measure over the full 5 s
+    prep, start = seeded["P25"]
+    res = anneal(prep, rulebook, optimizer_config(time_budget_s=5.0), start.plan, seed=1)
+    rate = res.iterations / res.elapsed_s
+    print(f"P25: {res.iterations} it in {res.elapsed_s:.2f} s = {rate:.1f} it/s ({res.stopped_by})")
+    assert rate >= 30.0
+
+
 def test_metropolis_edges() -> None:
     rng = random.Random(0)
     assert metropolis_accept(0.0, 1.0, rng)
@@ -160,7 +218,10 @@ def test_initial_temperature_median_rule() -> None:
 
 
 # ------------------------------------------------------------------- other behaviour
-def test_stop_by_max_iter(seeded: Seeded, rulebook: Rulebook) -> None:
+def test_stop_by_max_iter(
+    seeded: Seeded, rulebook: Rulebook, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(anneal_mod, "CONVERGED_SPAN", 2.0)  # never converge
     prep, start = seeded["P8"]
     res = anneal(prep, rulebook, optimizer_config(max_iter=5), start.plan, seed=1)
     assert res.stopped_by == "max_iter"
@@ -170,13 +231,13 @@ def test_stop_by_max_iter(seeded: Seeded, rulebook: Rulebook) -> None:
 
 def test_stop_by_convergence(seeded: Seeded, rulebook: Rulebook) -> None:
     prep, start = seeded["P8"]
-    cfg = optimizer_config(max_iter=20_000, moves_per_temperature=2, cooling=0.5)
-    res = anneal(prep, rulebook, cfg, start.plan, seed=1)
+    res = anneal(prep, rulebook, optimizer_config(max_iter=20_000), start.plan, seed=1)
     assert res.stopped_by == "converged"
     assert res.iterations < 20_000
 
 
-def test_stop_by_time(seeded: Seeded, rulebook: Rulebook) -> None:
+def test_stop_by_time(seeded: Seeded, rulebook: Rulebook, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(anneal_mod, "CONVERGED_SPAN", 2.0)  # never converge
     prep, start = seeded["P25"]
     res = anneal(prep, rulebook, optimizer_config(time_budget_s=0.5), start.plan, seed=1)
     assert res.stopped_by == "time_budget"
@@ -210,6 +271,15 @@ def test_start_must_realise(seeded: Seeded, rulebook: Rulebook) -> None:
     )
     cfg = optimizer_config()
     assert realize(prep, crowded, rulebook, cfg).layout is None
-    assert Energy(prep, rulebook, cfg, seed=0)(crowded)[0] == math.inf
+    assert Scorer(prep, rulebook, cfg, seed=0)(crowded)[1] == math.inf
     with pytest.raises(ValueError, match="does not realise"):
         anneal(prep, rulebook, cfg, crowded, seed=0)
+
+
+def test_hard_rooms(seeded: Seeded) -> None:
+    _, start = seeded["P8"]
+    layout = start.realization.layout
+    assert layout is not None
+    rooms = hard_rooms(layout)
+    assert rooms
+    assert rooms <= {iid for v in layout.metrics.violations for iid in v.instance_ids}
