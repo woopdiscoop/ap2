@@ -21,6 +21,10 @@ Maintained by the Router only. Directive: `specs/DIRECTIVE.md` (v2.2, supersedes
 | 3.5 | Export & report | **DONE** | — | RD + eval | layout.json, layered DXF (audit clean), SVG preview, French report.md. `ale generate` wiring in 3.4. |
 | A.1 | Contract amendment: CorridorPlan + footprint decomposition | **DONE** | — | RD + eval | Contracts 1.0.0 → 1.1.0; adds `corridor_plan.py`, `footprint.py`; regenerates lock. |
 | A.2 | Contract amendment: bands | **DONE** | — | RD + eval | Contracts 1.2.0 (CorridorPlan /2). |
+| Q.1 | Realisation never emits rule-breaking rooms | **IN-PROGRESS** | — | RD + eval | ROOM_INFEASIBLE / STACK_INFEASIBLE instead of fallbacks. |
+| A.3 | Contract: inner connector | **IN-PROGRESS** | — | RD + eval | Contracts 1.3.0, backward compatible. |
+| Q.2 | Façade-aware layouts | BLOCKED | Q.1, A.3 | — | Inner connectors in geometry/seeding/moves; façade-pull move; grammar façade capacity in feasibility. |
+| Q.3 | Cache into geometry + P8 reliability | BLOCKED | Q.2 | — | |
 | 1.1 | Corpus ingestion & classification | **DONE** | — | RD + eval | Real corpus: 439 files → 1734 units (DWG 17 NEEDS_TOOL, PDF_VECTOR 879, PDF_SCANNED 436, RASTER 402), 0 failed, idempotent. |
 | 1.2 | CAD reader (DXF; DWG via converter) | **DONE** (library) | — | RD + eval | Layers (whole-word), units, walls, rooms, labels, openings, multi-plan, DWG→DXF via ODA/accoreconsole. Follow-up 1.2c: wire `ale layers` / `ale extract --kind dxf\|dwg` to the corpus DB. Real DWGs need ODA on the user's workstation. |
 | 1.2c | CAD → corpus CLI (`ale layers`, `ale extract` dxf/dwg) | **DONE** | — | RD + eval | Empty layer map → in-memory proposal + warning; NEEDS_TOOL DWGs retried. |
@@ -70,6 +74,7 @@ with ground truth. The Router will issue an annotation template before Phase 1.
 ## History
 
 - 2026-11-06 — v2.0 workspace initialised (tickets 1.1, 1.2 specified).
+- 2026-11-08 — User: go on the quality wave. Q.1 and A.3 specified and dispatched in parallel; Q.2, Q.3 queued.
 - 2026-11-08 — 3.4 merged after review (777 tests). **End-to-end pipeline works: Excel → plan → optimised layout → DXF/SVG/report.** Quality gap on large programs (P60, 60 s): 22 hard breaks = 11 NO_FACADE (inner bands have no façade; connector at a piece end uses façade), 8 ASPECT/AREA/MIN_WIDTH (degenerate stack fallbacks in realisation), 2 REQUIRED_ADJ. Next wave: quality tickets Q.1–Q.3 (see notes).
 - 2026-11-08 — 3.2 merged after review (732 tests). Router check seed 3: valid geometry on all fixtures but hard-rule violations remain (area, aspect, min width, façade, required adj.) → 3.4 energy amended to penalise all hard rules. 3.4 dispatched.
 - 2026-11-08 — 3.2 Worker stopped by an account usage limit; resumed after reset (work preserved). 3.4 specified.
