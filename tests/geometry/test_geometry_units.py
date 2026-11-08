@@ -225,7 +225,7 @@ def test_greedy_j1_and_single_zone() -> None:
     rooms = [room("a1", 12.0), room("b1", 12.0), room("c1", 4.0), room("c2", 4.0)]
     prepared = prepared_poly(J1_PTS, rooms)
     plan = greedy_plan(prepared, RULEBOOK, CONFIG)
-    junctions = [b for b in plan.pieces[0].block_b.bays if getattr(b, "junction", False)]
+    junctions = [b for b in plan.pieces[0].bands[-1].block_b.bays if getattr(b, "junction", False)]
     assert len(junctions) == 1
     real = realize(prepared, plan, RULEBOOK, CONFIG)
     if real.layout is not None:

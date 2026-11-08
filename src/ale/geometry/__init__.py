@@ -1,4 +1,4 @@
-"""Corridor-grammar realisation and evaluation (Ticket 3.3).
+"""Corridor-grammar realisation and evaluation (Tickets 3.3 and 3.3b: bands).
 
 Public API: :func:`realize` (``CorridorPlan`` → ``Layout``), :func:`evaluate` (cost and
 violations), :func:`check_layout` (geometric invariants) and :func:`greedy_plan` (a simple

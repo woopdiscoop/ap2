@@ -15,6 +15,7 @@ from pydantic import BaseModel, ValidationError
 import ale.contracts
 from ale.contracts.area_rule import AreaCheck, AreaTolerance
 from ale.contracts.corridor_plan import (
+    BandPlan,
     BlockPlan,
     CorridorPlan,
     FingerBay,
@@ -197,8 +198,18 @@ def _corridor_instances() -> list[BaseModel]:
     block = BlockPlan(bays=(RoomBay(room="R1"), finger))
     corridor = CorridorPlan(
         pieces=(
-            PiecePlan(block_a=block, block_b=BlockPlan(bays=(FingerBay(junction=True),))),
-            PiecePlan(block_a=BlockPlan(), block_b=BlockPlan(bays=(RoomBay(room="R4"),))),
+            PiecePlan(
+                bands=(
+                    BandPlan(block_a=block, block_b=BlockPlan(bays=(FingerBay(junction=True),))),
+                    BandPlan(block_a=BlockPlan(), block_b=BlockPlan()),
+                ),
+                connector="end",
+            ),
+            PiecePlan(
+                bands=(
+                    BandPlan(block_a=BlockPlan(), block_b=BlockPlan(bays=(RoomBay(room="R4"),))),
+                )
+            ),
         )
     )
     pieces = decompose_footprint(
@@ -207,6 +218,7 @@ def _corridor_instances() -> list[BaseModel]:
     return [
         corridor,
         corridor.pieces[0],
+        corridor.pieces[0].bands[0],
         block,
         block.bays[0],
         finger,
