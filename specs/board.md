@@ -18,10 +18,10 @@ Maintained by the Router only. Directive: `specs/DIRECTIVE.md` (v2.2, supersedes
 | 3.2 | Topology & seeding | BLOCKED | 3.1, A.1, 0.3 | — | Adjacency graph, planarity diagnostic, seeded force layout → initial **CorridorPlan** (grammar). |
 | 3.3 | Grammar realization | **DONE** | — | RD + eval | CorridorPlan → Layout, cost, violations, invariant checks, greedy baseline (P25 fits; P8/P60 overflow). |
 | 3.4 | SA optimizer | BLOCKED | 3.2, 3.3 | — | Metropolis over grammar moves G1–G6 (U-6). |
-| 3.5 | Export & report | BLOCKED | 3.3 (3.4 for final metrics) | — | DXF / SVG / JSON / report.md. |
+| 3.5 | Export & report | **IN-PROGRESS** | — (Layout contract) | RD + eval | layout.json, layered DXF, SVG preview, French report.md. |
 | A.1 | Contract amendment: CorridorPlan + footprint decomposition | **DONE** | — | RD + eval | Contracts 1.0.0 → 1.1.0; adds `corridor_plan.py`, `footprint.py`; regenerates lock. |
 | A.2 | Contract amendment: bands | **IN-PROGRESS** | — | RD + eval | Merged together with the 3.3 rework (breaking plan change). |
-| 1.1 | Corpus ingestion & classification | BLOCKED | 0.1, 0.2, 0.4 · **test corpus** | — | `ale ingest`; vector/scanned PDF per page. |
+| 1.1 | Corpus ingestion & classification | **IN-PROGRESS** | — (0.x done; dev corpus available) | RD + eval | `ale ingest` / `ale status`; per-page PDF vector/scanned; read-only input; idempotent. |
 | 1.2 | CAD reader (DWG + DXF) | BLOCKED | 1.1 · test corpus · decision O-5 | — | ODA File Converter / accoreconsole. |
 | 1.3 | Vector-PDF reader | BLOCKED | 1.1 · test corpus | — | PyMuPDF. |
 | 1.4 | Raster reader | BLOCKED | 1.1 · test corpus | — | CubiCasa5K (v2.0 spec in git history reusable). |
@@ -69,6 +69,7 @@ with ground truth. The Router will issue an annotation template before Phase 1.
 ## History
 
 - 2026-11-06 — v2.0 workspace initialised (tickets 1.1, 1.2 specified).
+- 2026-11-08 — User: "start all". 3.5 and 1.1 specified and dispatched in parallel; 1.2 (DXF first) and 3.2 specs next.
 - 2026-11-08 — A.2 accepted (held for joint merge); 3.3b dispatched on top of it.
 - 2026-11-08 — User decision U-7 (bands). A.2 specified and dispatched; 3.3 rework to follow on top of it.
 - 2026-11-08 — 3.3 merged after review (539 tests). Greedy baseline overflows P8/P60 → 3.2 must estimate grammar circulation demand (open risk R-G1).
