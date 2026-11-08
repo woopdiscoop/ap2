@@ -74,6 +74,7 @@ with ground truth. The Router will issue an annotation template before Phase 1.
 ## History
 
 - 2026-11-06 — v2.0 workspace initialised (tickets 1.1, 1.2 specified).
+- 2026-11-08 — Q.1 attempt 1: geometry refuses rule-breaking shapes, but seeding then fails on P25/P60 (room bays in a block share depth; mixed room sizes have disjoint depth intervals). Scope extended to depth-interval-aware seeding (RD §4). Worker interrupted by the account usage limit, resumed 20:27 UTC. A.3 accepted (held for merge with Q.2).
 - 2026-11-08 — User: go on the quality wave. Q.1 and A.3 specified and dispatched in parallel; Q.2, Q.3 queued.
 - 2026-11-08 — 3.4 merged after review (777 tests). **End-to-end pipeline works: Excel → plan → optimised layout → DXF/SVG/report.** Quality gap on large programs (P60, 60 s): 22 hard breaks = 11 NO_FACADE (inner bands have no façade; connector at a piece end uses façade), 8 ASPECT/AREA/MIN_WIDTH (degenerate stack fallbacks in realisation), 2 REQUIRED_ADJ. Next wave: quality tickets Q.1–Q.3 (see notes).
 - 2026-11-08 — 3.2 merged after review (732 tests). Router check seed 3: valid geometry on all fixtures but hard-rule violations remain (area, aspect, min width, façade, required adj.) → 3.4 energy amended to penalise all hard rules. 3.4 dispatched.
