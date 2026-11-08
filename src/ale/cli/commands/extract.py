@@ -1,4 +1,4 @@
-"""``ale extract`` (stub, Tickets 1.2-1.4)."""
+"""``ale extract``: geometry of the ingested sources (Ticket 1.2c: DXF / DWG only)."""
 
 from __future__ import annotations
 
@@ -8,11 +8,14 @@ from typing import Annotated
 import typer
 
 from ale.cli.commands._common import (
+    EXIT_OK,
+    EXIT_WORKSPACE,
     WorkspaceOption,
-    not_implemented,
     open_workspace_or_exit,
     require_workspace,
 )
+from ale.corpus.extract import ExtractReport, run_extract
+from ale.workspace import WorkspaceError
 
 
 class SourceKind(enum.StrEnum):
@@ -20,6 +23,21 @@ class SourceKind(enum.StrEnum):
     dxf = "dxf"
     pdf = "pdf"
     raster = "raster"
+
+
+def format_extract(report: ExtractReport) -> str:
+    """French summary printed by ``ale extract``."""
+    lines = [
+        "Extraction terminée",
+        f"  unités sélectionnées : {report.selected}",
+        f"  extraites : {report.extracted} ({report.plans} plan(s), "
+        f"{report.files_written} fichier(s) écrit(s))",
+        f"  échecs : {report.failed}",
+        f"  outil manquant : {report.needs_tool}",
+        f"  non implémentées (PDF / raster) : {report.not_implemented}",
+    ]
+    lines.extend(f"    - {name} : {reason}" for name, reason in report.problems)
+    return "\n".join(lines)
 
 
 def extract(
@@ -33,5 +51,12 @@ def extract(
     ] = None,
 ) -> None:
     """Extract geometry and labels from ingested sources."""
-    open_workspace_or_exit(ctx, require_workspace(workspace))
-    not_implemented("extract", "1.2\u20131.4")
+    ws = open_workspace_or_exit(ctx, require_workspace(workspace))
+    try:
+        report = run_extract(ws, only_new=only_new, kind=None if kind is None else kind.value)
+    except WorkspaceError as exc:
+        for line in exc.lines:
+            typer.echo(line, err=True)
+        raise typer.Exit(EXIT_WORKSPACE) from exc
+    typer.echo(format_extract(report))
+    raise typer.Exit(EXIT_OK)

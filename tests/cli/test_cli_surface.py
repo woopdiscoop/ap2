@@ -21,8 +21,6 @@ STUB_OPTIONS: dict[str, list[str]] = {
 
 # `ingest` and `status` are implemented since Ticket 1.1 (no longer stubs).
 STUB_TICKETS: dict[str, str] = {
-    "extract": "1.2\u20131.4",
-    "layers": "1.2",
     "review": "1.6",
     "rulebook build": "2.2",
     "generate": "3.1\u20133.5",
