@@ -1,0 +1,609 @@
+"""Seeding: a bounded, seeded search for a first valid :class:`CorridorPlan` (RD 3.2 §5).
+
+Per attempt ``k`` (seed ``seed`` for ``k = 0``, else ``seed·1000 + k``): seeded embedding of
+the adjacency graph → band counts → capacity-aware assignment of rooms to blocks along a
+serpentine path → :func:`ale.geometry.realize` → overflow repair. The first valid plan is
+kept (else the least-overflow one) and then improved by swaps that lower the
+``required_adjacency`` cost term without breaking validity (at most 25 % of the remaining
+budget). Deterministic for a seed as long as the time budget is not exhausted; never raises.
+"""
+
+from __future__ import annotations
+
+import itertools
+import math
+import time
+from collections.abc import Sequence
+from fractions import Fraction
+
+from pydantic import BaseModel, ConfigDict, StrictFloat, StrictInt
+
+from ale.contracts.config import AleConfig
+from ale.contracts.corridor_plan import (
+    MAX_BANDS,
+    BandPlan,
+    BlockPlan,
+    CorridorPlan,
+    FingerBay,
+    PiecePlan,
+    RoomBay,
+)
+from ale.contracts.footprint import FootprintPieces, Piece, decompose_footprint
+from ale.contracts.geometry import ModuleRect
+from ale.contracts.models import Rulebook
+from ale.geometry import Realization, realize
+from ale.geometry.junction import across_origin, along_origin, cut_side, frame, to_abs
+from ale.guards import bounded
+from ale.program.models import PreparedInput
+from ale.topology.embed import Positions, embed
+from ale.topology.graph import AVOID, REQUIRED, TopologyReport, build_graph, planarity
+from ale.topology.repair import (
+    Connector,
+    Ctx,
+    Draft,
+    Slot,
+    band_depths,
+    bay_rooms,
+    block_depths,
+    form_bays,
+    repair_step,
+    score,
+    usable_length,
+)
+
+__all__ = ["SeedResult", "seed_plan"]
+
+_MAX_ATTEMPTS = 10_000
+_SWAP_SHARE = 0.25
+_SWAP_TRIALS_PER_PROGRAM = 720
+_SWAP_TRIALS_MIN = 10
+_SWAP_TRIALS_MAX = 60
+_SEED_STRIDE = 1000
+_D_T_FACTOR = Fraction(7, 5)
+_RHO_LOW = Fraction(7, 10)
+_RHO_HIGH = Fraction(3, 2)
+_RHO_STEPS = 32
+
+
+class SeedResult(BaseModel):
+    """Outcome of :func:`seed_plan`: the plan, its realisation, the topology report, the
+    number of attempts (restarts + 1) and the wall-clock time spent (seconds)."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    plan: CorridorPlan
+    realization: Realization
+    report: TopologyReport
+    attempts: StrictInt
+    elapsed_s: StrictFloat
+
+
+# ---------------------------------------------------------------------- band counts
+def _ceil_sqrt(x: Fraction) -> int:
+    d = math.isqrt(math.floor(x))
+    while d * d < x:
+        d += 1
+    return d
+
+
+def _n0(ctx: Ctx, p: int) -> int:
+    """RD 5.2: ``max(1, round((P - s) / (2·D_t + s)))`` (as in the 3.3b greedy plan)."""
+    targets = sorted(r.target for r in ctx.reqs.values())
+    if not targets:
+        return 1
+    mid = len(targets) // 2
+    median = targets[mid] if len(targets) % 2 else (targets[mid - 1] + targets[mid]) / 2
+    d_t = _ceil_sqrt(median * _D_T_FACTOR)
+    depth = frame(ctx.fp.pieces[p])[1]
+    return max(1, min(MAX_BANDS, round(Fraction(depth - ctx.k.s, 2 * d_t + ctx.k.s))))
+
+
+def _allowed(ctx: Ctx) -> list[list[int]]:
+    """Band-count candidates per piece: ``{n0-1, n0, n0+1} ∩ [1, 6]`` (J1 secondary: 1),
+    dropping counts whose spines alone exceed the piece depth."""
+    out: list[list[int]] = []
+    for p, piece in enumerate(ctx.fp.pieces):
+        if ctx.fp.junction == "J1" and p == 1:
+            out.append([1])
+            continue
+        n0 = _n0(ctx, p)
+        depth = frame(piece)[1]
+        cands = [n for n in (n0, n0 - 1, n0 + 1) if 1 <= n <= MAX_BANDS and n * ctx.k.s <= depth]
+        out.append(cands or [1])
+    return out
+
+
+def _access_point(prepared: PreparedInput) -> tuple[float, float]:
+    a, b = prepared.footprint.polygon.edges()[prepared.footprint.access_edge]
+    return (a[0] + b[0]) / 2, (a[1] + b[1]) / 2
+
+
+def _connectors(ctx: Ctx, counts: Sequence[int]) -> list[Connector]:
+    """Contract connectors: the cut side where required (J2), else the end of the piece
+    nearer the access edge; a J2 secondary whose spines reach the primary connector gets
+    none (its spines run the full length)."""
+    fp = ctx.fp
+    ax, ay = _access_point(ctx.prepared)
+    out: list[Connector] = []
+    for p, n in enumerate(counts):
+        if n == 1:
+            out.append("none")
+            continue
+        piece = fp.pieces[p]
+        length, depth = frame(piece)
+        u0, v0 = along_origin(piece), across_origin(piece)
+        mid = v0 + depth / 2
+
+        axis_x = piece.spine_axis == "X"
+
+        def dist(u: float, mid: float = mid, axis_x: bool = axis_x) -> float:
+            if axis_x:
+                return math.hypot(u - ax, mid - ay)
+            return math.hypot(mid - ax, u - ay)
+
+        near: Connector = "start" if dist(u0) <= dist(u0 + length) else "end"
+        out.append(near)
+    if fp.junction == "J2" and any(n >= 2 for n in counts):
+        carrier = 0 if counts[0] >= 2 else 1
+        side = cut_side(fp, carrier)
+        out[carrier] = "start" if side == "none" else side
+        if carrier == 0 and counts[1] >= 2:
+            out[1] = "none"
+    return out
+
+
+# ---------------------------------------------------------------------- assignment
+def _segments(
+    ctx: Ctx, draft: Draft, depths: dict[Slot, Fraction]
+) -> list[tuple[Slot, tuple[float, float], tuple[float, float]]]:
+    """Serpentine path (metres): piece by piece, band by band, block A forward (min u →
+    max u) then block B backward, along each block's centre line."""
+    m = ctx.prepared.grid.module_mm / 1000
+    s = ctx.k.s
+    out: list[tuple[Slot, tuple[float, float], tuple[float, float]]] = []
+    for p, n in enumerate(draft.counts):
+        piece = ctx.fp.pieces[p]
+        u0 = s if draft.connectors[p] == "start" else 0
+        u1 = u0 + usable_length(ctx, draft, p)
+        v = Fraction(0)
+        for k in range(n):
+            d_a, d_b = depths[(p, k, "A")], depths[(p, k, "B")]
+            for side, vm, a, b in (
+                ("A", v + d_a / 2, u0, u1),
+                ("B", v + d_a + s + d_b / 2, u1, u0),
+            ):
+                out.append(((p, k, side), _point(piece, a, vm, m), _point(piece, b, vm, m)))
+            v += d_a + s + d_b
+    return out
+
+
+def _point(piece: Piece, u: float, v: Fraction, m: float) -> tuple[float, float]:
+    """Piece-local ``(u, v)`` (modules) → footprint metres."""
+    along = (along_origin(piece) + u) * m
+    across = float(across_origin(piece) + v) * m
+    return (along, across) if piece.spine_axis == "X" else (across, along)
+
+
+def _path_position(
+    pt: tuple[float, float],
+    segs: Sequence[tuple[Slot, tuple[float, float], tuple[float, float]]],
+) -> float:
+    best: tuple[float, float] | None = None
+    offset = 0.0
+    for _, a, b in segs:
+        dx, dy = b[0] - a[0], b[1] - a[1]
+        length = math.hypot(dx, dy)
+        t = 0.0
+        if length > 0:
+            t = max(0.0, min(1.0, ((pt[0] - a[0]) * dx + (pt[1] - a[1]) * dy) / length**2))
+        d = math.hypot(pt[0] - a[0] - t * dx, pt[1] - a[1] - t * dy)
+        if best is None or d < best[0]:
+            best = (d, offset + t * length)
+        offset += length
+    return 0.0 if best is None else best[1]
+
+
+def _share(ctx: Ctx, room: str, depth: Fraction) -> Fraction:
+    """Length share of ``room`` in a block of depth ``depth`` (fill estimate)."""
+    if ctx.small(room, depth):
+        return ctx.reqs[room].target / max(Fraction(1), depth) + Fraction(ctx.k.s, 4)
+    return Fraction(ctx.room_width(room, depth))
+
+
+def _junction_slot(ctx: Ctx, counts: Sequence[int]) -> Slot | None:
+    if ctx.fp.junction != "J1":
+        return None
+    facing = ctx.fp.facing_block or "A"
+    return (0, 0 if facing == "A" else counts[0] - 1, facing)
+
+
+def assign(ctx: Ctx, counts: Sequence[int], pos: Positions) -> Draft:
+    """RD 5.3: fill the blocks in serpentine order with the rooms sorted along the path,
+    keeping every block at the same estimated fill ratio."""
+    draft = Draft(list(counts), _connectors(ctx, counts))
+    depths = block_depths(ctx, draft)
+    segs = _segments(ctx, draft, depths)
+    slots = [seg[0] for seg in segs]
+    rooms = sorted(ctx.reqs, key=lambda r: (_path_position(pos[r], segs), ctx.order[r]))
+    jslot = _junction_slot(ctx, counts)
+    caps = [
+        Fraction(usable_length(ctx, draft, sl[0]) - (ctx.k.s if sl == jslot else 0)) for sl in slots
+    ]
+    total_cap = sum(caps, Fraction(0))
+    demand = sum((_share(ctx, r, depths[slots[0]]) for r in rooms), Fraction(0))
+    rho0 = demand / total_cap if total_cap > 0 else Fraction(1)
+
+    def fill(rho: Fraction) -> dict[Slot, list[RoomBay | FingerBay]]:
+        members: dict[Slot, list[str]] = {sl: [] for sl in slots}
+        b = 0
+        used = Fraction(0)
+        cum_cap = caps[0]
+        for r in rooms:
+            w = _share(ctx, r, depths[slots[b]])
+            while b + 1 < len(slots) and used + w / 2 > rho * cum_cap:
+                b += 1
+                cum_cap += caps[b]
+                w = _share(ctx, r, depths[slots[b]])
+            members[slots[b]].append(r)
+            used += w
+        return {
+            sl: form_bays(ctx, members[sl] if sl[2] == "A" else members[sl][::-1], depths[sl])
+            for sl in slots
+        }
+
+    def key(blocks: dict[Slot, list[RoomBay | FingerBay]]) -> tuple[int, Fraction]:
+        over = 0
+        worst = Fraction(0)
+        for sl, cap in zip(slots, caps, strict=True):
+            width = ctx.block_width(blocks[sl], depths[sl])
+            over += max(0, width - math.floor(cap))
+            if cap > 0:
+                worst = max(worst, width / cap)
+        return over, worst
+
+    best: tuple[tuple[int, Fraction], dict[Slot, list[RoomBay | FingerBay]]] | None = None
+    for i in range(_RHO_STEPS + 1):
+        rho = rho0 * (_RHO_LOW + (_RHO_HIGH - _RHO_LOW) * Fraction(i, _RHO_STEPS))
+        blocks = fill(rho)
+        k = key(blocks)
+        if best is None or k < best[0]:
+            best = (k, blocks)
+    assert best is not None
+    draft.blocks = best[1]
+    if jslot is not None:
+        _place_junction(ctx, draft, jslot, depths[jslot])
+    return draft
+
+
+def _place_junction(ctx: Ctx, draft: Draft, slot: Slot, depth: Fraction) -> None:
+    """Insert the J1 junction finger where the secondary spine falls mid-depth."""
+    primary, secondary = ctx.fp.pieces
+    s = ctx.k.s
+    u0 = s if draft.connectors[0] == "start" else 0
+    sec_depth = frame(secondary)[1]
+    target = across_origin(secondary) + (sec_depth - s) // 2 - along_origin(primary) - u0
+    bays = draft.blocks[slot]
+    best = (abs(target), 0)
+    cum = 0
+    for i, bay in enumerate(bays):
+        cum += ctx.bay_width(bay, depth)
+        best = min(best, (abs(target - cum), i + 1))
+    bays.insert(best[1], FingerBay(junction=True))
+
+
+# ---------------------------------------------------------------------- search
+class _Search:
+    def __init__(
+        self,
+        prepared: PreparedInput,
+        rulebook: Rulebook,
+        config: AleConfig,
+        fp: FootprintPieces,
+        seed: int,
+    ) -> None:
+        self.ctx = Ctx.build(prepared, rulebook, config, fp)
+        self.seed = seed
+        self.allowed = _allowed(self.ctx)
+        self.graph = build_graph(prepared, rulebook)
+        self._cache: dict[str, Realization] = {}
+
+    def realise(self, draft: Draft) -> Realization:
+        plan = draft.to_plan()
+        key = plan.model_dump_json()
+        hit = self._cache.get(key)
+        if hit is None:
+            ctx = self.ctx
+            hit = realize(ctx.prepared, plan, ctx.rulebook, ctx.config, seed=self.seed)
+            self._cache[key] = hit
+        return hit
+
+    def combos(self) -> list[list[int]]:
+        """Band-count combinations, ``n0`` first (closest to ``n0`` first, then lower)."""
+        n0 = [a[0] for a in self.allowed]
+        combos = [list(c) for c in itertools.product(*self.allowed)]
+        combos.sort(key=lambda c: (sum(abs(x - y) for x, y in zip(c, n0, strict=True)), c))
+        return combos
+
+
+def _attempt_seed(seed: int, k: int) -> int:
+    return seed if k == 0 else seed * _SEED_STRIDE + k
+
+
+def _fallback(prepared: PreparedInput) -> CorridorPlan:
+    """A one-piece, one-band plan holding every room as a room bay (unsupported footprint)."""
+    bays = tuple(RoomBay(room=iid) for iid, _ in prepared.instances)
+    band = BandPlan(block_a=BlockPlan(bays=bays), block_b=BlockPlan())
+    return CorridorPlan(pieces=(PiecePlan(bands=(band,)),))
+
+
+def _report(search: _Search | None, prepared: PreparedInput, rulebook: Rulebook) -> TopologyReport:
+    graph = build_graph(prepared, rulebook) if search is None else search.graph
+    planar, conflicts = planarity(graph)
+    kinds = [k for _, _, k in graph.edges(data="kind")]
+    return TopologyReport(
+        n_nodes=graph.number_of_nodes(),
+        n_required=kinds.count(REQUIRED),
+        n_avoid=kinds.count(AVOID),
+        planar=planar,
+        conflicts=conflicts,
+    )
+
+
+def seed_plan(
+    prepared: PreparedInput,
+    rulebook: Rulebook,
+    config: AleConfig,
+    *,
+    seed: int,
+    time_budget_s: float = 20.0,
+) -> SeedResult:
+    """A first valid corridor plan for ``prepared`` (RD 3.2 §5); never raises.
+
+    Without a valid plan inside ``time_budget_s`` the least-overflow plan is returned with
+    its failing realisation.
+    """
+    t0 = time.monotonic()
+    budget_s = max(float(time_budget_s), 1e-3)
+    try:
+        fp = decompose_footprint(prepared.footprint.polygon)
+    except ValueError:
+        plan = _fallback(prepared)
+        real = realize(prepared, plan, rulebook, config, seed=seed)
+        return SeedResult(
+            plan=plan,
+            realization=real,
+            report=_report(None, prepared, rulebook),
+            attempts=1,
+            elapsed_s=time.monotonic() - t0,
+        )
+    search = _Search(prepared, rulebook, config, fp, seed)
+    ctx = search.ctx
+    combos = search.combos()
+    best: tuple[tuple[int, int], Draft, Realization] | None = None
+    attempts = 0
+    with bounded(
+        max_iter=_MAX_ATTEMPTS, time_budget_s=budget_s, label="seed-restarts", on_exhaust="stop"
+    ) as restarts:
+        for k in range(_MAX_ATTEMPTS):
+            if attempts and not restarts.tick():
+                break
+            attempts += 1
+            pos = embed(search.graph, prepared, rulebook, seed=_attempt_seed(seed, k))
+            counts = combos[k % len(combos)]
+            draft = assign(ctx, counts, pos)
+            real = search.realise(draft)
+
+            def reassign(new_counts: list[int], pos: Positions = pos) -> Draft | None:
+                return assign(ctx, new_counts, pos)
+
+            remaining = budget_s - (time.monotonic() - t0)
+            if score(real) != (0, 0) and remaining > 0:
+                with bounded(
+                    max_iter=4 * len(ctx.reqs) + 40,
+                    time_budget_s=remaining,
+                    label="seed-repair",
+                    on_exhaust="stop",
+                ) as rep:
+                    for _ in range(4 * len(ctx.reqs) + 40):
+                        step = repair_step(
+                            ctx, draft, real, search.realise, reassign, search.allowed, rep.tick
+                        )
+                        if step is None:
+                            break
+                        draft, real = step
+                        if score(real) == (0, 0):
+                            break
+            sc = score(real)
+            if best is None or sc < best[0]:
+                best = (sc, draft, real)
+            if sc == (0, 0):
+                break
+    assert best is not None  # at least one attempt always runs
+    _, draft, real = best
+    if not real.failures:
+        draft, real = _improve_adjacency(search, draft, real, t0, budget_s)
+    report = _report(search, prepared, rulebook).model_copy(
+        update={"unsatisfiable_required": unsatisfiable(search, draft, real)}
+    )
+    return SeedResult(
+        plan=draft.to_plan(),
+        realization=real,
+        report=report,
+        attempts=attempts,
+        elapsed_s=time.monotonic() - t0,
+    )
+
+
+# ---------------------------------------------------------------------- adjacency swaps
+def _share_len(a: ModuleRect, b: ModuleRect) -> int:
+    """Length of the common boundary of two disjoint rectangles (modules)."""
+    if a.x2() == b.x or b.x2() == a.x:
+        return max(0, min(a.y2(), b.y2()) - max(a.y, b.y))
+    if a.y2() == b.y or b.y2() == a.y:
+        return max(0, min(a.x2(), b.x2()) - max(a.x, b.x))
+    return 0
+
+
+def _swap(draft: Draft, a: str, b: str) -> Draft:
+    def rename(r: str) -> str:
+        return b if r == a else a if r == b else r
+
+    out = draft.copy()
+    for slot, bays in out.blocks.items():
+        new: list[RoomBay | FingerBay] = []
+        for bay in bays:
+            if isinstance(bay, RoomBay):
+                new.append(RoomBay(room=rename(bay.room)))
+            else:
+                new.append(
+                    FingerBay(
+                        left=tuple(rename(r) for r in bay.left),
+                        right=tuple(rename(r) for r in bay.right),
+                        junction=bay.junction,
+                    )
+                )
+        out.blocks[slot] = new
+    return out
+
+
+def _required_cost(real: Realization) -> float:
+    assert real.layout is not None
+    return real.layout.metrics.cost_breakdown.get("required_adjacency", 0.0)
+
+
+def _swap_candidates(search: _Search, real: Realization) -> list[tuple[str, str]]:
+    """Swaps that bring a missing required partner next to its room: for a violation of
+    room ``a`` towards spec ``B``, each instance ``b`` of ``B`` swapped with each room
+    touching ``a`` (and ``a`` with each room touching ``b``)."""
+    layout = real.layout
+    assert layout is not None
+    c = search.ctx.k.c
+    rects = {p.instance_id: p.rect for p in layout.rooms}
+    ids = sorted(rects)
+    touching: dict[str, list[str]] = {r: [] for r in ids}
+    for i, a in enumerate(ids):
+        for b in ids[i + 1 :]:
+            if _share_len(rects[a], rects[b]) >= c:
+                touching[a].append(b)
+                touching[b].append(a)
+    specs = dict(search.ctx.prepared.instances)
+    by_spec: dict[str, list[str]] = {}
+    for iid, spec in search.ctx.prepared.instances:
+        by_spec.setdefault(spec.id, []).append(iid)
+    out: list[tuple[str, str]] = []
+    for v in layout.metrics.violations:
+        if v.code != "REQUIRED_ADJ" or len(v.instance_ids) != 1:
+            continue
+        a = v.instance_ids[0]
+        for other in specs[a].adjacent_to:
+            partners = by_spec.get(other, [])
+            if any(p in touching.get(a, []) for p in partners):
+                continue
+            for b in partners:
+                out += [(b, x) for x in touching.get(a, []) if x != b]
+                out += [(a, y) for y in touching.get(b, []) if y != a]
+    seen: set[tuple[str, str]] = set()
+    uniq: list[tuple[str, str]] = []
+    for a, b in out:
+        key = (a, b) if a <= b else (b, a)
+        if key not in seen:
+            seen.add(key)
+            uniq.append(key)
+    reqs = search.ctx.reqs
+    # Rooms of similar size first: their swap is the most likely to stay valid.
+    uniq.sort(key=lambda ab: abs(reqs[ab[0]].target - reqs[ab[1]].target))
+    return uniq
+
+
+def _improve_adjacency(
+    search: _Search, draft: Draft, real: Realization, t0: float, budget_s: float
+) -> tuple[Draft, Realization]:
+    """RD 5.6: swaps lowering ``required_adjacency`` while staying valid, with no new zone
+    split; at most 25 % of the remaining budget."""
+    remaining = budget_s - (time.monotonic() - t0)
+    if remaining <= 0:
+        return draft, real
+    zones = {iid: spec.macro_zone for iid, spec in search.ctx.prepared.instances}
+
+    def splits(d: Draft) -> int:
+        return len(d.to_plan().zone_violations(zones))
+
+    cost = _required_cost(real)
+    n_split = splits(draft)
+    trials = _SWAP_TRIALS_PER_PROGRAM // max(1, len(zones))
+    trials = max(_SWAP_TRIALS_MIN, min(_SWAP_TRIALS_MAX, trials))
+    with bounded(
+        max_iter=trials,
+        time_budget_s=_SWAP_SHARE * remaining,
+        label="seed-adjacency-swaps",
+        on_exhaust="stop",
+    ) as budget:
+        improved = True
+        while improved and cost > 0:
+            improved = False
+            for a, b in _swap_candidates(search, real):
+                if not budget.tick():
+                    return draft, real
+                cand = _swap(draft, a, b)
+                got = search.realise(cand)
+                if got.failures or _required_cost(got) >= cost:
+                    continue
+                cand_split = splits(cand)
+                if cand_split > n_split:
+                    continue
+                draft, real, cost, n_split = cand, got, _required_cost(got), cand_split
+                improved = True
+                break
+    return draft, real
+
+
+# ---------------------------------------------------------------------- report
+def _block_rects(search: _Search, draft: Draft, real: Realization) -> dict[Slot, ModuleRect]:
+    """Footprint rectangles of every non-degenerate block region."""
+    ctx = search.ctx
+    s = ctx.k.s
+    out: dict[Slot, ModuleRect] = {}
+    n_bands = sum(draft.counts)
+    i = 0
+    for p, n in enumerate(draft.counts):
+        piece = ctx.fp.pieces[p]
+        u0 = s if draft.connectors[p] == "start" else 0
+        length = usable_length(ctx, draft, p)
+        v = 0
+        equal = band_depths(ctx, p, n)
+        for k in range(n):
+            if len(real.depths) == n_bands:
+                d_a, d_b = real.depths[i]
+            else:
+                d_a = (equal[k] - s) // 2
+                d_b = equal[k] - s - d_a
+            i += 1
+            if d_a > 0 and length > 0:
+                out[(p, k, "A")] = to_abs(piece, u0, v, length, d_a)
+            if d_b > 0 and length > 0:
+                out[(p, k, "B")] = to_abs(piece, u0, v + d_a + s, length, d_b)
+            v += d_a + s + d_b
+    return out
+
+
+def unsatisfiable(search: _Search, draft: Draft, real: Realization) -> tuple[tuple[str, str], ...]:
+    """REQUIRED pairs seeded into different blocks whose regions share less than a door
+    length (``c``) of boundary, sorted."""
+    rects = _block_rects(search, draft, real)
+    where: dict[str, Slot] = {}
+    for slot, bays in draft.blocks.items():
+        for bay in bays:
+            for r in bay_rooms(bay):
+                where[r] = slot
+    out: list[tuple[str, str]] = []
+    c = search.ctx.k.c
+    for a, b, kind in search.graph.edges(data="kind"):
+        if kind != REQUIRED:
+            continue
+        sa, sb = where.get(a), where.get(b)
+        if sa is None or sb is None or sa == sb:
+            continue
+        ra, rb = rects.get(sa), rects.get(sb)
+        if ra is None or rb is None or _share_len(ra, rb) < c:
+            out.append((a, b) if a <= b else (b, a))
+    return tuple(sorted(out))
