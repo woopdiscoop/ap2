@@ -36,16 +36,25 @@ def anneal(prepared, rulebook, config, start: CorridorPlan, *, seed: int) -> Ann
 ```
 - State = plan; energy = `total_cost` of `evaluate(realize(...).layout)`; a plan whose realisation fails gets
   energy `+inf` and is never accepted. The start plan must realise (else `ValueError`).
-- Metropolis: accept if Δ ≤ 0, else with probability `exp(−Δ/T)`. `T0` chosen so that
-  `optimizer.initial_acceptance` of 50 sampled uphill moves from the start would be accepted (median rule);
-  geometric cooling `T ← T × optimizer.cooling` every `optimizer.moves_per_temperature` proposals;
-  stop by `bounded(optimizer.max_iter, optimizer.time_budget_s, on_exhaust="stop")`, or `converged` when no
-  improvement of the best for 20 consecutive temperature steps. Return the **best** plan seen.
-- RNG: `random.Random(seed)` only; same inputs + seed → identical result.
-- **Hard rules** (user decisions D1/U-2 and the directive): energy = `total_cost + H × n_hard`, where `n_hard` =
-  number of violations with codes `AREA_UNDER`, `AREA_OVER`, `ASPECT`, `MIN_WIDTH`, `NO_FACADE`, `REQUIRED_ADJ`,
-  `AVOID_ADJ`, `NO_CIRCULATION_ACCESS`, and `H = optimizer.weights.required_adjacency` (default 1000). Lexicographic
-  in practice: fewer hard violations always win. `AnnealResult` also reports `initial_hard`, `final_hard`.
+- **Acceptance (amended at review 2026-11-08 — lexicographic, replaces the single-energy Metropolis rule):**
+  state score = `(n_hard, cost)` with `n_hard` as defined below and `cost = total_cost` of `evaluate`.
+  - `n_hard` decreases → accept.
+  - `n_hard` increases by `Δh` → accept with probability `exp(−Δh / T_h)`; `T_h` starts at 0.5 and follows the same
+    schedule fraction as `T_c` (so hard regressions are allowed early, almost never late).
+  - `n_hard` equal → Metropolis on cost: accept if `Δc ≤ 0`, else with `exp(−Δc / T_c)`.
+  - `T_c0` = calibrated on **cost deltas only** (the median of 50 sampled uphill moves that keep `n_hard` equal,
+    chosen so `optimizer.initial_acceptance` of them would be accepted); end temperature `T_c0 × 1e-3`.
+  - **Schedule by progress fraction** `f` ∈ [0, 1]: `T = T0 × (T_end / T0) ** f`, with `f = iterations / max_iter`
+    when `max_iter` binds first, else `elapsed / time_budget_s` (so the run always cools fully within its budget;
+    determinism is guaranteed when `max_iter` binds, as in O04). `moves_per_temperature` and `cooling` are ignored.
+  - Best = lexicographically smallest `(n_hard, cost)` seen; stop by `bounded(..., on_exhaust="stop")` or
+    `converged` (no best improvement during the last 25 % of the progress).
+- `n_hard` = number of violations with codes `AREA_UNDER`, `AREA_OVER`, `ASPECT`, `MIN_WIDTH`, `NO_FACADE`,
+  `REQUIRED_ADJ`, `AVOID_ADJ`, `NO_CIRCULATION_ACCESS` (user decisions D1/U-2 and the directive).
+  `AnnealResult` reports `initial_hard`, `final_hard`.
+- **Throughput**: `anneal` must reuse realisation work where possible (e.g. cache realised blocks keyed by the
+  block's bay tuple and depth); target ≥ 30 iterations/s on P25 on one CI core.
+- RNG: `random.Random(seed)` only.
 
 ## 4. Generate (`generate.py`, `ale generate`)
 ```python
