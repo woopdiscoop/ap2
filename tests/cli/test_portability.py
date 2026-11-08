@@ -41,14 +41,15 @@ def test_P01_cp1252_console(run_ale, tmp_path: Path) -> None:
 
 
 def test_P01_cp1252_console_stub_message(run_ale, tmp_path: Path) -> None:
-    """The en dash in stub messages is written through the same safe stream."""
+    """Stub messages are written through the same safe stream (cp1252 console)."""
     target = tmp_path / "ws Łódź"
     assert run_ale(["init", "--workspace", str(target)]).returncode == 0
-    proc = run_ale(["extract", "--workspace", str(target)], PYTHONIOENCODING="cp1252")
+    proc = run_ale(["review", "--workspace", str(target)], PYTHONIOENCODING="cp1252")
     assert proc.returncode == 3
     stderr = proc.stderr.decode("cp1252", errors="replace")
     assert "Traceback" not in stderr
-    assert "not implemented yet (Ticket 1.2\u20131.4)" in stderr
+    assert "UnicodeEncodeError" not in stderr
+    assert "ale review: not implemented yet (Ticket 1.6)" in stderr
 
 
 def test_P03_utf8_io(tmp_path: Path) -> None:

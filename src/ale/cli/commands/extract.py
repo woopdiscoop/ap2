@@ -27,7 +27,15 @@ class SourceKind(enum.StrEnum):
 
 def format_extract(report: ExtractReport) -> str:
     """French summary printed by ``ale extract``."""
-    lines = [
+    lines: list[str] = []
+    if report.proposed_layers is not None:
+        lines.append(
+            "avertissement : layer_map.yaml ne contient aucun calque ; "
+            f"{report.proposed_layers} rôle(s) proposé(s) automatiquement pour cette "
+            "extraction, non enregistré(s). Lancez `ale layers` pour les vérifier et les "
+            "enregistrer."
+        )
+    lines += [
         "Extraction terminée",
         f"  unités sélectionnées : {report.selected}",
         f"  extraites : {report.extracted} ({report.plans} plan(s), "

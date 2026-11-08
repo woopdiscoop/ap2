@@ -437,3 +437,72 @@ def test_W08_meta_units(tmp_workspace: Workspace, tmp_path: Path, invoke: Invoke
         assert len(plan.rooms) == GT_ROOMS
     # Same drawing without the metadata: units unknown, millimetre thresholds, no plan.
     assert unit_of(tmp_workspace, "none.dxf")[3:] == ("FAILED", "no plan found")
+
+
+# ---------------------------------------------------------------------- W10 / W11
+
+
+def test_W10_empty_layer_map_proposes(
+    tmp_workspace: Workspace, tmp_path: Path, invoke: Invoke
+) -> None:
+    inp = tmp_path / "input"
+    save_doc(plan_doc(labels=True), inp / "a.dxf")
+    save_doc(plan_doc(copies=2), inp / "b.dxf")
+    ingest(tmp_workspace, inp)
+    map_file = tmp_workspace.path("layer_map.yaml")
+    assert load_layer_map(map_file).layers == {}
+    before = map_file.read_bytes()
+
+    result = invoke(["extract", *_ws_args(tmp_workspace)])
+
+    assert result.exit_code == 0, result.output
+    assert "layer_map.yaml ne contient aucun calque" in result.stdout
+    assert "ale layers" in result.stdout
+    assert map_file.read_bytes() == before  # never written by extract
+    for rel, n_plans in (("a.dxf", 1), ("b.dxf", 2)):
+        sha, _page, _kind, status, _reason = unit_of(tmp_workspace, rel)
+        assert status == "EXTRACTED"
+        for i in range(n_plans):
+            assert len(_load_plan(plan_path(tmp_workspace, sha, 0, i)).rooms) == GT_ROOMS
+
+    # With a non-empty map, the map is used as is (no proposal, no warning).
+    save_layer_map(LayerMap(layers={"MUR": LayerRole.WALL}), map_file)
+    execute(tmp_workspace, "UPDATE units SET status = 'NEW'")
+    result = invoke(["extract", *_ws_args(tmp_workspace)])
+    assert result.exit_code == 0, result.output
+    assert "aucun calque" not in result.stdout
+    assert "extraites : 2" in result.stdout
+
+
+def test_W11_dwg_needs_tool_retried(
+    tmp_workspace: Workspace, tmp_path: Path, invoke: Invoke, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    inp = tmp_path / "input"
+    write(inp / "plan.dwg", dwg_bytes())
+    ingest(tmp_workspace, inp)  # no converter: NEEDS_TOOL
+    _map_layers(invoke, tmp_workspace)
+    row = query(tmp_workspace, "SELECT status, reason, updated_at FROM units")
+    assert row[0][0] == "NEEDS_TOOL"
+    n_events = event_count(tmp_workspace)
+
+    # Still no converter: re-detected, left unchanged, no event.
+    result = invoke(["extract", *_ws_args(tmp_workspace)])
+    assert result.exit_code == 0, result.output
+    assert "unités sélectionnées : 1" in result.stdout
+    assert "outil manquant : 1" in result.stdout
+    assert query(tmp_workspace, "SELECT status, reason, updated_at FROM units") == row
+    assert event_count(tmp_workspace) == n_events
+
+    # A converter appears: --only-new still ignores the unit, the default run extracts it.
+    prepared = save_doc(plan_doc(), tmp_path / "prep" / "prepared.dxf")
+    monkeypatch.setenv("ALE_ODA_PATH", str(_fake_oda(tmp_path, prepared)))
+    result = invoke(["extract", *_ws_args(tmp_workspace), "--only-new"])
+    assert "unités sélectionnées : 0" in result.stdout
+    assert query(tmp_workspace, "SELECT status FROM units") == [("NEEDS_TOOL",)]
+    result = invoke(["extract", *_ws_args(tmp_workspace)])
+    assert result.exit_code == 0, result.output
+    sha, _page, kind, status, reason = unit_of(tmp_workspace, "plan.dwg")
+    assert (kind, status, reason) == ("DWG", "EXTRACTED", None)
+    plan = _load_plan(plan_path(tmp_workspace, sha, 0, 0))
+    assert plan.source_kind is SourceKind.DWG
+    assert event_count(tmp_workspace, "extracted") == 1

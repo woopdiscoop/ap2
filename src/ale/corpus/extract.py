@@ -275,6 +275,8 @@ class ExtractReport:
     not_implemented: int = 0
     plans: int = 0
     files_written: int = 0
+    #: Layers proposed in memory because ``layer_map.yaml`` had none (None: map used).
+    proposed_layers: int | None = None
     #: (name, reason) of the units that failed or still need a tool.
     problems: list[tuple[str, str]] = field(default_factory=list)
 
@@ -287,6 +289,7 @@ class ExtractReport:
             "not_implemented": self.not_implemented,
             "plans": self.plans,
             "files_written": self.files_written,
+            "proposed_layers": self.proposed_layers,
             "problems": [list(p) for p in self.problems],
         }
 
@@ -325,12 +328,15 @@ def _select(conn: sqlite3.Connection, only_new: bool, kind: str | None) -> list[
     statuses = (
         (FileStatus.NEW.value,) if only_new else (FileStatus.NEW.value, FileStatus.FAILED.value)
     )
+    where = f"u.status IN ({', '.join('?' * len(statuses))})"
+    params: list[str] = list(statuses)
+    if not only_new:  # retry DWG units waiting for a converter
+        where = f"({where} OR (u.status = ? AND u.kind = ?))"
+        params += [FileStatus.NEEDS_TOOL.value, SourceKind.DWG.value]
     sql = (
         "SELECT u.sha256, u.page, u.kind, u.status, f.meta_json FROM units u "
-        "JOIN files f ON f.sha256 = u.sha256 "
-        f"WHERE u.status IN ({', '.join('?' * len(statuses))})"
+        f"JOIN files f ON f.sha256 = u.sha256 WHERE {where}"
     )
-    params: list[str] = list(statuses)
     if kind is not None:
         kinds = KIND_FILTERS[kind]
         sql += f" AND u.kind IN ({', '.join('?' * len(kinds))})"
@@ -365,8 +371,10 @@ def _extract_unit(
     dxf, status, message = _dxf_for(ws, unit, source, environ)
     if dxf is None:
         if status == "NEEDS_TOOL":
-            _set_status(conn, unit, FileStatus.NEEDS_TOOL, message)
             report.needs_tool += 1
+            if unit.status == FileStatus.NEEDS_TOOL.value:
+                return  # still no converter: left unchanged
+            _set_status(conn, unit, FileStatus.NEEDS_TOOL, message)
             report.problems.append((name, message))
             log.warning("%s: %s", name, message, extra={"event": "corpus.extract.needs_tool"})
             return
@@ -426,6 +434,28 @@ def _fail(
     log.warning("%s: extraction failed: %s", name, reason, extra={"event": "corpus.extract_failed"})
 
 
+def _proposed_map(
+    ws: Workspace,
+    conn: sqlite3.Connection,
+    units: Iterable[_Unit],
+    environ: Mapping[str, str] | None,
+) -> LayerMap:
+    """In-memory proposal over the layers of the selected CAD units (never saved)."""
+    names: set[str] = set()
+    for unit in units:
+        if unit.kind not in _CAD_KINDS:
+            continue
+        source = _source_path(conn, unit.sha256)[0]
+        if source is None:
+            continue
+        dxf = _dxf_for(ws, unit, source, environ)[0]
+        if dxf is None:
+            continue
+        with contextlib.suppress(Exception):  # the extraction reports unreadable files
+            names.update(model_space_layers(dxf))
+    return propose_layer_map(sorted(names))
+
+
 def run_extract(
     ws: Workspace,
     *,
@@ -435,7 +465,9 @@ def run_extract(
 ) -> ExtractReport:
     """Extract the selected units (``kind``: a key of :data:`KIND_FILTERS` or None).
 
-    Selection: status NEW (``only_new``) or NEW and FAILED (default, retry). Raises
+    Selection: status NEW (``only_new``) or NEW, FAILED and DWG units in NEEDS_TOOL
+    (default, retry). An empty ``layer_map.yaml`` is replaced, for this run only, by a
+    proposal over the selected units' layers. Raises
     :class:`WorkspaceError` only when the corpus or ``layer_map.yaml`` cannot be used.
     """
     if kind is not None and kind not in KIND_FILTERS:
@@ -445,6 +477,14 @@ def run_extract(
     with closing(_open_corpus(ws)) as conn:
         units = _select(conn, only_new, kind)
         report.selected = len(units)
+        if not layer_map.layers and any(u.kind in _CAD_KINDS for u in units):
+            layer_map = _proposed_map(ws, conn, units, environ)
+            report.proposed_layers = len(layer_map.layers)
+            log.warning(
+                "layer_map.yaml has no layers: %d roles proposed for this run only",
+                report.proposed_layers,
+                extra={"event": "corpus.extract.proposed_layer_map"},
+            )
         for unit in units:
             if unit.kind not in _CAD_KINDS:
                 report.not_implemented += 1
