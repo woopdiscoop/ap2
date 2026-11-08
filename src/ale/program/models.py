@@ -185,7 +185,10 @@ class RoomFit(BaseModel):
 
 
 class FeasibilityReport(BaseModel):
-    """Feasibility pre-check (areas in m², lengths in metres, ``fill_ratio`` unitless)."""
+    """Feasibility pre-check (areas in m², lengths in metres, ``fill_ratio`` unitless).
+
+    ``facade_usable_m``: grammar-aware façade capacity (Q.2a), metres.
+    """
 
     model_config = _CONFIG
 
@@ -198,6 +201,7 @@ class FeasibilityReport(BaseModel):
     fill_ratio: Float
     facade_required_m: Float
     perimeter_m: Float
+    facade_usable_m: Float
     per_room: dict[StrictStr, RoomFit]
     issues: tuple[Issue, ...] = ()
 
