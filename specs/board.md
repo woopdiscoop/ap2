@@ -22,7 +22,7 @@ Maintained by the Router only. Directive: `specs/DIRECTIVE.md` (v2.2, supersedes
 | A.1 | Contract amendment: CorridorPlan + footprint decomposition | **DONE** | — | RD + eval | Contracts 1.0.0 → 1.1.0; adds `corridor_plan.py`, `footprint.py`; regenerates lock. |
 | A.2 | Contract amendment: bands | **IN-PROGRESS** | — | RD + eval | Merged together with the 3.3 rework (breaking plan change). |
 | 1.1 | Corpus ingestion & classification | **DONE** | — | RD + eval | Real corpus: 439 files → 1734 units (DWG 17 NEEDS_TOOL, PDF_VECTOR 879, PDF_SCANNED 436, RASTER 402), 0 failed, idempotent. |
-| 1.2 | CAD reader (DXF; DWG via converter) | **IN-PROGRESS** | — (library; CLI wiring after 1.1) | RD + eval | Layer proposal, units, walls, rooms, labels via taxonomy, openings, multi-plan clustering, DWG→DXF with fake-converter tests. ODA not installable here (registration download) → real DWGs need the user's workstation. |
+| 1.2 | CAD reader (DXF; DWG via converter) | **DONE** (library) | — | RD + eval | Layers (whole-word), units, walls, rooms, labels, openings, multi-plan, DWG→DXF via ODA/accoreconsole. Follow-up 1.2c: wire `ale layers` / `ale extract --kind dxf\|dwg` to the corpus DB. Real DWGs need ODA on the user's workstation. |
 | 1.3 | Vector-PDF reader | BLOCKED | 1.1 · test corpus | — | PyMuPDF. |
 | 1.4 | Raster reader | BLOCKED | 1.1 · test corpus | — | CubiCasa5K (v2.0 spec in git history reusable). |
 | 1.5 | Semantic labelling | BLOCKED | 1.2, 1.3, 1.4 · decision O-3 | — | CAD text → PDF text → VLM → manual. |
@@ -69,6 +69,7 @@ with ground truth. The Router will issue an annotation template before Phase 1.
 ## History
 
 - 2026-11-06 — v2.0 workspace initialised (tickets 1.1, 1.2 specified).
+- 2026-11-08 — 1.2 merged after review (layer rule fixed to whole words; -AL→-AUX plurals).
 - 2026-11-08 — 1.1 merged after review (614 tests). Note: PDF_VECTOR counts every page with drawing paths (charts, diagrams in the reports) — plan detection is a later step. Follow-up: dev-only install fails mypy on ezdxf imports in 3.1's site.py (CI unaffected).
 - 2026-11-08 — 3.5 merged after review (564 tests; circulation ratio aligned to Σ net).
 - 2026-11-08 — User: "start all". 3.5 and 1.1 specified and dispatched in parallel; 1.2 (DXF first) and 3.2 specs next.

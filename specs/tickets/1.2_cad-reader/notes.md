@@ -10,3 +10,4 @@ Parked:
 
 ## Review log
 - 2026-11-08 — a3da38a: 15 IDs pass, 94.8 % coverage. Worker found substring matching flaw in layer proposal (MUR PORTEUR → DOOR; TEXTE LOCAUX → ZONE) — Router spec error; RD rewritten to whole-word matching with text roles before zones. Accepted: odafc command run via ale.proc (timeout), override precedence, lowercase LayerRole values, extra keyword args, pairing details. Rework requested.
+- 2026-11-08 — Rework 1772eb3: whole-word matching, -AL→-AUX plural accepted, A-AREA-IDEN → area_label accepted. **DONE**.
