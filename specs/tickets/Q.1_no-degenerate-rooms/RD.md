@@ -25,3 +25,19 @@ geometry that should never have been produced.
 ## 3. Must still hold
 3.3/3.3b eval (ported: E05 now expects `ROOM_INFEASIBLE` for the 6 m² room at D = 40), 3.2 T03–T05 (valid plans for
 P8/P25/P60), 3.4 O03 (with whatever new hard counts result — report them).
+
+## 4. Scope extension (2026-11-08, after attempt 1) — depth-compatible seeding
+Attempt 1 showed `seed_plan` cannot find valid plans once fallbacks are gone: room bays in one block share the
+block depth, and programs mix rooms whose compliant depth intervals do not overlap. Ownership is extended to
+`src/ale/topology/**` and `tests/topology/**` (and `src/ale/optimize/moves.py` only if a move needs the same rule).
+- **Depth interval** per room for a room bay: `[dmin, dmax]` = depths `D` for which some width satisfies area rule +
+  aspect + `wmin` (compute exactly by scanning integer `D`). A room is **stackable** at depth `D` if it can be a
+  stack room there (any stack width).
+- **Assignment** (3.2 §5 step 3, replaced): choose band/block depths first — cluster the room-bay candidates by
+  depth interval (sort by `dmin`, greedily open a new depth group when the running intersection empties), assign
+  each group to blocks whose estimated depth lies in the group's intersection, and put rooms whose interval misses
+  every block depth into finger-bay stacks of a compatible block (same zone preferred). Band depths `P_b` are then
+  set from their blocks' depths (`D_A + s + D_B`) and the rest absorbed by the deepest-tolerant band.
+- **Repair** gains the moves: (e) move a `ROOM_INFEASIBLE` room to a block whose depth is inside its interval,
+  (f) move it into a stack, (g) change a band's depth split. Restarts as before.
+- 3.2 T03–T05 (valid plans for P8/P25/P60, P60 ≤ 20 s) and 3.4 O03 are hard gates again; report hard counts.
