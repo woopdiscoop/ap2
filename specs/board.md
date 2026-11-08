@@ -15,7 +15,7 @@ Maintained by the Router only. Directive: `specs/DIRECTIVE.md` (v2.2, supersedes
 | 0.3 | Seed rulebook | **READY (user input)** | user values; validation needs 0.2 | template + RD + eval | Aspect pre-filled (U-2); remaining ≈ 196 entries: area + orientation per type, 30 pairs, core offset. Unused types can be deleted. |
 | 0.4 | Guards & test harness | **DONE** | — | RD + eval + fixtures | `ale.guards.bounded`, `ale.proc.run_tool`, fixtures P8/P25/P60 + 3 sites (Router-verified). Dispatch right after 0.1/0.2 merge. |
 | 3.1 | Program & site ingestion | **DONE** | — (0.2, 0.4 done) | RD + eval | Excel → Program with full French error report; site.yaml/DXF → module footprint; feasibility; template + `ale program check`. |
-| 3.2 | Topology & seeding | BLOCKED | 3.1, A.1, 0.3 | — | Adjacency graph, planarity diagnostic, seeded force layout → initial **CorridorPlan** (grammar). |
+| 3.2 | Topology & seeding | **IN-PROGRESS** | — (3.3b done) | RD + eval | Graph + planarity report + seeded embedding → capacity-aware plan + repair + restarts; must produce **valid** plans for P8/P25/P60 (P60 ≤ 20 s). |
 | 3.3 | Grammar realization (+3.3b bands) | **DONE** | — | RD + eval (+ bands) | Bands, connectors, J1/J2; 99 % coverage; P60 realisation 0.10 s. |
 | 3.4 | SA optimizer | BLOCKED | 3.2, 3.3 | — | Metropolis over grammar moves G1–G6 (U-6). |
 | 3.5 | Export & report | **DONE** | — | RD + eval | layout.json, layered DXF (audit clean), SVG preview, French report.md. `ale generate` wiring in 3.4. |
