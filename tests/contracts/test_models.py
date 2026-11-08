@@ -17,6 +17,7 @@ from ale.contracts.area_rule import AreaCheck, AreaTolerance
 from ale.contracts.corridor_plan import (
     BandPlan,
     BlockPlan,
+    ConnectorBay,
     CorridorPlan,
     FingerBay,
     PiecePlan,
@@ -222,6 +223,7 @@ def _corridor_instances() -> list[BaseModel]:
         block,
         block.bays[0],
         finger,
+        ConnectorBay(),
         corridor.locate("R3#01"),
         pieces,
         pieces.pieces[0],
