@@ -93,3 +93,19 @@ The geometry is rebuilt by 3.3 after every move. Metropolis acceptance, as in th
 
 Every grammar plan is a slicing layout. 3.3 may emit the equivalent `PolishExpression` for the report,
 but the optimiser state is the `CorridorPlan` (contract amendment A.1), not a free expression.
+
+## 8. Bands — several parallel corridors per piece (user decision U-7, 2026-11-08)
+
+A single spine cannot serve deep pieces: at 30 m depth each block is ~14 m deep while a 12 m² office within 2:1
+is at most ~4.9 m deep. A piece is therefore divided, across its spine axis, into **bands** stacked from the
+piece's min `v` upward. Each band = `block A | spine | block B` (the single-spine piece of §1 is a 1-band piece).
+Band depths sum to the piece depth; 3.3 chooses them.
+
+- **Connector**: when a piece has ≥ 2 bands, a corridor strip of width `s` spans the full piece depth at its
+  `start` (u ∈ [0, s)) or `end` (u ∈ [L − s, L)); every band spine runs from the connector to the far end, so
+  all spines are joined. 1-band pieces have no connector.
+- **J2 (collinear)**: if both pieces have 1 band, spines stay collinear (§5). Otherwise the primary's connector
+  must lie on the cut side; the secondary's spines end at the cut and touch it, so the secondary needs no connector.
+- **J1 (junction finger)**: v1 keeps the secondary at 1 band; the junction finger sits in the primary's band
+  adjacent to the cut (band 0 if `facing_block = A`, last band if `B`), in that band's facing block.
+- Guarantees of §2 are unchanged. New optimiser move **G7**: split a band / merge two adjacent bands (3.4).

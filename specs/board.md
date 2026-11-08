@@ -20,6 +20,7 @@ Maintained by the Router only. Directive: `specs/DIRECTIVE.md` (v2.2, supersedes
 | 3.4 | SA optimizer | BLOCKED | 3.2, 3.3 | — | Metropolis over grammar moves G1–G6 (U-6). |
 | 3.5 | Export & report | BLOCKED | 3.3 (3.4 for final metrics) | — | DXF / SVG / JSON / report.md. |
 | A.1 | Contract amendment: CorridorPlan + footprint decomposition | **DONE** | — | RD + eval | Contracts 1.0.0 → 1.1.0; adds `corridor_plan.py`, `footprint.py`; regenerates lock. |
+| A.2 | Contract amendment: bands | **IN-PROGRESS** | — | RD + eval | Merged together with the 3.3 rework (breaking plan change). |
 | 1.1 | Corpus ingestion & classification | BLOCKED | 0.1, 0.2, 0.4 · **test corpus** | — | `ale ingest`; vector/scanned PDF per page. |
 | 1.2 | CAD reader (DWG + DXF) | BLOCKED | 1.1 · test corpus · decision O-5 | — | ODA File Converter / accoreconsole. |
 | 1.3 | Vector-PDF reader | BLOCKED | 1.1 · test corpus | — | PyMuPDF. |
@@ -42,6 +43,7 @@ with ground truth. The Router will issue an annotation template before Phase 1.
 | U-4 | **Academic project, not for commercial use.** | Resolves O-4 (CubiCasa5K usable: attribution + share-alike on any published derived weights/data) and O-8 (PyMuPDF usable). Reference-plan copyright rule of directive §7 still applies: plans stay out of the repo, only derived statistics are kept. |
 | U-5 | **More room types.** | Taxonomy v1.1: 25 → 75 types (retail, food service, education, health, sport, culture, services, outdoor), from Uniclass 2015 SL + French ERP types. Seed template: 23 core types active, 49 optional types listed commented-out. |
 | U-6 | **Corridor grammar** for circulation (instead of a free slicing tree + penalty). | Every room touches a corridor by construction; circulation always connected. Spine per footprint piece, blocks of room bays / finger bays; L shapes via J1 (corner finger) / J2 (collinear spines). Replaces directive §3.B.1 free tree and 3.4 moves M1–M3 with grammar moves G1–G6. Design: `specs/design/corridor_grammar.md`. Contract amendment A.1. |
+| U-7 | **Bands**: several parallel corridors per piece, joined by a connector corridor. | Deep plates (P60's 30 m piece) become feasible. Contract amendment A.2 (CorridorPlan /2, contracts 1.2.0), then 3.3 rework. Design note §8. |
 | U-3 | **Corridor minimum width 1.2 m.** | `circulation.min_width_m` default 1.8 → 1.2 m (12 modules). |
 
 ## Open decisions
@@ -67,6 +69,7 @@ with ground truth. The Router will issue an annotation template before Phase 1.
 ## History
 
 - 2026-11-06 — v2.0 workspace initialised (tickets 1.1, 1.2 specified).
+- 2026-11-08 — User decision U-7 (bands). A.2 specified and dispatched; 3.3 rework to follow on top of it.
 - 2026-11-08 — 3.3 merged after review (539 tests). Greedy baseline overflows P8/P60 → 3.2 must estimate grammar circulation demand (open risk R-G1).
 - 2026-11-08 — CI run #13 green on all 9 jobs with extras (Windows: 501 pass, Excel/DXF tests run). Ticket 3.3 specified and dispatched.
 - 2026-11-07 — Reference corpus received (user's Drive zip, 446 files); network allowlist: drive.google.com, drive.usercontent.google.com (user-approved, "for now"). Inventory in `specs/corpus/inventory_2026-11-07.md` (derived counts only; plans kept out of git).
