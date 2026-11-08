@@ -491,11 +491,25 @@ def test_B08_J2_rules() -> None:
         bands(band([room("R3")]), band([room("R4")])),
     )
     assert good.check_against(ids, j2) == ()
-    # A multi-band secondary forces the 1-band primary to carry a connector it cannot have.
-    sec_only = plan(
+    # 1-band primary + multi-band secondary: the secondary's connector goes on its cut side
+    # (site_L: the cut is the secondary's min-x edge -> "start").
+    sec_end = plan(
+        piece([room("R1")], [room("R2")]),
+        bands(band([room("R3")]), band([room("R4")]), connector="end"),
+    )
+    out = sec_end.check_against(ids, j2)
+    assert len(out) == 1 and "secondary connector must be on the cut side (start)" in out[0]
+    sec_start = plan(
+        piece([room("R1")], [room("R2")]),
+        bands(band([room("R3")]), band([room("R4")]), connector="start"),
+    )
+    assert sec_start.check_against(ids, j2) == ()
+    sec_none = plan(
         piece([room("R1")], [room("R2")]), bands(band([room("R3")]), band([room("R4")]))
     )
-    assert sec_only.check_against(ids, j2) == ("primary connector must be on the cut side (end)",)
+    assert sec_none.check_against(ids, j2) == (
+        "secondary connector must be on the cut side (start)",
+    )
 
 
 def test_B08_J2_cut_side_variants() -> None:

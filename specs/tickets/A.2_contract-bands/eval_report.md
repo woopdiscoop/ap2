@@ -37,9 +37,10 @@ version `ale.corridor_plan/1` → `ale.corridor_plan/2`.
    unknown rooms, piece count and junction presence as unchanged). K07 updated accordingly.
 3. **Docstring "verbatim"**: re-wrapped to 100 columns, `block A | spine | block B` in RST double
    backticks, and `L − s` written with an ASCII hyphen (`L - s`) because ruff RUF002 rejects U+2212.
-4. **J2, 1-band primary + multi-band secondary**: literal reading emits
-   `primary connector must be on the cut side (end)` (the primary cannot carry a connector, so the
-   plan is infeasible per U-7).
+4. **J2, 1-band primary + multi-band secondary** (found in the first pass; RD §3 / B08 amended at
+   review 2026-11-08): the secondary's connector must be on the secondary's cut side, else
+   `secondary connector must be on the cut side (start|end)` (site_L: "start"). Implemented and tested
+   in `test_B08_J2_rules`. The module docstring keeps the original verbatim U-7 text.
 5. **J1 multi-band secondary without a connector** also yields `piece 1 has 2+ bands but no connector`
    (the connector rule exempts only a J2 secondary). B09 therefore gives that secondary a connector to
    get the single expected message.

@@ -280,7 +280,8 @@ class CorridorPlan(BaseModel):
         from the footprint's, a junction finger that is absent on a J1 footprint or present on
         a non-J1 footprint, and the band rules: a piece with 2+ bands needs a connector
         (except the secondary of a J2 footprint); on a J2 footprint with any multi-band piece
-        the primary's connector must be on the cut side; on a J1 footprint the secondary has
+        the primary's connector must be on its cut side if the primary has 2+ bands, else the
+        secondary's connector must be on its cut side; on a J1 footprint the secondary has
         exactly one band and the junction finger lies in the primary's band adjacent to the
         cut (band 0 for ``facing_block`` ``"A"``, the last band for ``"B"``), in its block of
         the same letter.
@@ -304,9 +305,12 @@ class CorridorPlan(BaseModel):
         elif junction is not None:
             out.append(f"junction finger on a {footprint.junction} footprint (J1 only)")
         if footprint.junction == "J2" and any(len(pc.bands) >= 2 for pc in self.pieces):
-            side = _cut_side(footprint)
-            if self.pieces[0].connector != side:
-                out.append(f"primary connector must be on the cut side ({side})")
+            # The primary carries the connector when it can (2+ bands), else the secondary does.
+            p = 0 if len(self.pieces[0].bands) >= 2 else 1
+            side = _cut_side(footprint, p)
+            if self.pieces[p].connector != side:
+                role = ("primary", "secondary")[p]
+                out.append(f"{role} connector must be on the cut side ({side})")
         return tuple(sorted(out))
 
     def _check_j1(self, junction: BayPosition | None, footprint: FootprintPieces) -> list[str]:
@@ -324,12 +328,12 @@ class CorridorPlan(BaseModel):
         return out
 
 
-def _cut_side(footprint: FootprintPieces) -> Literal["start", "end"]:
-    """``"end"`` if the cut lies on the primary's max-u edge, else ``"start"``."""
+def _cut_side(footprint: FootprintPieces, p: int) -> Literal["start", "end"]:
+    """``"end"`` if the cut lies on piece ``p``'s max-u edge, else ``"start"``."""
     if footprint.cut is None:  # pragma: no cover - a 2-piece footprint always has a cut
         raise ValueError("a J2 footprint has a cut")
-    primary = footprint.pieces[0]
+    piece = footprint.pieces[p]
     (cx, cy), _ = footprint.cut
-    if primary.spine_axis == "X":
-        return "end" if cx == primary.rect.x2() else "start"
-    return "end" if cy == primary.rect.y2() else "start"
+    if piece.spine_axis == "X":
+        return "end" if cx == piece.rect.x2() else "start"
+    return "end" if cy == piece.rect.y2() else "start"
