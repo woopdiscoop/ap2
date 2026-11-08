@@ -17,3 +17,6 @@ RD + eval written for the corridor-grammar realisation. E01/E02/E05 values verif
 - Manual fixture run (greedy plan): P25 valid layout (checks pass, 0.03 s); P8 overflows by 12 modules; P60 overflows by 86 / 84 modules (0.09 s). Risk for 3.2: grammar circulation (spine + fingers + strips) may exceed the 18 % budget at 0.93 fill — 3.2 must include a grammar-aware feasibility estimate.
 
 ## 3.3b (bands rework) specified 2026-11-08: RD_bands.md / eval_bands.md. To be merged together with A.2.
+
+## 3.3b review (2026-11-08)
+52028ea: 55 geometry tests + 2 strict xfails; N01 was a Router error (axis + depths) — corrected case added; band descent is local (17/150 shifted optima missed, documented xfail; generators use equal splits); J2 deep-secondary → JUNCTION_MISALIGNED; R03 uses a seeded random plan. Merged with A.2. Greedy fits none of P8/P25/P60, but random search shows valid plans exist for all three.
