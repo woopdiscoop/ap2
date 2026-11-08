@@ -26,6 +26,7 @@ __all__ = [
     "LayerMap",
     "LayerRole",
     "canon_layer",
+    "canon_layer_tokens",
     "load_layer_map",
     "propose_layer_map",
     "propose_role",
@@ -66,47 +67,74 @@ class LayerMap(BaseModel):
         return self.layers.get(layer, LayerRole.IGNORE)
 
 
-_NON_ALNUM = re.compile(r"[^A-Z0-9]")
+_NON_ALNUM = re.compile(r"[^A-Z0-9]+")
+
+
+def canon_layer_tokens(name: str) -> tuple[str, ...]:
+    """Canonical tokens: NFKC, accents stripped, upper case, non ``A-Z0-9`` → space, split."""
+    text = unicodedata.normalize("NFD", unicodedata.normalize("NFKC", name))
+    text = "".join(c for c in text if not unicodedata.combining(c)).upper()
+    return tuple(_NON_ALNUM.sub(" ", text).split())
 
 
 def canon_layer(name: str) -> str:
-    """Canonical layer name: NFKC, accents stripped, upper case, every non ``A-Z0-9`` removed."""
-    text = unicodedata.normalize("NFD", unicodedata.normalize("NFKC", name))
-    text = "".join(c for c in text if not unicodedata.combining(c)).upper()
-    return _NON_ALNUM.sub("", text)
+    """Canonical layer name: the canonical tokens joined by single spaces."""
+    return " ".join(canon_layer_tokens(name))
 
 
-def _kw(*words: str) -> tuple[str, ...]:
-    return tuple(canon_layer(w) for w in words)
+Keyword = tuple[str, ...]
 
 
-_ZONE_KW = _kw("ZONE", "LOCAUX", "ROOM", "A-AREA", "ESPACE")
+def _kw(*words: str) -> tuple[Keyword, ...]:
+    return tuple(canon_layer_tokens(w) for w in words)
 
-# (keywords, role) in priority order; the first group with a substring match wins.
-_RULES: tuple[tuple[tuple[str, ...], LayerRole], ...] = (
-    (_kw("COTE", "DIM"), LayerRole.IGNORE),
-    (_kw("HACH"), LayerRole.IGNORE),  # only when no zone keyword matches (see propose_role)
-    (_kw("AXE"), LayerRole.IGNORE),
-    (_kw("MOBILIER"), LayerRole.FURNITURE),
-    (_kw("DEFPOINTS", "VIEWPORT"), LayerRole.IGNORE),
-    (_ZONE_KW, LayerRole.ZONE),
+
+_ZONE_KW = _kw("ZONE", "LOCAL", "ROOM", "A AREA", "ESPACE")
+_HACHURE = _kw("HACHURE")
+
+# (keywords, role) in priority order (RD 1.2 section 3, amended); first match wins.
+_RULES: tuple[tuple[tuple[Keyword, ...], LayerRole], ...] = (
+    (_kw("COTE", "COTATION", "DIM", "DIMENSION", "AXE", "DEFPOINTS", "VIEWPORT"), LayerRole.IGNORE),
+    (_HACHURE, LayerRole.IGNORE),  # only when the name has no zone keyword
+    (_kw("MOBILIER", "EQUIPEMENT", "FURN", "A FURN"), LayerRole.FURNITURE),
     (_kw("SURFACE", "AREA", "M2"), LayerRole.AREA_LABEL),
-    (_kw("TEXTE", "TEXT", "NOM", "A-ANNO", "LIBELLE"), LayerRole.ROOM_LABEL),
-    (_kw("PORTE", "DOOR", "A-DOOR"), LayerRole.DOOR),
-    (_kw("FENETRE", "MENUISERIE", "WINDOW", "A-GLAZ", "CHASSIS"), LayerRole.WINDOW),
-    (_kw("MUR", "CLOISON", "WALL", "A-WALL", "VOILE", "MACONNERIE", "BETON"), LayerRole.WALL),
+    (_kw("TEXTE", "TEXT", "NOM", "LIBELLE", "A ANNO", "ETIQUETTE"), LayerRole.ROOM_LABEL),
+    (_ZONE_KW, LayerRole.ZONE),
+    (_kw("PORTE", "DOOR", "A DOOR"), LayerRole.DOOR),
+    (_kw("FENETRE", "MENUISERIE", "WINDOW", "A GLAZ", "CHASSIS", "BAIE"), LayerRole.WINDOW),
+    (
+        _kw("MUR", "CLOISON", "WALL", "A WALL", "VOILE", "MACONNERIE", "BETON", "PORTEUR"),
+        LayerRole.WALL,
+    ),
 )
-_HACH = canon_layer("HACH")
+
+
+def _token_matches(name_tok: str, kw_tok: str) -> bool:
+    """Equal, or a plural: keyword + ``S`` / ``X``, or French ``-AL`` → ``-AUX``."""
+    if name_tok in (kw_tok, kw_tok + "S", kw_tok + "X"):
+        return True
+    return kw_tok.endswith("AL") and name_tok == kw_tok[:-2] + "AUX"
+
+
+def _has_keyword(tokens: tuple[str, ...], keyword: Keyword) -> bool:
+    n, k = len(tokens), len(keyword)
+    return any(
+        all(_token_matches(tokens[i + j], keyword[j]) for j in range(k)) for i in range(n - k + 1)
+    )
+
+
+def _has_any(tokens: tuple[str, ...], keywords: tuple[Keyword, ...]) -> bool:
+    return any(_has_keyword(tokens, kw) for kw in keywords)
 
 
 def propose_role(layer_name: str) -> LayerRole:
-    """Keyword proposal for one layer name (RD 1.2 section 3, first match wins)."""
-    c = canon_layer(layer_name)
-    has_zone = any(k in c for k in _ZONE_KW)
+    """Whole-word keyword proposal for one layer name (RD 1.2 section 3, first match wins)."""
+    tokens = canon_layer_tokens(layer_name)
+    has_zone = _has_any(tokens, _ZONE_KW)
     for keywords, role in _RULES:
-        if keywords == (_HACH,) and has_zone:
+        if keywords is _HACHURE and has_zone:
             continue
-        if any(k in c for k in keywords):
+        if _has_any(tokens, keywords):
             return role
     return LayerRole.IGNORE
 

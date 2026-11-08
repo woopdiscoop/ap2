@@ -6,7 +6,7 @@ Environment: Linux, Python 3.13.18, ezdxf 1.4.5, shapely 2.2.0. No ODA / AutoCAD
 
 | ID | Test(s) (`tests/cad/`) | Result |
 |---|---|---|
-| D01 | `test_D01_layer_proposal`, `test_D01_layer_proposal_details` | pass (20-name table; `{"0": "WALL"}` preserved; YAML save/load round trip, 0.1 template loads) |
+| D01 | `test_D01_layer_proposal`, `test_D01_layer_proposal_details` | pass (20-name table + the 8 amended whole-word cases (`test_D01_layer_proposal_whole_words`); `{"0": "WALL"}` preserved; YAML save/load round trip, 0.1 template loads) |
 | D02 | `test_D02_units[4/5/6/1]`, `test_D02_units_inferred_from_doors`, `test_D02_units_override`, `test_D02_units_rules` | pass |
 | D03 | `test_D03_walls_pairs` | pass (5 walls = ground truth; thickness and centreline offset within 5 mm) |
 | D04 | `test_D04_walls_width_polyline`, `test_D04_width_polyline_variants` | pass (same 5 walls; LWPOLYLINE const width, POLYLINE default width, equal per-vertex widths) |
@@ -22,17 +22,19 @@ Environment: Linux, Python 3.13.18, ezdxf 1.4.5, shapely 2.2.0. No ODA / AutoCAD
 | D14 | `test_D14_real_corpus_smoke` (skips without `ALE_CORPUS_DIR`) | run manually on the reference corpus: **0 DXF, 17 DWG; no ODA converter detected → DWGs not read** |
 | D15 | `test_D15_gates` (lock --check) + commands below | pass |
 
-Gates: `pytest` whole suite 576 passed, 6 skipped (platform skips + D14); `ruff check src tests` clean;
+Gates: `pytest` whole suite 647 passed, 12 skipped after the rework merge (platform/extra skips + D14); `ruff check src tests` clean;
 `ruff format --check src tests` clean; `mypy` (strict) clean; `python -m ale.contracts.lock --check` OK.
 Coverage of `ale.cad`: 1110 statements, 58 missed → **94.8 % line** (92 % line+branch).
 
 ## Ambiguities and the literal reading chosen
 
-1. **Layer proposal order.** Groups are tried in the RD order, first match wins, on names with every
-   non-alphanumeric removed. Hence `TEXTE LOCAUX` → **ZONE** (`LOCAUX` is a zone keyword, tried before
-   `TEXTE`), and `MUR PORTEUR` → DOOR (`PORTE` before `MUR`). `COTATIONS` contains no keyword (`COTE`
-   is not a substring) → IGNORE by default. To keep `TEXTE LOCAUX`-style layers useful, texts on ZONE
-   layers are used as zone labels (`CAD_ZONE`).
+1. **Layer proposal** (reworked after review, RD §3 amended): whole-word matching on canonical tokens,
+   consecutive keyword tokens, plural `S`/`X`; role order IGNORE, FURNITURE, AREA_LABEL, ROOM_LABEL, ZONE,
+   DOOR, WINDOW, WALL. Two literal-reading notes: (a) the amended D01 requires `Locaux techniques` → zone,
+   but `LOCAUX` is neither `LOCAL`+`S` nor `LOCAL`+`X`; the French plural `-AL` → `-AUX` is therefore also
+   accepted as a plural. (b) `AREA` (AREA_LABEL) is tried before `A AREA` (ZONE), so `A-AREA-IDEN` →
+   area_label and the zone keyword `A AREA` can never win. Texts on ZONE layers still label zones
+   (`CAD_ZONE`, RD "zones carrying a label attribute/text"), which is principled and kept.
 2. **LayerRole values** are the lower-case names of the 0.1 `layer_map.yaml` format (`wall`, `door`, …);
    loading accepts any case, so `{"0": "WALL"}` validates.
 3. **Units precedence** taken literally: `$INSUNITS` → door inference → `units_override` → unknown (the

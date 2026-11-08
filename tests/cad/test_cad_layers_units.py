@@ -22,21 +22,44 @@ LAYER_TABLE: dict[str, LayerRole] = {
     "PORTES": R.DOOR,
     "A-DOOR": R.DOOR,
     "Menuiseries ext": R.WINDOW,
-    "TEXTE LOCAUX": R.ZONE,  # LOCAUX (zone group) precedes TEXTE (room-label group)
+    "TEXTE LOCAUX": R.ROOM_LABEL,
     "Surfaces": R.AREA_LABEL,
     "ZONES": R.ZONE,
-    "COTATIONS": R.IGNORE,  # no keyword ("COTE" is not a substring of "COTATIONS")
+    "COTATIONS": R.IGNORE,
     "Mobilier": R.FURNITURE,
     "0": R.IGNORE,
     "Defpoints": R.IGNORE,
     "FENÊTRES": R.WINDOW,
     "A-ANNO-TEXT": R.ROOM_LABEL,
     "HACHURES": R.IGNORE,
-    "HACH ZONE": R.ZONE,
+    "HACHURES ZONE": R.ZONE,
     "Voiles béton": R.WALL,
-    "A-AREA-IDEN": R.ZONE,
+    "A-AREA-IDEN": R.AREA_LABEL,  # AREA (area-label group) is tried before A AREA (zone)
     "COTES": R.IGNORE,
 }
+
+
+#: Whole-word cases required by the amended D01.
+AMENDED_CASES: dict[str, LayerRole] = {
+    "MUR PORTEUR": R.WALL,
+    "TEXTE LOCAUX": R.ROOM_LABEL,
+    "Portes": R.DOOR,
+    "PORTEUR": R.WALL,
+    "Locaux techniques": R.ZONE,
+    "COTATIONS": R.IGNORE,
+    "A-WALL-FULL": R.WALL,
+    "Baies vitrées": R.WINDOW,
+}
+
+
+def test_D01_layer_proposal_whole_words() -> None:
+    for name, role in AMENDED_CASES.items():
+        assert propose_role(name) is role, name
+    # no substring matching
+    assert propose_role("SUPPORTE") is R.IGNORE
+    assert propose_role("MURAL") is R.IGNORE
+    assert propose_role("AXES") is R.IGNORE
+    assert propose_role("Equipements") is R.FURNITURE
 
 
 def test_D01_layer_proposal() -> None:
@@ -51,7 +74,7 @@ def test_D01_layer_proposal() -> None:
 
 
 def test_D01_layer_proposal_details(tmp_path: Path) -> None:
-    assert canon_layer("Fenêtre-Ext.") == "FENETREEXT"
+    assert canon_layer("Fenêtre-Ext.") == "FENETRE EXT"
     assert propose_role("whatever") is R.IGNORE
     assert propose_role("SURFACE M2") is R.AREA_LABEL
     lm = propose_layer_map(["MUR", "PORTES", "Libellés"])
