@@ -23,6 +23,7 @@ Maintained by the Router only. Directive: `specs/DIRECTIVE.md` (v2.2, supersedes
 | A.2 | Contract amendment: bands | **IN-PROGRESS** | — | RD + eval | Merged together with the 3.3 rework (breaking plan change). |
 | 1.1 | Corpus ingestion & classification | **DONE** | — | RD + eval | Real corpus: 439 files → 1734 units (DWG 17 NEEDS_TOOL, PDF_VECTOR 879, PDF_SCANNED 436, RASTER 402), 0 failed, idempotent. |
 | 1.2 | CAD reader (DXF; DWG via converter) | **DONE** (library) | — | RD + eval | Layers (whole-word), units, walls, rooms, labels, openings, multi-plan, DWG→DXF via ODA/accoreconsole. Follow-up 1.2c: wire `ale layers` / `ale extract --kind dxf\|dwg` to the corpus DB. Real DWGs need ODA on the user's workstation. |
+| 1.2c | CAD → corpus CLI (`ale layers`, `ale extract` dxf/dwg) | **IN-PROGRESS** | — | RD + eval | |
 | 1.3 | Vector-PDF reader | BLOCKED | 1.1 · test corpus | — | PyMuPDF. |
 | 1.4 | Raster reader | BLOCKED | 1.1 · test corpus | — | CubiCasa5K (v2.0 spec in git history reusable). |
 | 1.5 | Semantic labelling | BLOCKED | 1.2, 1.3, 1.4 · decision O-3 | — | CAD text → PDF text → VLM → manual. |
