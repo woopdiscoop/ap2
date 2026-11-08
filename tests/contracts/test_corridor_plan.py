@@ -1,4 +1,4 @@
-"""Tests K01-K07 and S01-S03 (Ticket A.1): CorridorPlan contract amendment."""
+"""Tests K01-K07, S01-S03 (Ticket A.1) and B01-B10 (Ticket A.2): CorridorPlan contract."""
 
 from __future__ import annotations
 
@@ -15,6 +15,7 @@ from pydantic import ValidationError
 
 from ale.contracts import export_schemas, lock
 from ale.contracts.corridor_plan import (
+    BandPlan,
     BlockPlan,
     CorridorPlan,
     FingerBay,
@@ -49,8 +50,18 @@ def finger(left: tuple[str, ...] = (), right: tuple[str, ...] = (), **kw: Any) -
     return FingerBay(left=left, right=right, **kw)
 
 
+def band(a: list[Any] | None = None, b: list[Any] | None = None) -> BandPlan:
+    return BandPlan(block_a=BlockPlan(bays=tuple(a or ())), block_b=BlockPlan(bays=tuple(b or ())))
+
+
 def piece(a: list[Any], b: list[Any] | None = None) -> PiecePlan:
-    return PiecePlan(block_a=BlockPlan(bays=tuple(a)), block_b=BlockPlan(bays=tuple(b or ())))
+    """A 1-band piece."""
+    return PiecePlan(bands=(band(a, b),))
+
+
+def bands(*bs: BandPlan, connector: Any = "none") -> PiecePlan:
+    """A piece with the given bands (min v first)."""
+    return PiecePlan(bands=bs, connector=connector)
 
 
 def plan(*pieces: PiecePlan) -> CorridorPlan:
@@ -58,7 +69,7 @@ def plan(*pieces: PiecePlan) -> CorridorPlan:
 
 
 def sample_plan() -> CorridorPlan:
-    """2 pieces, room bays, finger bays (one stack empty), junction finger in piece 0 block B."""
+    """2 pieces, room bays, finger bays (one stack empty), junction in piece 0 band 0 block B."""
     return plan(
         piece(
             [room("R1"), finger(left=("R2", "R3")), room("R4")],
@@ -76,7 +87,7 @@ def fp(pts: tuple[tuple[int, int], ...]) -> FootprintPieces:
 
 
 def test_K01_version() -> None:
-    assert CONTRACTS_VERSION == "1.1.0"
+    assert CONTRACTS_VERSION == "1.2.0"
 
 
 # SHA-256 of the contract files as frozen at 1.0.0 (CONTRACTS.lock before amendment A.1),
@@ -157,17 +168,17 @@ def test_K03_roundtrip() -> None:
     y = load_yaml(CorridorPlan, dump_yaml(x))
     assert y == x
     for restored in (back, y):
-        a0 = restored.pieces[0].block_a.bays
+        a0 = restored.pieces[0].bands[0].block_a.bays
         assert [type(b) for b in a0] == [RoomBay, FingerBay, RoomBay]
-        b0 = restored.pieces[0].block_b.bays
+        b0 = restored.pieces[0].bands[0].block_b.bays
         assert isinstance(b0[0], FingerBay)
         assert b0[0].junction is True
         assert b0[0].left == () and b0[0].right == ()
-        assert isinstance(restored.pieces[1].block_a.bays[0], FingerBay)
-        assert restored.pieces[1].block_a.bays[0].left == ()
+        assert isinstance(restored.pieces[1].bands[0].block_a.bays[0], FingerBay)
+        assert restored.pieces[1].bands[0].block_a.bays[0].left == ()
     data = json.loads(canonical_json(x))
-    assert data["schema_version"] == "ale.corridor_plan/1"
-    assert data["pieces"][0]["block_a"]["bays"][0] == {"kind": "room", "room": "R1"}
+    assert data["schema_version"] == "ale.corridor_plan/2"
+    assert data["pieces"][0]["bands"][0]["block_a"]["bays"][0] == {"kind": "room", "room": "R1"}
     schema = json.loads(
         (export_schemas.SCHEMA_DIR / "CorridorPlan.schema.json").read_text(encoding="utf-8")
     )
@@ -216,7 +227,7 @@ def test_K04_validators_raw_data() -> None:
     good = sample_plan().model_dump(mode="json")
     assert CorridorPlan.model_validate(good) == sample_plan()
     bad = json.loads(json.dumps(good))
-    bad["pieces"][0]["block_a"]["bays"][0] = {"kind": "corridor", "room": "R1"}
+    bad["pieces"][0]["bands"][0]["block_a"]["bays"][0] = {"kind": "corridor", "room": "R1"}
     with pytest.raises(ValidationError):
         CorridorPlan.model_validate(bad)
     with pytest.raises(ValidationError):
@@ -224,7 +235,7 @@ def test_K04_validators_raw_data() -> None:
     with pytest.raises(ValidationError):
         FingerBay(left=("R1",), junction=1)  # type: ignore[arg-type]
     with pytest.raises(ValidationError):
-        RoomPosition(piece=0.0, block="A", bay=0, stack=None, index=None)  # type: ignore[arg-type]
+        RoomPosition(piece=0.0, band=0, block="A", bay=0, stack=None, index=None)  # type: ignore[arg-type]
 
 
 # --------------------------------------------------------------------------- K05
@@ -233,9 +244,9 @@ def test_K04_validators_raw_data() -> None:
 def test_K05_room_ids_locate() -> None:
     x = plan(piece([room("R1"), finger(left=("R2", "R3"), right=("R4",))], [room("R5")]))
     assert x.room_ids() == ("R1", "R2", "R3", "R4", "R5")
-    assert x.locate("R3") == RoomPosition(piece=0, block="A", bay=1, stack="left", index=1)
-    assert x.locate("R4") == RoomPosition(piece=0, block="A", bay=1, stack="right", index=0)
-    assert x.locate("R1") == RoomPosition(piece=0, block="A", bay=0, stack=None, index=None)
+    assert x.locate("R3") == RoomPosition(piece=0, band=0, block="A", bay=1, stack="left", index=1)
+    assert x.locate("R4") == RoomPosition(piece=0, band=0, block="A", bay=1, stack="right", index=0)
+    assert x.locate("R1") == RoomPosition(piece=0, band=0, block="A", bay=0, stack=None, index=None)
     r5 = x.locate("R5")
     assert r5.stack is None and r5.index is None and r5.block == "B" and r5.bay == 0
     with pytest.raises(KeyError):
@@ -245,8 +256,10 @@ def test_K05_room_ids_locate() -> None:
 def test_K05_room_ids_two_pieces() -> None:
     x = sample_plan()
     assert x.room_ids() == ("R1", "R2", "R3", "R4", "R5", "R6#01", "R6#02", "R7", "R8")
-    assert x.locate("R6#02") == RoomPosition(piece=0, block="B", bay=1, stack="right", index=1)
-    assert x.locate("R7") == RoomPosition(piece=1, block="A", bay=0, stack="right", index=0)
+    assert x.locate("R6#02") == RoomPosition(
+        piece=0, band=0, block="B", bay=1, stack="right", index=1
+    )
+    assert x.locate("R7") == RoomPosition(piece=1, band=0, block="A", bay=0, stack="right", index=0)
 
 
 # --------------------------------------------------------------------------- K06
@@ -255,11 +268,11 @@ def test_K05_room_ids_two_pieces() -> None:
 def test_K06_zone_violations() -> None:
     split = plan(piece([room("R1"), room("R2"), room("R3")]))
     assert split.zone_violations({"R1": P, "R2": A, "R3": P}) == (
-        "zone PUBLIC split in piece 0 block A",
+        "zone PUBLIC split in piece 0 band 0 block A",
     )
     mixed = plan(piece([room("R1"), finger(left=("R2",), right=("R3",))]))
     out = mixed.zone_violations({"R1": A, "R2": A, "R3": S})
-    assert "finger bay 1 of piece 0 block A mixes zones" in out
+    assert "finger bay 1 of piece 0 band 0 block A mixes zones" in out
     assert out == tuple(sorted(out))
     clean = sample_plan()
     zones = {"R1": P, "R2": P, "R3": P, "R4": A, "R5": S, "R6#01": S, "R6#02": S}
@@ -274,9 +287,9 @@ def test_K06_zone_violations_details() -> None:
     )
     zones = {"R1": P, "R2": A, "R3": P, "R4": A, "R5": A, "R6": S, "R7": P, "R8": S}
     assert x.zone_violations(zones) == (
-        "finger bay 1 of piece 0 block B mixes zones",
-        "zone ADMINISTRATIVE split in piece 0 block B",
-        "zone SERVICES split in piece 1 block A",
+        "finger bay 1 of piece 0 band 0 block B mixes zones",
+        "zone ADMINISTRATIVE split in piece 0 band 0 block B",
+        "zone SERVICES split in piece 1 band 0 block A",
     )
     # The junction finger is ignored for contiguity (its rooms do not break a run).
     j = plan(piece([room("R1"), finger(left=("R2",), junction=True), room("R3")]), piece([]))
@@ -284,7 +297,7 @@ def test_K06_zone_violations_details() -> None:
     # A finger's stacks are read left then right for contiguity.
     f = plan(piece([room("R1"), finger(left=("R2",), right=("R3",)), room("R4")]))
     assert f.zone_violations({"R1": P, "R2": A, "R3": A, "R4": P}) == (
-        "zone PUBLIC split in piece 0 block A",
+        "zone PUBLIC split in piece 0 band 0 block A",
     )
     with pytest.raises(KeyError):
         f.zone_violations({"R1": P, "R2": A, "R3": A})
@@ -307,7 +320,7 @@ def test_K07_check_against() -> None:
     assert out == ("J1 footprint needs a junction finger",)
     # Junction finger in the wrong block.
     wrong = plan(piece([finger(left=("R2",), junction=True)], [room("R1")]), piece([room("R3")]))
-    assert wrong.check_against(ids, j1) == ("junction finger in block A, expected facing block B",)
+    assert wrong.check_against(ids, j1) == ("junction finger must be in band 0 block B",)
 
 
 def test_K07_check_against_counts_and_junction_kinds() -> None:
@@ -322,6 +335,256 @@ def test_K07_check_against_counts_and_junction_kinds() -> None:
     with_junction = plan(piece([room("R1"), finger(junction=True)]), piece([room("R2")]))
     assert with_junction.check_against(iter(["R1", "R2"]), j2) == (
         "junction finger on a J2 footprint (J1 only)",
+    )
+
+
+# --------------------------------------------------------------------------- B01-B09 (A.2)
+
+
+BASE_REV = "3dcd970"  # spec commit of Ticket A.2, before the amendment
+
+
+def test_B01_version_schema() -> None:
+    assert CONTRACTS_VERSION == "1.2.0"
+    # ``pieces`` is required, so the default is read from the field (CorridorPlan() is invalid).
+    assert CorridorPlan.model_fields["schema_version"].default == "ale.corridor_plan/2"
+    assert plan(piece([room("R1")])).schema_version == "ale.corridor_plan/2"
+    assert export_schemas.main(["--check"]) == 0
+    assert lock.main(["--check"]) == 0
+
+
+def test_B02_footprint_unchanged() -> None:
+    files = (
+        "src/ale/contracts/footprint.py",
+        "src/ale/contracts/models.py",
+        "src/ale/contracts/geometry.py",
+    )
+    proc = subprocess.run(
+        ["git", "diff", BASE_REV, "--", *files],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=30,
+    )
+    if proc.returncode != 0:  # pragma: no cover - not a git checkout / revision unknown
+        pytest.skip(f"git diff unavailable: {proc.stderr.strip()}")
+    assert proc.stdout == ""
+
+
+def b03_plan() -> CorridorPlan:
+    return plan(
+        bands(
+            band([room("R1"), finger(left=("R2",), right=("R3",))], [room("R4")]),
+            band([], [finger(left=("R5", "R6"))]),
+            band([room("R7")], [finger(junction=True), room("R8")]),
+            connector="end",
+        ),
+        piece([finger(right=("R9",))], [room("R10")]),
+    )
+
+
+def test_B03_roundtrip() -> None:
+    x = b03_plan()
+    back = CorridorPlan.model_validate_json(canonical_json(x))
+    assert back == x
+    assert canonical_json(back) == canonical_json(x)
+    y = load_yaml(CorridorPlan, dump_yaml(x))
+    assert y == x
+    assert canonical_json(y) == canonical_json(x)
+    data = json.loads(canonical_json(x))
+    assert data["pieces"][0]["connector"] == "end"
+    assert len(data["pieces"][0]["bands"]) == 3
+    assert data["pieces"][1]["connector"] == "none"
+    schema = json.loads(
+        (export_schemas.SCHEMA_DIR / "CorridorPlan.schema.json").read_text(encoding="utf-8")
+    )
+    jsonschema.Draft202012Validator(schema).validate(data)
+    bad = json.loads(canonical_json(x))
+    bad["pieces"][1]["bands"] = []
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.Draft202012Validator(schema).validate(bad)
+
+
+@pytest.mark.parametrize(
+    ("build", "match"),
+    [
+        (lambda: plan(bands()), "at least 1"),
+        (lambda: plan(bands(*[band() for _ in range(7)], connector="start")), "at most 6"),
+        (lambda: plan(bands(band([room("R1")]), connector="start")), "1-band piece"),
+        (
+            lambda: plan(
+                bands(band([room("R1")]), band([], [finger(left=("R1",))]), connector="end")
+            ),
+            "more than once: R1",
+        ),
+        (
+            lambda: plan(piece([room("R1")]), piece([], [finger(junction=True)])),
+            r"pieces\[0\]",
+        ),
+    ],
+    ids=["zero_bands", "seven_bands", "one_band_connector", "dup_across_bands", "junction_p1"],
+)
+def test_B04_validators(build: Any, match: str) -> None:
+    with pytest.raises(ValidationError, match=match):
+        build()
+
+
+def test_B04_validators_ok() -> None:
+    six = bands(*[band() for _ in range(6)], connector="start")
+    assert len(six.bands) == 6
+    # A junction finger in any band of pieces[0] passes the model validator.
+    x = plan(bands(band(), band([finger(junction=True)]), connector="end"), piece([room("R1")]))
+    assert x.locate("R1").piece == 1
+    with pytest.raises(ValidationError):
+        PiecePlan(bands=(band(),), connector="middle")  # type: ignore[arg-type]
+
+
+def test_B05_order_locate() -> None:
+    x = plan(bands(band([room("R1")], [room("R2")]), band([finger(left=("R3", "R4"))], [])))
+    assert x.room_ids() == ("R1", "R2", "R3", "R4")
+    assert x.locate("R4") == RoomPosition(piece=0, band=1, block="A", bay=0, stack="left", index=1)
+    assert x.locate("R2") == RoomPosition(piece=0, band=0, block="B", bay=0, stack=None, index=None)
+
+
+def test_B06_zones_per_band() -> None:
+    x = plan(bands(band([room("R1")]), band([room("R2")])))
+    assert x.zone_violations({"R1": P, "R2": P}) == ()
+    split = plan(bands(band([room("R0")]), band([room("R1"), room("R2"), room("R3")])))
+    assert split.zone_violations({"R0": P, "R1": P, "R2": A, "R3": P}) == (
+        "zone PUBLIC split in piece 0 band 1 block A",
+    )
+    mixed = plan(bands(band([room("R0")]), band([], [room("R1"), finger(("R2",), ("R3",))])))
+    assert mixed.zone_violations({"R0": P, "R1": P, "R2": A, "R3": S}) == (
+        "finger bay 1 of piece 0 band 1 block B mixes zones",
+    )
+
+
+RECT = ((0, 0), (240, 0), (240, 180), (0, 180))
+
+
+def test_B07_connector_rules() -> None:
+    rect = fp(RECT)
+    ids = ["R1", "R2"]
+    none = plan(bands(band([room("R1")]), band([room("R2")])))
+    assert none.check_against(ids, rect) == ("piece 0 has 2+ bands but no connector",)
+    start = plan(bands(band([room("R1")]), band([room("R2")]), connector="start"))
+    assert start.check_against(ids, rect) == ()
+
+
+def test_B08_J2_rules() -> None:
+    j2 = fp(J2_POLY)
+    assert j2.junction == "J2"
+    assert j2.cut is not None and j2.cut[0][0] == j2.pieces[0].rect.x2()
+    ids = ["R1", "R2", "R3", "R4"]
+    one = plan(piece([room("R1")], [room("R2")]), piece([room("R3")], [room("R4")]))
+    assert one.check_against(ids, j2) == ()
+    wrong = plan(
+        bands(band([room("R1")]), band([room("R2")]), connector="start"),
+        piece([room("R3")], [room("R4")]),
+    )
+    out = wrong.check_against(ids, j2)
+    assert len(out) == 1 and "cut side (end)" in out[0]
+    assert out == ("primary connector must be on the cut side (end)",)
+    good = plan(
+        bands(band([room("R1")]), band([room("R2")]), connector="end"),
+        bands(band([room("R3")]), band([room("R4")])),
+    )
+    assert good.check_against(ids, j2) == ()
+    # A multi-band secondary forces the 1-band primary to carry a connector it cannot have.
+    sec_only = plan(
+        piece([room("R1")], [room("R2")]), bands(band([room("R3")]), band([room("R4")]))
+    )
+    assert sec_only.check_against(ids, j2) == ("primary connector must be on the cut side (end)",)
+
+
+def test_B08_J2_cut_side_variants() -> None:
+    # site_L mirrored in x: the cut lies on the primary's min-x edge ("start").
+    mirrored = fp(((480, 300), (180, 300), (180, 180), (0, 180), (0, 0), (480, 0)))
+    # Vertical variants (primary spine Y): cut on max y / min y.
+    tall = fp(((300, 0), (300, 300), (180, 300), (180, 480), (0, 480), (0, 0)))
+    tall_low = fp(((0, 480), (0, 0), (180, 0), (180, 180), (300, 180), (300, 480)))
+    two = plan(bands(band([room("R1")]), band([room("R2")]), connector="end"), piece([room("R3")]))
+    ids = ["R1", "R2", "R3"]
+    got = {}
+    for name, f in (("mirrored", mirrored), ("tall", tall), ("tall_low", tall_low)):
+        assert f.junction == "J2", name
+        got[name] = two.check_against(ids, f)
+    assert tall.pieces[0].spine_axis == "Y" and tall_low.pieces[0].spine_axis == "Y"
+    assert got == {
+        "mirrored": ("primary connector must be on the cut side (start)",),
+        "tall": (),
+        "tall_low": ("primary connector must be on the cut side (start)",),
+    }
+
+
+J1_IDS = ["R1", "R2", "R3", "R4"]
+
+
+def test_B09_J1_rules() -> None:
+    j1 = fp(J1_POLY)
+    assert j1.junction == "J1" and j1.facing_block == "B"
+    sec2 = plan(
+        piece([room("R1")], [finger(left=("R2",), junction=True)]),
+        bands(band([room("R3")]), band([room("R4")]), connector="start"),
+    )
+    out = sec2.check_against(J1_IDS, j1)
+    assert any(m.startswith("secondary must have exactly one band") for m in out)
+    assert out == ("secondary must have exactly one band in a J1 footprint",)
+    in_band0 = plan(
+        bands(
+            band([room("R1")], [finger(left=("R2",), junction=True)]),
+            band([room("R3")]),
+            band(),
+            connector="start",
+        ),
+        piece([room("R4")]),
+    )
+    assert in_band0.check_against(J1_IDS, j1) == ("junction finger must be in band 2 block B",)
+    in_band2 = plan(
+        bands(
+            band([room("R1")]),
+            band([room("R3")]),
+            band([], [finger(left=("R2",), junction=True)]),
+            connector="start",
+        ),
+        piece([room("R4")]),
+    )
+    assert in_band2.check_against(J1_IDS, j1) == ()
+    wrong_block = plan(
+        bands(
+            band([room("R1")]),
+            band([room("R3")]),
+            band([finger(left=("R2",), junction=True)]),
+            connector="start",
+        ),
+        piece([room("R4")]),
+    )
+    assert wrong_block.check_against(J1_IDS, j1) == ("junction finger must be in band 2 block B",)
+    # Missing junction is still reported alongside a multi-band secondary.
+    none = plan(piece([room("R1"), room("R2")]), bands(band([room("R3")]), band([room("R4")])))
+    assert none.check_against(J1_IDS, j1) == (
+        "J1 footprint needs a junction finger",
+        "piece 1 has 2+ bands but no connector",
+        "secondary must have exactly one band in a J1 footprint",
+    )
+
+
+def test_B09_J1_facing_A() -> None:
+    # J1_POLY mirrored in x: the cut lies on the primary's left side -> facing block A.
+    j1a = fp(((600, 300), (400, 300), (400, 120), (0, 120), (0, 0), (600, 0)))
+    assert j1a.junction == "J1" and j1a.facing_block == "A"
+    ok = plan(
+        bands(band([finger(left=("R2",), junction=True)]), band([room("R1")]), connector="end"),
+        piece([room("R3")]),
+    )
+    assert ok.check_against(["R1", "R2", "R3"], j1a) == ()
+    bad = plan(
+        bands(band([room("R1")]), band([finger(left=("R2",), junction=True)]), connector="end"),
+        piece([room("R3")]),
+    )
+    assert bad.check_against(["R1", "R2", "R3"], j1a) == (
+        "junction finger must be in band 0 block A",
     )
 
 
@@ -368,4 +631,20 @@ def test_S03_gates() -> None:
     proc = _tool("ruff", "format", "--check", *files)
     assert proc.returncode == 0, proc.stdout + proc.stderr
     proc = _tool("mypy", *NEW_MODULES)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+
+
+@pytest.mark.slow
+@pytest.mark.timeout(120)
+def test_B10_gates() -> None:
+    """ruff / format / mypy strict on the A.2 files (suite and coverage gates run outside)."""
+    if shutil.which("ruff") is None and _tool("ruff", "--version").returncode != 0:
+        pytest.skip("ruff not installed")  # pragma: no cover
+    files = ["src/ale/contracts/corridor_plan.py", "tests/contracts/test_corridor_plan.py"]
+    files.append("tests/contracts/test_models.py")
+    proc = _tool("ruff", "check", *files)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    proc = _tool("ruff", "format", "--check", *files)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    proc = _tool("mypy", "src/ale/contracts/corridor_plan.py", "src/ale/contracts/version.py")
     assert proc.returncode == 0, proc.stdout + proc.stderr
