@@ -23,7 +23,7 @@ Maintained by the Router only. Directive: `specs/DIRECTIVE.md` (v2.2, supersedes
 | A.2 | Contract amendment: bands | **DONE** | — | RD + eval | Contracts 1.2.0 (CorridorPlan /2). |
 | Q.1 | Realisation never emits rule-breaking rooms | **IN-PROGRESS** | — | RD + eval | ROOM_INFEASIBLE / STACK_INFEASIBLE instead of fallbacks. |
 | A.3 | Contract: inner connector | **IN-PROGRESS** | — | RD + eval | Contracts 1.3.0, backward compatible. |
-| Q.2a | Façade capacity in feasibility | **IN-PROGRESS** | — | RD + eval | W_FACADE_TIGHT warning. |
+| Q.2a | Façade capacity in feasibility | **DONE** | — | RD + eval | usable façade: site_rect 43.2 m, site_L 90.0 m; P60 demand 117.9 m → W_FACADE_TIGHT. |
 | Q.2 | Façade-aware layouts | BLOCKED | Q.1, A.3 | — | Inner connectors in geometry/seeding/moves; façade-pull move; grammar façade capacity in feasibility. |
 | Q.3 | Cache into geometry + P8 reliability | BLOCKED | Q.2 | — | |
 | 1.1 | Corpus ingestion & classification | **DONE** | — | RD + eval | Real corpus: 439 files → 1734 units (DWG 17 NEEDS_TOOL, PDF_VECTOR 879, PDF_SCANNED 436, RASTER 402), 0 failed, idempotent. |
