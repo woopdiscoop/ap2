@@ -37,7 +37,9 @@ Gates: whole suite 564 passed, 5 skipped; `ruff check` clean; `ruff format --che
    `#`), `k` taken verbatim from the instance id (so zero padding is kept, e.g. `#01`).
 3. **Façade oui/non**: read as the placed room's actual facade contact (a side lying on a
    footprint edge over a positive length), not the program's `needs_facade` flag.
-4. **Circulation ratio**: circulation area / module-footprint area, shown in percent.
+4. **Circulation ratio** (revised after router review): engine definition, circulation area ÷
+   Σ net target area of the program, shown with its budget `circulation.ratio`, e.g.
+   `Circulation : 12,00 m² (16,0 % du net ; budget 18,0 %)` (percentages with 1 decimal).
    Circulation area is recomputed from the circulation rects (not `metrics.circulation_area_m2`);
    Σ net = Σ targets of `prepared.instances`; Σ placed = Σ room rect areas.
 5. **Circulation colours** ("`#ffffff` with grey hatch-free fill `#eeeeee`"): fill `#eeeeee`,

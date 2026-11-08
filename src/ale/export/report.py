@@ -31,6 +31,7 @@ __all__ = [
     "RoomInfo",
     "area_label",
     "fr_num",
+    "fr_pct1",
     "fr_signed",
     "render_report",
     "room_infos",
@@ -50,6 +51,7 @@ ZONE_FR: dict[MacroZone, str] = {
 
 _TIMES = "\u00d7"  # multiplication sign of "L x l"
 _CENT = Decimal("0.01")
+_TENTH = Decimal("0.1")
 _TEN_THOUSANDTH = Decimal("0.0001")
 
 
@@ -64,6 +66,11 @@ def _quantize(x: float | int | Decimal, q: Decimal) -> Decimal:
 def fr_num(x: float | int | Decimal) -> str:
     """``x`` with 2 decimals and ``,`` as decimal separator (half-even rounding)."""
     return f"{_quantize(x, _CENT):f}".replace(".", ",")
+
+
+def fr_pct1(x: float | int | Decimal) -> str:
+    """``x`` with 1 decimal and ``,`` as decimal separator (percentages)."""
+    return f"{_quantize(x, _TENTH):f}".replace(".", ",")
 
 
 def fr_signed(x: float | int | Decimal) -> str:
@@ -236,11 +243,9 @@ def render_report(
     placed_m2 = sum((to_decimal(i.placed_m2) for i in infos), Decimal(0))
     circ_cells = sum(c.rect.area_cells() for c in layout.circulation)
     circ_m2 = cells_to_m2(circ_cells, grid.module_mm)
-    circ_ratio = (
-        Decimal(circ_cells) * 100 / Decimal(layout.footprint.area_cells())
-        if layout.footprint.area_cells()
-        else Decimal(0)
-    )
+    # Engine definition: circulation / sum of net targets (budget = circulation.ratio x net).
+    circ_pct = to_decimal(circ_m2) * 100 / net_m2 if net_m2 else Decimal(0)
+    budget_pct = to_decimal(config.circulation.ratio) * 100
     module_m = Decimal(grid.module_mm) / 1000
     m = layout.metrics
 
@@ -253,7 +258,8 @@ def render_report(
         f"- Surface de l'emprise : {fr_num(footprint_m2)} m²",
         f"- Σ surfaces nettes (programme) : {fr_num(net_m2)} m²",
         f"- Σ surfaces placées : {fr_num(placed_m2)} m²",
-        f"- Circulation : {fr_num(circ_m2)} m² ({fr_num(circ_ratio)} % de l'emprise)",
+        f"- Circulation : {fr_num(circ_m2)} m² ({fr_pct1(circ_pct)} % du net ; "
+        f"budget {fr_pct1(budget_pct)} %)",
         f"- Dépassement total : {fr_num(m.total_overshoot_m2)} m²",
         f"- Coût total : {fr_num(m.total_cost)}",
         "",

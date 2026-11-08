@@ -348,7 +348,9 @@ def test_X08_report_summary(tmp_path: Path, layout: Layout, prepared: PreparedIn
         "100,00 m²",
         f"{fr2(net)} m²",
         f"{fr2(placed)} m²",
-        f"{fr2(circ)} m² ({fr2(circ)} %",  # footprint = 100 m², so the ratio equals the area
+        # Engine definition: circulation / sum of net targets; budget = circulation.ratio.
+        f"Circulation : {fr2(circ)} m² ({f'{circ / net * 100:.1f}'.replace('.', ',')} % du net"
+        f" ; budget {f'{AleConfig().circulation.ratio * 100:.1f}'.replace('.', ',')} %)",
         f"{fr2(layout.metrics.total_overshoot_m2)} m²",
         fr2(layout.metrics.total_cost),
     ):
@@ -427,10 +429,13 @@ def test_X08_report_no_violation(tmp_path: Path, prepared: PreparedInput) -> Non
 def test_X08_report_cost_weights_from_config(
     tmp_path: Path, layout: Layout, prepared: PreparedInput
 ) -> None:
-    cfg = AleConfig.model_validate({"optimizer": {"weights": {"aspect": 4.0}}})
+    cfg = AleConfig.model_validate(
+        {"optimizer": {"weights": {"aspect": 4.0}}, "circulation": {"ratio": 0.25}}
+    )
     text = _export(layout, prepared, tmp_path, config=cfg).report_md.read_text(encoding="utf-8")
     cost = {r[0]: r for r in _table(_section(text, "## Coût"))}
     assert cost["aspect"][1:] == ["3,25", "4,00", "13,00"]
+    assert "Circulation : 12,00 m² (16,0 % du net ; budget 25,0 %)" in text
 
 
 # --------------------------------------------------------------------------- X09
