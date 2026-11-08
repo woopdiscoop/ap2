@@ -33,8 +33,8 @@ Maintained by the Router only. Directive: `specs/DIRECTIVE.md` (v2.2, supersedes
 | 1.4 | Raster reader (classical CV v1, library) | **IN-PROGRESS** | — | RD + eval | No model weights needed; CubiCasa can be added later behind the same API. |
 | 1.5 | Semantic labelling (library) | **DONE** | — | RD + eval | Text-first; VLM interface + cache with fake providers. For integration: renderer must use the same extent model; real provider must enforce vlm.timeout_s. Real provider = O-3. |
 | 1.6 | Scale reconciliation & review flags (library) | **DONE** | — | RD + eval | Dimension-text rule fixed (plausibility + notation tie-break). |
-| 2.1 | Topology extraction (library) | **IN-PROGRESS** | — | RD + eval | PlanGeometry → contacts (WALL/DOOR), façade lengths. |
-| 2.2 | Rulebook build | BLOCKED | 2.1, 0.3 | — | Fidelity-weighted, blended with seed. |
+| 2.1 | Topology extraction (library) | **DONE** | — | RD + eval | Facing-edge shared length (formula fixed); DOOR contacts; façade lengths. |
+| 2.2 | Rulebook build (library + `ale rulebook build`) | **IN-PROGRESS** | — | RD + eval | Fidelity-weighted adjacency, quantiles, core offset, orientation; blend with seed; report.md. |
 
 **External blocker for all Phase 1 tickets:** the annotated test set (directive §7) — ≥ 12 plans
 (4 DWG/DXF incl. one multi-plan model space and one without `$INSUNITS`, 4 vector PDF, 4 JPEG/scanned)
@@ -75,6 +75,7 @@ with ground truth. The Router will issue an annotation template before Phase 1.
 ## History
 
 - 2026-11-06 — v2.0 workspace initialised (tickets 1.1, 1.2 specified).
+- 2026-11-08 — 2.1 merged after review (shared-length formula fixed by Worker). 2.2 specified and dispatched.
 - 2026-11-08 — 1.5 merged after review (69 tests, 99 %).
 - 2026-11-08 — 1.6 merged after review (64 tests, 100 % branch coverage).
 - 2026-11-08 — User: "launch all". Dispatched in parallel (libraries, no CLI wiring): 1.3, 1.4 (classical CV), 1.5 (fake VLM providers), 1.6, 2.1, Q.2a. Integration ticket I.1 (wire extract/review) to follow.
