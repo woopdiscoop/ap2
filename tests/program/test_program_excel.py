@@ -61,6 +61,7 @@ FROZEN_CODES = {
     "W_SHEET_NAME",
     "W_UNKNOWN_COLUMN",
     "W_ZONE_DEFAULTED",
+    "W_FACADE_TIGHT",  # Q.2a
 }
 
 
