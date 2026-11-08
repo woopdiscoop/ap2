@@ -8,3 +8,6 @@ O-2 resolved (2026-11-07): **two hard rules** — area (−3 % / +max(3 %, 1.2 m
 
 ## U-6 (2026-11-07)
 Re-scoped: realises a `CorridorPlan` (contract A.1) instead of a free Polish expression. Spec to follow design note §4; depends on A.1. The area/aspect analysis above still applies per room (room bay: w × D; stack room: w_s × h_i).
+
+## Spec (2026-11-08)
+RD + eval written for the corridor-grammar realisation. E01/E02/E05 values verified with an independent implementation of RD §5. Inverse-generation property tests (G01–G04) guarantee the realiser reaches known-optimal geometry.
