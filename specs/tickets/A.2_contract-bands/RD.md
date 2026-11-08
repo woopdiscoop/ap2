@@ -65,9 +65,13 @@ Unchanged: `RoomBay`, `FingerBay`, `BlockPlan`, method names and signatures.
 
 **`check_against`** — add footprint rules (messages sorted, as before):
 - `piece p has 2+ bands but no connector` — unless p is the secondary of a J2 footprint.
-- J2 with any piece having ≥ 2 bands: the primary's connector must be on the cut side → otherwise
-  `primary connector must be on the cut side (start|end)`. The cut side is `"end"` if the cut lies on the
-  primary's max-u edge (axis X: max x; axis Y: max y), else `"start"`.
+- J2 with any piece having ≥ 2 bands (amended at review 2026-11-08):
+  - primary has ≥ 2 bands → its connector must be on the cut side, else
+    `primary connector must be on the cut side (start|end)`; the secondary then needs no connector;
+  - primary has 1 band (so no connector) and the secondary has ≥ 2 → the **secondary's** connector must be on
+    its cut side, else `secondary connector must be on the cut side (start|end)`; the primary's single spine then
+    meets that connector (3.3 aligns it within the cut segment).
+  Cut side of a piece = `"end"` if the cut lies on its max-u edge (axis X: max x; axis Y: max y), else `"start"`.
 - J1: secondary must have 1 band → `secondary must have exactly one band in a J1 footprint`; the junction finger
   must be in band 0 when `facing_block == "A"` / in the last band when `"B"`, inside that band's block of the
   same letter → otherwise `junction finger must be in band k block X`.

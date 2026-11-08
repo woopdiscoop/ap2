@@ -104,8 +104,9 @@ Band depths sum to the piece depth; 3.3 chooses them.
 - **Connector**: when a piece has ≥ 2 bands, a corridor strip of width `s` spans the full piece depth at its
   `start` (u ∈ [0, s)) or `end` (u ∈ [L − s, L)); every band spine runs from the connector to the far end, so
   all spines are joined. 1-band pieces have no connector.
-- **J2 (collinear)**: if both pieces have 1 band, spines stay collinear (§5). Otherwise the primary's connector
-  must lie on the cut side; the secondary's spines end at the cut and touch it, so the secondary needs no connector.
+- **J2 (collinear)**: if both pieces have 1 band, spines stay collinear (§5). If the primary has ≥ 2 bands, its connector
+  lies on the cut side and the secondary needs none; if only the secondary has ≥ 2 bands, the secondary's connector lies
+  on its cut side and the primary's single spine meets it.
 - **J1 (junction finger)**: v1 keeps the secondary at 1 band; the junction finger sits in the primary's band
   adjacent to the cut (band 0 if `facing_block = A`, last band if `B`), in that band's facing block.
 - Guarantees of §2 are unchanged. New optimiser move **G7**: split a band / merge two adjacent bands (3.4).
