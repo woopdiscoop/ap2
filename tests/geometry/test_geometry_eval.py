@@ -32,7 +32,7 @@ def test_V01_violations() -> None:
     assert ("REQUIRED_ADJ", ("r4",)) in found  # r4 is far from r1
     assert ("AVOID_ADJ", ("r1", "r2")) in found  # r1 touches r2
     zone = [v for v in real.layout.metrics.violations if v.code == "ZONE_SPLIT"]
-    assert any("zone PUBLIC split in piece 0 block B" in v.detail for v in zone)
+    assert any("zone PUBLIC split in piece 0 band 0 block B" in v.detail for v in zone)
     keys = [(v.code, v.instance_ids) for v in real.layout.metrics.violations]
     assert keys == sorted(keys)
     # Without a plan there is no ZONE_SPLIT.
