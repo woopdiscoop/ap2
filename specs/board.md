@@ -23,7 +23,7 @@ Maintained by the Router only. Directive: `specs/DIRECTIVE.md` (v2.2, supersedes
 | A.2 | Contract amendment: bands | **DONE** | — | RD + eval | Contracts 1.2.0 (CorridorPlan /2). |
 | 1.1 | Corpus ingestion & classification | **DONE** | — | RD + eval | Real corpus: 439 files → 1734 units (DWG 17 NEEDS_TOOL, PDF_VECTOR 879, PDF_SCANNED 436, RASTER 402), 0 failed, idempotent. |
 | 1.2 | CAD reader (DXF; DWG via converter) | **DONE** (library) | — | RD + eval | Layers (whole-word), units, walls, rooms, labels, openings, multi-plan, DWG→DXF via ODA/accoreconsole. Follow-up 1.2c: wire `ale layers` / `ale extract --kind dxf\|dwg` to the corpus DB. Real DWGs need ODA on the user's workstation. |
-| 1.2c | CAD → corpus CLI (`ale layers`, `ale extract` dxf/dwg) | **IN-PROGRESS** | — | RD + eval | |
+| 1.2c | CAD → corpus CLI (`ale layers`, `ale extract` dxf/dwg) | **DONE** | — | RD + eval | Empty layer map → in-memory proposal + warning; NEEDS_TOOL DWGs retried. |
 | 1.3 | Vector-PDF reader | BLOCKED | 1.1 · test corpus | — | PyMuPDF. |
 | 1.4 | Raster reader | BLOCKED | 1.1 · test corpus | — | CubiCasa5K (v2.0 spec in git history reusable). |
 | 1.5 | Semantic labelling | BLOCKED | 1.2, 1.3, 1.4 · decision O-3 | — | CAD text → PDF text → VLM → manual. |
@@ -70,6 +70,7 @@ with ground truth. The Router will issue an annotation template before Phase 1.
 ## History
 
 - 2026-11-06 — v2.0 workspace initialised (tickets 1.1, 1.2 specified).
+- 2026-11-08 — 1.2c merged after review (710 tests).
 - 2026-11-08 — A.2 + 3.3b merged together (686 tests, contracts 1.2.0). Router feasibility probe (random plans, scratch): valid grammar plans exist for P8 (2906/5390), P25 (522/1264), P60 (22/672, bands [4,1]) → risk R-G1 closed; greedy plan is the weak part → 3.2 must find valid plans.
 - 2026-11-08 — 1.2 merged after review (layer rule fixed to whole words; -AL→-AUX plurals).
 - 2026-11-08 — 1.1 merged after review (614 tests). Note: PDF_VECTOR counts every page with drawing paths (charts, diagrams in the reports) — plan detection is a later step. Follow-up: dev-only install fails mypy on ezdxf imports in 3.1's site.py (CI unaffected).
