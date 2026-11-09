@@ -1,0 +1,29 @@
+# Default "programme physique" (Annexe format) mapping of Ticket P.2: espace name → room type.
+#
+# Ordered list, first match wins. `match` is a Python regular expression searched in the
+# folded espace name (lower case, accents removed, spaces collapsed: "Hall d'entrée" →
+# "hall d'entree"). `type` is a taxonomy key (ROOM or VERTICAL) or null (= exclude the row).
+# `zone` (Public / Administratif / Services) is optional: empty = the type's default zone.
+# `facade` (true/false, default false) is the needs_facade flag of the program row.
+# The defaults reproduce the hand-made AREP-MS Annexe 3 conversion (specs/design/arep_ms_gaps.md).
+- {match: 'parking', type: null}
+- {match: '\bhall\b|accueil', type: entrance_hall, zone: Public, facade: true}
+- {match: 'gardien', type: security_room, zone: Services, facade: true}
+- {match: 'bureau d.?\s*ordre', type: mail_room, zone: Administratif, facade: false}
+- {match: 'archive', type: archive, zone: Services, facade: false}
+- {match: 'stockage|rangement', type: storage, zone: Services, facade: false}
+- {match: 'serveur', type: it_room, zone: Services, facade: false}
+- {match: 'nettoyage|menage|entretien', type: cleaning_room, zone: Services, facade: false}
+- {match: 'regie', type: control_room, zone: Services, facade: false}
+- {match: '\blocal tech', type: technical_room, zone: Services, facade: false}
+- {match: 'sanit|ablution|\bwc\b|toilette', type: sanitary, zone: Services, facade: false}
+- {match: 'buvette|cafeteria', type: bar, zone: Public, facade: false}
+- {match: 'infirmerie', type: first_aid_room, zone: Services, facade: false}
+- {match: 'priere', type: quiet_room, zone: Administratif, facade: false}
+- {match: 'conference', type: auditorium, zone: Public, facade: false}
+- {match: 'salon', type: waiting_area, zone: Public, facade: true}
+- {match: 'reunion', type: meeting_room, zone: Administratif, facade: true}
+- {match: 'open.?space|plateau', type: open_office, zone: Administratif, facade: true}
+- {match: 'chauffeur', type: staff_room, zone: Administratif, facade: false}
+- {match: 'bureau|chef|secretariat|direct|departement|president|coordination|cellule|expert|charge de mission|division', type: office, zone: Administratif, facade: true}
+- {match: 'attente', type: waiting_area, zone: Public, facade: true}
