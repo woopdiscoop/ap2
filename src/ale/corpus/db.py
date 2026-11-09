@@ -1,7 +1,7 @@
 """Schema and migrations of ``corpus.sqlite`` (Ticket 1.1 RD section 3).
 
 ``ale init`` creates the database at ``user_version = 0`` with only the ``ale_meta``
-table. :func:`migrate` brings it to :data:`SCHEMA_VERSION` (1) and is a no-op when the
+table. :func:`migrate` brings it to :data:`SCHEMA_VERSION` (2) and is a no-op when the
 database is already current. ``ale_meta`` is never touched.
 """
 
@@ -26,7 +26,7 @@ __all__ = [
     "utc_now",
 ]
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 _SCHEMA_V1 = """
 CREATE TABLE IF NOT EXISTS inputs (
@@ -74,6 +74,18 @@ CREATE INDEX IF NOT EXISTS events_event ON events (event);
 """
 
 
+_SCHEMA_V2 = """
+CREATE TABLE IF NOT EXISTS review_flags (
+    sha256 TEXT NOT NULL,
+    page INTEGER NOT NULL,
+    plan_index INTEGER NOT NULL,
+    flag TEXT NOT NULL,
+    PRIMARY KEY (sha256, page, plan_index, flag),
+    FOREIGN KEY (sha256, page) REFERENCES units (sha256, page)
+);
+"""
+
+
 class CorpusDbError(Exception):
     """``corpus.sqlite`` cannot be used (unknown schema version, I/O error)."""
 
@@ -102,10 +114,9 @@ def migrate(conn: sqlite3.Connection) -> int:
         raise CorpusDbError(
             f"corpus.sqlite: schema version {found} is newer than supported ({SCHEMA_VERSION})"
         )
-    if found < 1:
-        conn.executescript(
-            f"BEGIN;\n{_SCHEMA_V1}\nPRAGMA user_version = {SCHEMA_VERSION};\nCOMMIT;"
-        )
+    if found < SCHEMA_VERSION:
+        schema = (_SCHEMA_V1 if found < 1 else "") + _SCHEMA_V2
+        conn.executescript(f"BEGIN;\n{schema}\nPRAGMA user_version = {SCHEMA_VERSION};\nCOMMIT;")
     return found
 
 

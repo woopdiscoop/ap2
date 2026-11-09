@@ -40,16 +40,16 @@ def test_P01_cp1252_console(run_ale, tmp_path: Path) -> None:
     assert (target / "ale.toml").is_file()
 
 
-def test_P01_cp1252_console_stub_message(run_ale, tmp_path: Path) -> None:
-    """Stub messages are written through the same safe stream (cp1252 console)."""
-    target = tmp_path / "ws Łódź"
+def test_P01_cp1252_console_status_message(run_ale, tmp_path: Path) -> None:
+    """Status output must not crash on a cp1252 console with a Unicode workspace."""
+    target = tmp_path / "Łódź ws"
     assert run_ale(["init", "--workspace", str(target)]).returncode == 0
-    proc = run_ale(["review", "--workspace", str(target)], PYTHONIOENCODING="cp1252")
-    assert proc.returncode == 3
+    proc = run_ale(["status", "--workspace", str(target)], PYTHONIOENCODING="cp1252")
+    assert proc.returncode == 0
     stderr = proc.stderr.decode("cp1252", errors="replace")
     assert "Traceback" not in stderr
     assert "UnicodeEncodeError" not in stderr
-    assert "ale review: not implemented yet (Ticket 1.6)" in stderr
+    assert "TOTAL" in proc.stdout.decode("cp1252", errors="replace")
 
 
 def test_P03_utf8_io(tmp_path: Path) -> None:

@@ -12,7 +12,7 @@ from typer.testing import CliRunner, Result
 
 # Reuse the DXF builders of tests/cad and the byte builders of tests/corpus.
 _TESTS = Path(__file__).resolve().parents[1]
-for _sub in ("cad", "corpus"):
+for _sub in ("cad", "corpus", "pdfread", "raster"):
     if str(_TESTS / _sub) not in sys.path:
         sys.path.insert(0, str(_TESTS / _sub))
 

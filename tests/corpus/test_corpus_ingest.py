@@ -442,11 +442,11 @@ def test_C13_migration(tmp_workspace: Workspace, input_dir: Path, db: Path) -> N
     assert query(db, "PRAGMA user_version") == [(0,)]
     assert read_status(db).total_units == 0  # an un-migrated DB reads as empty
     ingest(tmp_workspace, input_dir)
-    assert query(db, "PRAGMA user_version") == [(1,)]
+    assert query(db, "PRAGMA user_version") == [(2,)]
     assert query(db, "SELECT key, value FROM ale_meta ORDER BY key") == meta_before
     schema = query(db, "SELECT type, name, sql FROM sqlite_master ORDER BY name")
     with closing(sqlite3.connect(db)) as conn:
-        assert migrate(conn) == 1  # re-opening: no-op
+        assert migrate(conn) == 2  # re-opening: no-op
     assert query(db, "SELECT type, name, sql FROM sqlite_master ORDER BY name") == schema
     assert {r[1] for r in schema} >= {"inputs", "files", "file_paths", "units", "events"}
 

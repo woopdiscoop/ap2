@@ -7,8 +7,8 @@ entries win) and returns what changed.
 ``run_extract`` reads the selected units and writes one
 ``extracted/<sha256>/<page>/<plan_index>/plan.json`` per plan
 (``canonical_json(PlanGeometry)``, atomic rewrite, unchanged bytes are not rewritten).
-Only the CAD kinds are extracted in this ticket; PDF and raster units are counted as
-``not_implemented`` and left untouched. A failing unit never aborts the run.
+CAD, vector/scanned PDF and raster units share scale, text labelling and review flags.
+A failing unit never aborts the run.
 
 Sources are read from the input folders recorded in ``corpus.sqlite``; nothing is ever
 written there (DWG conversion works on a temporary copy, output goes to ``cache/dxf``).
@@ -39,8 +39,13 @@ from ale.cad import (
     save_layer_map,
 )
 from ale.contracts.enums import FileStatus, SourceKind
+from ale.contracts.models import PlanGeometry
 from ale.contracts.serialization import canonical_json
 from ale.corpus.db import CorpusDbError, add_event, connect, migrate, utc_now
+from ale.join import resolve_scale, review_flags
+from ale.labels import VlmCache, label_plan
+from ale.pdfread import read_pdf_page
+from ale.raster import rasterize_pdf_page, read_raster
 from ale.workspace import CORPUS_FILENAME, LAYER_MAP_FILENAME, Workspace, WorkspaceError
 
 __all__ = [
@@ -273,6 +278,8 @@ class ExtractReport:
     failed: int = 0
     needs_tool: int = 0
     not_implemented: int = 0
+    excluded: int = 0
+    by_kind: dict[str, int] = field(default_factory=dict)
     plans: int = 0
     files_written: int = 0
     #: Layers proposed in memory because ``layer_map.yaml`` had none (None: map used).
@@ -287,6 +294,8 @@ class ExtractReport:
             "failed": self.failed,
             "needs_tool": self.needs_tool,
             "not_implemented": self.not_implemented,
+            "excluded": self.excluded,
+            "by_kind": dict(sorted(self.by_kind.items())),
             "plans": self.plans,
             "files_written": self.files_written,
             "proposed_layers": self.proposed_layers,
@@ -357,6 +366,35 @@ def _set_status(
     )
 
 
+def _page_meta(unit: _Unit) -> dict[str, Any]:
+    """Page fields override file fields; unspecified fields inherit from the file."""
+    meta = {k: v for k, v in unit.meta.items() if k != "pages"}
+    meta.update(unit.meta.get("pages", {}).get(str(unit.page), {}))
+    return meta
+
+
+def _exclude(
+    conn: sqlite3.Connection,
+    unit: _Unit,
+    name: str,
+    score: float,
+    report: ExtractReport,
+    warnings: tuple[str, ...],
+) -> None:
+    reason = f"not a plan (score {score:.2f})"
+    _set_status(conn, unit, FileStatus.EXCLUDED, reason)
+    conn.execute("DELETE FROM review_flags WHERE sha256 = ? AND page = ?", (unit.sha256, unit.page))
+    add_event(
+        conn,
+        "extract_excluded",
+        unit.sha256,
+        unit.page,
+        {"rel_path": name, "reason": reason, "warnings": list(warnings)},
+    )
+    report.excluded += 1
+    report.problems.append((name, reason))
+
+
 def _extract_unit(
     ws: Workspace,
     conn: sqlite3.Connection,
@@ -368,53 +406,108 @@ def _extract_unit(
     source, name = _source_path(conn, unit.sha256)
     if source is None:
         raise FileNotFoundError(f"source file not found: {name}")
-    dxf, status, message = _dxf_for(ws, unit, source, environ)
-    if dxf is None:
-        if status == "NEEDS_TOOL":
-            report.needs_tool += 1
-            if unit.status == FileStatus.NEEDS_TOOL.value:
-                return  # still no converter: left unchanged
-            _set_status(conn, unit, FileStatus.NEEDS_TOOL, message)
-            report.problems.append((name, message))
-            log.warning("%s: %s", name, message, extra={"event": "corpus.extract.needs_tool"})
+    meta = _page_meta(unit)
+    plans: tuple[PlanGeometry, ...]
+    warnings: tuple[str, ...]
+    if unit.kind in _CAD_KINDS:
+        dxf, status, message = _dxf_for(ws, unit, source, environ)
+        if dxf is None:
+            if status == "NEEDS_TOOL":
+                report.needs_tool += 1
+                if unit.status == FileStatus.NEEDS_TOOL.value:
+                    return
+                _set_status(conn, unit, FileStatus.NEEDS_TOOL, message)
+                report.problems.append((name, message))
+                log.warning("%s: %s", name, message, extra={"event": "corpus.extract.needs_tool"})
+                return
+            _fail(conn, unit, name, f"DWG conversion failed: {message}", report)
             return
-        _fail(conn, unit, name, f"DWG conversion failed: {message}", report)
+        cad = read_cad(
+            dxf,
+            source_sha256=unit.sha256,
+            layer_map=layer_map,
+            config=ws.config,
+            units_override=_units_override(unit.meta, unit.page),
+            source_kind=SourceKind(unit.kind),
+        )
+        plans, warnings = cad.plans, cad.warnings
+    elif unit.kind == SourceKind.PDF_VECTOR.value:
+        pdf = read_pdf_page(source, unit.page, source_sha256=unit.sha256, config=ws.config)
+        if not pdf.is_plan_likely:
+            _exclude(conn, unit, name, pdf.plan_score, report, pdf.warnings)
+            return
+        plans, warnings = pdf.plans, pdf.warnings
+    else:
+        if unit.kind not in (SourceKind.PDF_SCANNED.value, SourceKind.RASTER.value):
+            raise ValueError(f"unsupported source kind {unit.kind}")
+        if unit.kind == SourceKind.PDF_SCANNED.value:
+            image = rasterize_pdf_page(
+                source, unit.page, dpi=meta.get("dpi", ws.config.extract.raster_dpi)
+            )
+            raster = read_raster(
+                image,
+                source_sha256=unit.sha256,
+                page=unit.page,
+                source_kind=SourceKind.PDF_SCANNED,
+                config=ws.config,
+            )
+        else:
+            raster = read_raster(
+                source, source_sha256=unit.sha256, page=unit.page, config=ws.config
+            )
+        if raster.plan_score < 0.3:
+            _exclude(conn, unit, name, raster.plan_score, report, raster.warnings)
+            return
+        plans, warnings = raster.plans, raster.warnings
+    if not plans:
+        _fail(conn, unit, name, NO_PLAN_REASON, report, warnings=warnings)
         return
-    is_dwg = unit.kind == SourceKind.DWG.value
-    result = read_cad(
-        dxf,
-        source_sha256=unit.sha256,
-        layer_map=layer_map,
-        config=ws.config,
-        units_override=_units_override(unit.meta, unit.page),
-        source_kind=SourceKind.DWG if is_dwg else SourceKind.DXF,
-    )
-    if not result.plans:
-        _fail(conn, unit, name, NO_PLAN_REASON, report, warnings=result.warnings)
-        return
+    processed = []
+    for plan in plans:
+        scaled = resolve_scale(plan, meta=meta, config=ws.config)
+        labelled = label_plan(
+            scaled, image=None, provider=None, cache=VlmCache.for_workspace(ws), config=ws.config
+        )
+        processed.append(
+            labelled.plan.model_copy(
+                update={
+                    "warnings": tuple(dict.fromkeys((*labelled.plan.warnings, *labelled.warnings)))
+                }
+            )
+        )
+    conn.execute("DELETE FROM review_flags WHERE sha256 = ? AND page = ?", (unit.sha256, unit.page))
+
     written = 0
-    for plan in result.plans:
+    for plan in processed:
         if _write_atomic(
             plan_path(ws, unit.sha256, unit.page, plan.plan_index), canonical_json(plan)
         ):
             written += 1
-    _remove_stale(ws, unit.sha256, unit.page, len(result.plans))
+        conn.executemany(
+            "INSERT INTO review_flags (sha256, page, plan_index, flag) VALUES (?, ?, ?, ?)",
+            [
+                (unit.sha256, unit.page, plan.plan_index, flag)
+                for flag in review_flags(plan, ws.config)
+            ],
+        )
+    _remove_stale(ws, unit.sha256, unit.page, len(processed))
     _set_status(conn, unit, FileStatus.EXTRACTED, None)
     detail = {
         "rel_path": name,
-        "plans": len(result.plans),
-        "source_kind": SourceKind.DWG.value if is_dwg else SourceKind.DXF.value,
-        "warnings": list(result.warnings),
+        "plans": len(processed),
+        "source_kind": unit.kind,
+        "warnings": list(warnings),
     }
     add_event(conn, "extracted", unit.sha256, unit.page, detail)
     report.extracted += 1
-    report.plans += len(result.plans)
+    report.by_kind[unit.kind] = report.by_kind.get(unit.kind, 0) + 1
+    report.plans += len(processed)
     report.files_written += written
     log.info(
         "%s: %d plan(s) extracted",
         name,
-        len(result.plans),
-        extra={"event": "corpus.extracted", "sha256": unit.sha256, "plans": len(result.plans)},
+        len(processed),
+        extra={"event": "corpus.extracted", "sha256": unit.sha256, "plans": len(processed)},
     )
 
 
@@ -486,9 +579,6 @@ def run_extract(
                 extra={"event": "corpus.extract.proposed_layer_map"},
             )
         for unit in units:
-            if unit.kind not in _CAD_KINDS:
-                report.not_implemented += 1
-                continue
             try:
                 _extract_unit(ws, conn, unit, layer_map, report, environ)
             except Exception as exc:  # one unit must never abort the run

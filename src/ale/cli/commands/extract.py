@@ -1,4 +1,4 @@
-"""``ale extract``: geometry of the ingested sources (Ticket 1.2c: DXF / DWG only)."""
+"""``ale extract``: geometry of the ingested sources (CAD, PDF and raster)."""
 
 from __future__ import annotations
 
@@ -42,8 +42,11 @@ def format_extract(report: ExtractReport) -> str:
         f"{report.files_written} fichier(s) écrit(s))",
         f"  échecs : {report.failed}",
         f"  outil manquant : {report.needs_tool}",
-        f"  non implémentées (PDF / raster) : {report.not_implemented}",
+        f"  exclues : {report.excluded}",
     ]
+    lines.extend(
+        f"  {kind} : {count} unité(s) extraite(s)" for kind, count in sorted(report.by_kind.items())
+    )
     lines.extend(f"    - {name} : {reason}" for name, reason in report.problems)
     return "\n".join(lines)
 

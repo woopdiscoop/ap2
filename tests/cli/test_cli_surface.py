@@ -21,9 +21,7 @@ STUB_OPTIONS: dict[str, list[str]] = {
 
 # `ingest` and `status` are implemented since Ticket 1.1, `generate` since 3.4 and
 # `rulebook build` since 2.2 (no longer stubs).
-STUB_TICKETS: dict[str, str] = {
-    "review": "1.6",
-}
+STUB_TICKETS: dict[str, str] = {}
 
 
 @pytest.fixture
