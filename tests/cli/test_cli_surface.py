@@ -19,10 +19,10 @@ STUB_OPTIONS: dict[str, list[str]] = {
     "status": ["--workspace", "--json"],
 }
 
-# `ingest` and `status` are implemented since Ticket 1.1, `generate` since 3.4 (no longer stubs).
+# `ingest` and `status` are implemented since Ticket 1.1, `generate` since 3.4 and
+# `rulebook build` since 2.2 (no longer stubs).
 STUB_TICKETS: dict[str, str] = {
     "review": "1.6",
-    "rulebook build": "2.2",
 }
 
 
