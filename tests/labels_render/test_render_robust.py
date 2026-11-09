@@ -127,7 +127,7 @@ def test_scanned_pdf_reloaded_at_dpi(tmp_path: Path) -> None:
         doc.save(path)
     plan = _plan(SourceKind.PDF_SCANNED, frame=Frame.Y_DOWN)
     data, extent = plan_image(plan, config=CONFIG, source=path, dpi=150)
-    assert extent == (0.0, 0.0, 600.0, 400.0)
+    assert extent == (-0.5, -0.5, 599.5, 399.5)
     assert png_size(data) == (600, 400)
 
 

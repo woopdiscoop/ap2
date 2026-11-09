@@ -363,15 +363,21 @@ def _remove_stale(ws: Workspace, sha: str, page: int, keep: int) -> None:
             shutil.rmtree(child, ignore_errors=True)
 
 
-def _select(conn: sqlite3.Connection, only_new: bool, kind: str | None) -> list[_Unit]:
-    statuses = (
-        (FileStatus.NEW.value,) if only_new else (FileStatus.NEW.value, FileStatus.FAILED.value)
-    )
-    where = f"u.status IN ({', '.join('?' * len(statuses))})"
-    params: list[str] = list(statuses)
-    if not only_new:  # retry DWG units waiting for a converter
-        where = f"({where} OR (u.status = ? AND u.kind = ?))"
-        params += [FileStatus.NEEDS_TOOL.value, SourceKind.DWG.value]
+def _select(
+    conn: sqlite3.Connection, only_new: bool, kind: str | None, *, force: bool = False
+) -> list[_Unit]:
+    params: list[str] = []
+    if force:
+        where = "1 = 1"  # All statuses, including explicitly excluded units.
+    else:
+        statuses = (
+            (FileStatus.NEW.value,) if only_new else (FileStatus.NEW.value, FileStatus.FAILED.value)
+        )
+        where = f"u.status IN ({', '.join('?' * len(statuses))})"
+        params.extend(statuses)
+        if not only_new:  # retry DWG units waiting for a converter
+            where = f"({where} OR (u.status = ? AND u.kind = ?))"
+            params += [FileStatus.NEEDS_TOOL.value, SourceKind.DWG.value]
     sql = (
         "SELECT u.sha256, u.page, u.kind, u.status, f.meta_json FROM units u "
         f"JOIN files f ON f.sha256 = u.sha256 WHERE {where}"
@@ -692,22 +698,28 @@ def run_extract(
     kind: str | None = None,
     environ: Mapping[str, str] | None = None,
     no_vlm: bool = False,
+    force: bool = False,
 ) -> ExtractReport:
     """Extract the selected units (``kind``: a key of :data:`KIND_FILTERS` or None).
 
     Selection: status NEW (``only_new``) or NEW, FAILED and DWG units in NEEDS_TOOL
-    (default, retry). An empty ``layer_map.yaml`` is replaced, for this run only, by a
+    (default, retry). ``force`` selects every status (still filtered by kind) and is
+    incompatible with ``only_new``. Each forced attempt records ``extract_forced``;
+    the normal atomic writer, flag replacement and VLM cache are reused. An empty
+    ``layer_map.yaml`` is replaced, for this run only, by a
     proposal over the selected units' layers. ``no_vlm`` skips the configured VLM
     provider (text labelling only). Raises
     :class:`WorkspaceError` only when the corpus or ``layer_map.yaml`` cannot be used.
     """
+    if force and only_new:
+        raise ValueError("--force et --only-new sont incompatibles.")
     if kind is not None and kind not in KIND_FILTERS:
         raise ValueError(f"unknown kind {kind!r}")
     report = ExtractReport()
     layer_map = _layer_map(ws)
     vlm = _make_vlm(ws, no_vlm, report)
     with closing(_open_corpus(ws)) as conn:
-        units = _select(conn, only_new, kind)
+        units = _select(conn, only_new, kind, force=force)
         report.selected = len(units)
         if not layer_map.layers and any(u.kind in _CAD_KINDS for u in units):
             layer_map = _proposed_map(ws, conn, units, environ)
@@ -718,6 +730,14 @@ def run_extract(
                 extra={"event": "corpus.extract.proposed_layer_map"},
             )
         for unit in units:
+            if force:
+                add_event(
+                    conn,
+                    "extract_forced",
+                    unit.sha256,
+                    unit.page,
+                    {"previous_status": unit.status, "kind": unit.kind},
+                )
             try:
                 _extract_unit(ws, conn, unit, layer_map, report, environ, vlm)
             except Exception as exc:  # one unit must never abort the run
