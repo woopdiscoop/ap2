@@ -1,0 +1,12 @@
+footprint:
+- - 0.0
+  - 0.0
+- - 24.0
+  - 0.0
+- - 24.0
+  - 18.0
+- - 0.0
+  - 18.0
+north_angle_deg: 0.0
+access_edge: 0
+core_hint: null
