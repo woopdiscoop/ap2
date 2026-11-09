@@ -73,3 +73,7 @@ Local implementation commit: `ebf11111c3411dea5abdb905d278ac3ec358ece0` on `code
 The connected GitHub app could read repository metadata (account-level push permission true), but its Git Trees write call also returned HTTP 403 `Resource not accessible by integration`. Account permission does not establish token/application write scope. No remote branch, commit, tree or PR was created by these rejected calls; the base branch was never pushed or merged. No alternate endpoint writes were attempted after the app's write rejection.
 
 Prepared portable artifacts outside the repository: `/tmp/ale-i1-evidence/I.1-integration.bundle`, `I.1-integration.patch`, and `PR.md`. The bundle requires base commit `1d08396844e9f711e354a342fb2586393702d3d6`; the PR body includes all measured failures and interpretation notes. Restore effective Contents and Pull requests write access before retrying publication. Ticket remains blocked for both Router reconciliation of legacy tests and remote delivery.
+
+### Publication access restored
+
+On the user's requested access recheck, pushing `codex/I.1-integration` succeeded. The authentication failures above are historical and no longer block branch delivery. The three documented legacy test conflicts still block merge acceptance; the PR is submitted as a draft for Router review.
