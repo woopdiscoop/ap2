@@ -29,7 +29,7 @@ Maintained by the Router only. Directive: `specs/DIRECTIVE.md` (v2.2, supersedes
 | 1.1 | Corpus ingestion & classification | **DONE** | — | RD + eval | Real corpus: 439 files → 1734 units (DWG 17 NEEDS_TOOL, PDF_VECTOR 879, PDF_SCANNED 436, RASTER 402), 0 failed, idempotent. |
 | 1.2 | CAD reader (DXF; DWG via converter) | **DONE** (library) | — | RD + eval | Layers (whole-word), units, walls, rooms, labels, openings, multi-plan, DWG→DXF via ODA/accoreconsole. Follow-up 1.2c: wire `ale layers` / `ale extract --kind dxf\|dwg` to the corpus DB. Real DWGs need ODA on the user's workstation. |
 | 1.2c | CAD → corpus CLI (`ale layers`, `ale extract` dxf/dwg) | **DONE** | — | RD + eval | Empty layer map → in-memory proposal + warning; NEEDS_TOOL DWGs retried. |
-| I.2 | Claude labelling in `ale extract` | READY | I.1 | RD + eval | Render plan image per kind (bbox model), prepare_image, make_provider; opt-in; mocked tests. |
+| I.2 | Claude labelling in `ale extract` | **DONE** | I.1 | RD + eval | Render plan image per kind (bbox model), prepare_image, make_provider; opt-in; mocked tests. |
 | P.1 | Claude VLM provider | **DONE** | 3c9db4e | RD + eval + eval_report | User decision U-8: VLM = Claude (claude-opus-5-5, effort low, structured output, no sampling params, cached). |
 | I.1 | Integration: PDF/raster extract, labels, scale, `ale review` | **DONE** | — | RD + eval | Assigned to an external Codex agent; PR to be reviewed by the Router. |
 | 1.3 | Vector-PDF reader (library) | **DONE** | — | RD + eval | Plan-likeness on merged walls; HABS PDFs correctly identified as scanned (→ raster path). |
@@ -80,6 +80,7 @@ with ground truth. The Router will issue an annotation template before Phase 1.
 
 - 2026-11-06 — v2.0 workspace initialised (tickets 1.1, 1.2 specified).
 - 2026-11-09 — User: yes to seed-rulebook draft and Claude as VLM. Seed draft written and validated; P.1 specified and dispatched. CI: raster extra added to the install line.
+- 2026-11-09 — **I.2 merged**: `ale extract` sends still-untyped rooms to Claude with a rendered plan image when `[vlm] provider` is set (missing key → French warning, text-only); `--no-vlm`. Follow-ups: raster extent should be (−0.5, −0.5, W−0.5, H−0.5); consider `ale extract --force`. AREP-MS Annexe 3 converted (outside repo); gaps in `specs/design/arep_ms_gaps.md`.
 - 2026-11-09 — **I.1 merged** (PR #1, Codex, 3cdb3c0): `ale extract` for PDF/raster + scale/labels/flags for all plans, DB v2 `review_flags`, `ale review` HTML; independent review 1142 passed. No CLI stubs remain. I.2 now ready.
 - 2026-11-09 — CI #60/#61: T05 (seed P60 ≤ 20 s) fails intermittently (20.4–20.5 s) since Q.2 — post-seed steps ignore the deadline; routed to Q.3 (Q311). I.2 specified (waits for I.1).
 - 2026-11-09 — I.1 scope kept text-only; Claude provider wiring into `ale extract` queued as I.2 (after I.1).
