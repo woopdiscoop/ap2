@@ -12,6 +12,16 @@ the marker over all blocks; every band spine runs the full length (split in two 
 connector); a block whose bays before the marker end before ``u_c`` gets a circulation filler
 strip up to ``u_c``; bays after the marker start at ``u_c + s``.
 
+Ticket Q.3 (façade-aware depths): the band depth search key (RD 3.3 §5.1, amended) is
+``(n_failures, n_no_facade, cost, |D_A - D_B|, D_A)`` and the band-depth descent (3.3b) ranks
+arrangements by ``(n_failures, n_no_facade, cost)``. ``n_no_facade`` counts the
+``needs_facade`` rooms predicted to end with façade ``< f`` from the candidate geometry
+(:attr:`ale.geometry.blocks.BlockOut.no_facade`: a room bay in an exterior block has façade
+= its width, a stack room only when outermost in an exterior block; linked pieces
+included). A block is *exterior* when its outer long side (band 0 block A, last band block
+B) lies on the footprint exterior along at least half of the band region; there, room bays
+of ``needs_facade`` rooms take the smallest compliant width (RD 3.3 §5.2, amended).
+
 Deterministic and exact (integer modules, ``Fraction`` targets); no randomness — ``seed``
 is only recorded in the layout. Problems with a valid plan become :class:`Failure` entries,
 never exceptions.
@@ -31,6 +41,7 @@ from ale.contracts.corridor_plan import BandPlan, ConnectorBay, CorridorPlan, Fi
 from ale.contracts.footprint import FootprintPieces, Piece, decompose_footprint
 from ale.contracts.models import Layout, LayoutMetrics, PlacedRoom, RoomSpec, Rulebook
 from ale.geometry.blocks import AnyBay, BlockOut, Consts, Item, RoomReq, Solver
+from ale.geometry.checks import exterior_contacts
 from ale.geometry.evaluate import evaluate
 from ale.geometry.junction import (
     across_origin,
@@ -55,8 +66,9 @@ _SHIFTS = tuple(d for k in range(1, _MAX_SHIFT + 1) for d in (k, -k))
 Bays = tuple[AnyBay, ...]
 Connector = Literal["none", "start", "end", "inner"]
 Fail = tuple[str, str]
-Score = tuple[int, Fraction]
-_NO_SCORE: Score = (1 << 30, Fraction(0))
+Score = tuple[int, int, Fraction]
+"""``(n_failures, n_no_facade, cost)`` (Q.3)."""
+_NO_SCORE: Score = (1 << 30, 0, Fraction(0))
 
 
 class Failure(BaseModel):
@@ -123,8 +135,18 @@ class _BandOut:
         own = self.a.area_dev + self.b.area_dev + self.a.strip_cells + self.b.strip_cells
         return own + sum((po.cost() for po in self.link.pieces), Fraction(0))
 
-    def key(self) -> tuple[int, Fraction, int, int]:
-        return (len(self.failures()), self.cost(), abs(self.d_a - self.b_depth), self.d_a)
+    def no_facade(self) -> int:
+        """Q.3: predicted ``needs_facade`` rooms without façade (linked pieces included)."""
+        return self.a.no_facade + self.b.no_facade + sum(po.no_facade() for po in self.link.pieces)
+
+    def key(self) -> tuple[int, int, Fraction, int, int]:
+        return (
+            len(self.failures()),
+            self.no_facade(),
+            self.cost(),
+            abs(self.d_a - self.b_depth),
+            self.d_a,
+        )
 
 
 @dataclass
@@ -146,8 +168,11 @@ class _PieceOut:
     def cost(self) -> Fraction:
         return sum((bo.cost() for bo in self.bands), Fraction(0))
 
+    def no_facade(self) -> int:
+        return sum(bo.no_facade() for bo in self.bands)
+
     def score(self) -> Score:
-        return (len(self.failures()), self.cost())
+        return (len(self.failures()), self.no_facade(), self.cost())
 
     def linked(self) -> list[_PieceOut]:
         return [po for bo in self.bands for po in bo.link.pieces]
@@ -189,6 +214,8 @@ class _Realizer:
         self.timed_out = False
         self._blocks: dict[tuple[int, int, str, int], BlockOut] = {}
         self._fixed: dict[tuple[int, int], _PieceOut] = {}
+        self._exterior: dict[tuple[int, int, str], bool] = {}
+        self._poly = prepared.footprint.polygon
 
     # ------------------------------------------------------------------ frames
     def region(self, p: int) -> tuple[int, int]:
@@ -199,6 +226,26 @@ class _Realizer:
             return 0, length
         return (self.k.s if connector == "start" else 0), length - self.k.s
 
+    def exterior(self, p: int, k: int, side: str) -> bool:
+        """Q.3: whether block ``side`` of band ``k`` of piece ``p`` is exterior — band 0
+        block A or the last band's block B, whose outer long side lies on the footprint
+        exterior along at least half of the band region."""
+        key = (p, k, side)
+        hit = self._exterior.get(key)
+        if hit is None:
+            n = len(self.plan.pieces[p].bands)
+            hit = False
+            if (side == "A" and k == 0) or (side == "B" and k == n - 1):
+                piece = self.fp.pieces[p]
+                u0, length = self.region(p)
+                v = 0 if side == "A" else frame(piece)[1] - 1
+                if length > 0:
+                    rect = to_abs(piece, u0, v, length, 1)
+                    contact = sum(ln for ln, _ in exterior_contacts(rect, self._poly))
+                    hit = 2 * contact >= length
+            self._exterior[key] = hit
+        return hit
+
     def block(self, p: int, k: int, side: str, depth: int) -> BlockOut:
         key = (p, k, side, depth)
         hit = self._blocks.get(key)
@@ -206,7 +253,8 @@ class _Realizer:
             band = self.plan.pieces[p].bands[k]
             bays = band.block_a.bays if side == "A" else band.block_b.bays
             _, length = self.region(p)
-            hit = self.solver.block(bays, depth, length, f"piece {p} band {k} block {side}")
+            where = f"piece {p} band {k} block {side}"
+            hit = self.solver.block(bays, depth, length, where, self.exterior(p, k, side))
             self._blocks[key] = hit
         return hit
 
@@ -257,7 +305,7 @@ class _Realizer:
         plan = self.plan.pieces[p].bands[k]
         best: _BandOut | None = None
         best_da: int | None = None
-        best_key: tuple[int, Fraction, int, int] | None = None
+        best_key: tuple[int, int, Fraction, int, int] | None = None
         s = self.k.s
         with bounded(
             max_iter=depth + 1,
@@ -274,6 +322,7 @@ class _Realizer:
                     a, b = self.block(p, k, "A", d_a), self.block(p, k, "B", d_b)
                     key = (
                         len(a.failures) + len(b.failures),
+                        a.no_facade + b.no_facade,
                         a.dev() + b.dev(),
                         abs(d_a - d_b),
                         d_a,

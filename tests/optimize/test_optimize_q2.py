@@ -1,26 +1,25 @@
 """Ticket Q.2 eval G803-G805: moves G8-G10 and the façade results of the annealer.
 
-G804 (``NO_FACADE ≤ 6`` on P60 after 15 s) is not reached: the test keeps the target and is
-marked ``xfail`` with the measured numbers (see ``specs/tickets/Q.2_facade-aware/
-eval_report.md``); ``test_G804_facade_drops`` asserts the clear drop against the baseline
-measured before Q.2 (15 ``NO_FACADE`` at the start and the end of the same run).
+Ticket Q.3: G804 / G805 run on the deterministic quality runs of ``conftest.quality_runs``
+(iteration and attempt budgets instead of 15 s); G804 is strict and G805 has no coverage
+xfail. ``test_G804_facade_drops`` asserts the drop against the baseline measured before Q.2
+(15 ``NO_FACADE`` at the start and the end of the same run).
 """
 
 from __future__ import annotations
 
 import random
-import sys
 from collections import Counter
 
 import pytest
-from optimize_helpers import optimizer_config
+from optimize_helpers import QualityRun
 
 from ale.contracts.corridor_plan import ConnectorBay, CorridorPlan
 from ale.contracts.footprint import decompose_footprint
 from ale.contracts.geometry import ModulePolygon
-from ale.contracts.models import Layout, Rulebook
-from ale.geometry import check_layout, realize
-from ale.optimize import MoveContext, anneal
+from ale.contracts.models import Rulebook
+from ale.geometry import realize
+from ale.optimize import MoveContext
 from ale.optimize.anneal import focus_on
 from ale.optimize.moves import (
     g7_split_merge,
@@ -261,69 +260,27 @@ def test_focus_on(seeded: Seeded) -> None:
 
 
 # ------------------------------------------------------------------------------ G804-G805
-def _codes(layout: Layout) -> dict[str, int]:
-    from ale.optimize import HARD_CODES
-
-    return dict(
-        sorted(Counter(v.code for v in layout.metrics.violations if v.code in HARD_CODES).items())
-    )
-
-
-@pytest.fixture(scope="module")
-def annealed(
-    seeded: Seeded, rulebook: Rulebook
-) -> dict[str, tuple[dict[str, int], dict[str, int], int]]:
-    """15 s annealing (O03 configuration) of the three seed-3 starts: initial / final hard
-    counts by code and the final ``n_hard``."""
-    out = {}
-    for name in ("P8", "P25", "P60"):
-        prep, start = seeded[name]
-        layout0 = start.realization.layout
-        assert layout0 is not None
-        cfg = optimizer_config(time_budget_s=15.0)
-        res = anneal(prep, rulebook, cfg, start.plan, seed=ANNEAL_SEED)
-        assert check_layout(res.layout, prep, cfg) == ()
-        again = realize(prep, res.plan, rulebook, cfg, seed=ANNEAL_SEED)
-        assert again.layout is not None
-        before, after = _codes(layout0), _codes(res.layout)
-        print(f"{name}: {before} -> {after} ({res.iterations} it)")
-        out[name] = (before, after, res.final_hard)
-    return out
+# Ticket Q.3: the quality runs use iteration / attempt budgets (``conftest.quality_runs``),
+# so G804 is strict and G805 no longer depends on coverage tracing.
+@pytest.mark.slow
+@pytest.mark.timeout(900)
+def test_G804_facade_P60(quality_runs: dict[str, QualityRun]) -> None:
+    assert quality_runs["P60"].after.get("NO_FACADE", 0) <= 6
 
 
 @pytest.mark.slow
-@pytest.mark.timeout(300)
-@pytest.mark.xfail(
-    strict=False,
-    reason=(
-        "G804 not reached: P60 ends with 10 NO_FACADE (seed-3 start 11; 15 before Q.2); "
-        "the exterior frontage at the realiser's depths holds ~30 offices (see eval_report)."
-    ),
-)
-def test_G804_facade_P60(annealed: dict[str, tuple[dict[str, int], dict[str, int], int]]) -> None:
-    _, after, _ = annealed["P60"]
-    assert after.get("NO_FACADE", 0) <= 6
+@pytest.mark.timeout(900)
+def test_G804_facade_drops(quality_runs: dict[str, QualityRun]) -> None:
+    run = quality_runs["P60"]
+    assert run.before.get("NO_FACADE", 0) < P60_NO_FACADE_BEFORE
+    assert run.after.get("NO_FACADE", 0) < P60_NO_FACADE_BEFORE
 
 
 @pytest.mark.slow
-@pytest.mark.timeout(300)
-def test_G804_facade_drops(annealed: dict[str, tuple[dict[str, int], dict[str, int], int]]) -> None:
-    before, after, _ = annealed["P60"]
-    assert before.get("NO_FACADE", 0) < P60_NO_FACADE_BEFORE
-    assert after.get("NO_FACADE", 0) < P60_NO_FACADE_BEFORE
-
-
-@pytest.mark.slow
-@pytest.mark.timeout(300)
-def test_G805_no_regression(
-    annealed: dict[str, tuple[dict[str, int], dict[str, int], int]],
-) -> None:
-    assert annealed["P8"][2] == 0
-    if annealed["P25"][2] > 6 and sys.gettrace() is not None:
-        # Under coverage tracing the 15 s budget gives the annealer 4-10x fewer iterations
-        # (3.4 / Q.1 reports); the target is measured without tracing (eval_report).
-        pytest.xfail(f"P25 final_hard {annealed['P25'][2]} > 6 under coverage tracing")
-    assert annealed["P25"][2] <= 6
+@pytest.mark.timeout(900)
+def test_G805_no_regression(quality_runs: dict[str, QualityRun]) -> None:
+    assert quality_runs["P8"].result.final_hard == 0
+    assert quality_runs["P25"].result.final_hard <= 6
 
 
 @pytest.mark.timeout(120)

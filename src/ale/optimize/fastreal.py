@@ -41,6 +41,8 @@ _DEPTH_BUDGET_S = 5.0
 """Same per-band depth-search budget as ``ale.geometry.realize``."""
 _MAX_ENTRIES = 200_000
 """Each memo is cleared when it grows beyond this many entries (bounded memory)."""
+_BlockScore = tuple[int, int, Fraction | int]
+"""``(failures, no_facade, scaled deviation)`` of a block (Q.3 depth key)."""
 
 
 @dataclass
@@ -73,7 +75,7 @@ class _CachedRealizer(_Realizer):
         super().__init__(prepared, plan, fp, consts, cache.solver)
         self._cache = cache
         self._local_bands: dict[tuple[int, int, int], Any] = {}
-        self._scores: dict[tuple[int, int, str, int], tuple[int, Fraction | int]] = {}
+        self._scores: dict[tuple[int, int, str, int], _BlockScore] = {}
 
     def band_at(self, p: int, k: int, depth: int, d_a: int) -> _BandOut:
         d_b = depth - self.k.s - d_a
@@ -91,8 +93,8 @@ class _CachedRealizer(_Realizer):
         self._scores[local] = score
         return got
 
-    def _score(self, p: int, k: int, side: str, depth: int) -> tuple[int, Fraction | int]:
-        """``(failures, scaled area deviation + strip cells)`` of a block (depth search)."""
+    def _score(self, p: int, k: int, side: str, depth: int) -> _BlockScore:
+        """``(failures, no_facade, scaled area deviation + strip cells)`` of a block."""
         local = (p, k, side, depth)
         hit = self._scores.get(local)
         if hit is None:
@@ -100,20 +102,23 @@ class _CachedRealizer(_Realizer):
             hit = self._scores[local]
         return hit
 
-    def _shared_block(
-        self, p: int, k: int, side: str, depth: int
-    ) -> tuple[BlockOut, tuple[int, Fraction | int]]:
+    def _shared_block(self, p: int, k: int, side: str, depth: int) -> tuple[BlockOut, _BlockScore]:
         band = self.plan.pieces[p].bands[k]
         bays = band.block_a.bays if side == "A" else band.block_b.bays
         _, length = self.region(p)
         where = f"piece {p} band {k} block {side}"
-        key = (bays, depth, length, where)
+        exterior = self.exterior(p, k, side)
+        key = (bays, depth, length, where, exterior)
         memo = self._cache.blocks
         hit = memo.get(key)
         if hit is None:
-            out = self.solver.block(bays, depth, length, where)
+            out = self.solver.block(bays, depth, length, where, exterior)
             dev = (out.area_dev + out.strip_cells) * self._cache.scale
-            score = (len(out.failures), dev.numerator if dev.denominator == 1 else dev)
+            score = (
+                len(out.failures),
+                out.no_facade,
+                dev.numerator if dev.denominator == 1 else dev,
+            )
             hit = (out, score)
             if len(memo) >= _MAX_ENTRIES:
                 memo.clear()
@@ -148,7 +153,7 @@ class _CachedRealizer(_Realizer):
         plan = self.plan.pieces[p].bands[k]
         scale = self._cache.scale
         best: tuple[int, Any] | None = None
-        best_key: tuple[int, Fraction | int, int, int] | None = None
+        best_key: tuple[int, int, Fraction | int, int, int] | None = None
         s = self.k.s
         with bounded(
             max_iter=depth + 1,
@@ -164,14 +169,16 @@ class _CachedRealizer(_Realizer):
                 got = link(v0 + d_a, self.block(p, k, "A", d_a), self.block(p, k, "B", d_b))
                 if got is None:
                     continue
-                fa, da = self._score(p, k, "A", d_a)
-                fb, db = self._score(p, k, "B", d_b)
+                fa, na, da = self._score(p, k, "A", d_a)
+                fb, nb, db = self._score(p, k, "B", d_b)
                 n_fail = fa + fb + len(got.extra)
+                n_nf = na + nb
                 dev: Fraction | int = da + db
                 for po in got.pieces:
                     n_fail += len(po.failures())
+                    n_nf += po.no_facade()
                     dev = dev + scale * po.cost()
-                key = (n_fail, dev, abs(d_a - d_b), d_a)
+                key = (n_fail, n_nf, dev, abs(d_a - d_b), d_a)
                 if best_key is None or key < best_key:
                     best, best_key = (d_a, got), key
         if best is None:
@@ -187,7 +194,7 @@ class _CachedRealizer(_Realizer):
         so the comparison needs no ``Fraction`` arithmetic in the common case.
         """
         plan = self.plan.pieces[p].bands[k]
-        best_key: tuple[int, Fraction | int, int, int] | None = None
+        best_key: tuple[int, int, Fraction | int, int, int] | None = None
         best_da = 0
         s = self.k.s
         with bounded(
@@ -201,9 +208,9 @@ class _CachedRealizer(_Realizer):
                     self.timed_out = True
                     break
                 d_b = depth - s - d_a
-                fa, da = self._score(p, k, "A", d_a)
-                fb, db = self._score(p, k, "B", d_b)
-                key = (fa + fb, da + db, abs(d_a - d_b), d_a)
+                fa, na, da = self._score(p, k, "A", d_a)
+                fb, nb, db = self._score(p, k, "B", d_b)
+                key = (fa + fb, na + nb, da + db, abs(d_a - d_b), d_a)
                 if best_key is None or key < best_key:
                     best_key, best_da = key, d_a
         if best_key is None:
@@ -221,7 +228,7 @@ class RealizeCache:
         reqs = {iid: self.consts.req(spec) for iid, spec in prepared.instances}
         self.solver = Solver(self.consts, reqs)
         self.scale = math.lcm(1, *(Fraction(r.target).denominator for r in reqs.values()))
-        self.blocks: dict[object, tuple[BlockOut, tuple[int, Fraction | int]]] = {}
+        self.blocks: dict[object, tuple[BlockOut, _BlockScore]] = {}
         self.bands: dict[object, object] = {}
         self.instance_ids = tuple(iid for iid, _ in prepared.instances)
         self._fp: FootprintPieces | None = None

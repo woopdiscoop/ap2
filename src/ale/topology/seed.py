@@ -12,6 +12,16 @@ valid plan is then improved by a greedy façade pull (swaps with non-façade roo
 façade contact, bays moved to a block end), and multi-band pieces without a cut-side
 connector rule are also tried with an ``"inner"`` connector (kept if ``(n_hard, cost)``
 improves).
+
+Ticket Q.3 (deterministic budgets): ``seed_plan(..., max_attempts=N)`` bounds the restarts by
+``N`` before time; every share of the budget (assignment deadline, repair, swaps, façade pull)
+is then taken of the safety cap :data:`SAFETY_TIME_S` instead of ``time_budget_s``, so a run
+that finishes well inside it gives the same plan on any machine, with or without coverage.
+
+Ticket Q.3 (Q311, budget kept): the run works to a deadline ``t0 + time_budget_s - margin``
+(margin ``min(1 s, 10 %)``). A new attempt, every repair / swap / façade-pull realisation and
+every ``"inner"`` trial starts only while the time left exceeds the slowest step of its kind
+seen so far, so ``elapsed_s <= time_budget_s`` holds on slow machines and under coverage.
 """
 
 from __future__ import annotations
@@ -41,7 +51,7 @@ from ale.contracts.models import Rulebook
 from ale.geometry import Realization, realize
 from ale.geometry.checks import exterior_contacts
 from ale.geometry.junction import across_origin, along_origin, cut_side, frame, to_abs
-from ale.guards import bounded
+from ale.guards import Budget, bounded
 from ale.program.models import PreparedInput
 from ale.topology.depth import DEADLINE_KEY, BandSpec, fill_blocks
 from ale.topology.embed import Positions, embed
@@ -55,6 +65,7 @@ from ale.topology.repair import (
     band_depths,
     bay_rooms,
     block_depths,
+    move_room,
     repair_step,
     score,
     usable_length,
@@ -63,6 +74,13 @@ from ale.topology.repair import (
 __all__ = ["SeedResult", "seed_plan"]
 
 _MAX_ATTEMPTS = 10_000
+SAFETY_TIME_S = 3600.0
+"""Time cap of a run bound by ``max_attempts`` (a safety net only, Q.3)."""
+_END_MARGIN_S = 1.0
+_END_MARGIN_SHARE = 0.1
+"""The run stops ``min(_END_MARGIN_S, _END_MARGIN_SHARE · budget)`` before its budget (Q311)."""
+_STEP_SAFETY = 1.5
+"""A step starts only when the time left exceeds this multiple of its estimated cost."""
 _SWAP_SHARE = 0.25
 _SWAP_TRIALS_PER_PROGRAM = 720
 _SWAP_TRIALS_MIN = 10
@@ -356,16 +374,36 @@ class _Search:
         self.allowed = _allowed(self.ctx)
         self.graph = build_graph(prepared, rulebook)
         self._cache: dict[str, Realization] = {}
+        self.deadline = math.inf
+        """``time.monotonic()`` by which the run must be done (Q311)."""
+        self.slowest = 0.0
+        """Longest realisation seen so far (seconds)."""
+
+    def left(self) -> float:
+        """Seconds left before :attr:`deadline`."""
+        return self.deadline - time.monotonic()
+
+    def affords(self, cost: float | None = None) -> bool:
+        """Whether a step of ``cost`` seconds (default: the slowest realisation) still fits,
+        with :data:`_STEP_SAFETY` headroom for timing noise."""
+        return self.left() > _STEP_SAFETY * (self.slowest if cost is None else cost)
 
     def realise(self, draft: Draft) -> Realization:
         plan = draft.to_plan()
         key = plan.model_dump_json()
         hit = self._cache.get(key)
         if hit is None:
-            ctx = self.ctx
-            hit = realize(ctx.prepared, plan, ctx.rulebook, ctx.config, seed=self.seed)
+            hit = self.realise_plan(plan)
             self._cache[key] = hit
         return hit
+
+    def realise_plan(self, plan: CorridorPlan) -> Realization:
+        """``realize`` of ``plan``, timing it (:attr:`slowest`)."""
+        ctx = self.ctx
+        start = time.monotonic()
+        out = realize(ctx.prepared, plan, ctx.rulebook, ctx.config, seed=self.seed)
+        self.slowest = max(self.slowest, time.monotonic() - start)
+        return out
 
     def combos(self) -> list[list[int]]:
         """Band-count combinations, ``n0`` first (closest to ``n0`` first, then lower)."""
@@ -406,14 +444,21 @@ def seed_plan(
     *,
     seed: int,
     time_budget_s: float = 20.0,
+    max_attempts: int | None = None,
 ) -> SeedResult:
     """A first valid corridor plan for ``prepared`` (RD 3.2 §5); never raises.
 
     Without a valid plan inside ``time_budget_s`` the least-overflow plan is returned with
-    its failing realisation.
+    its failing realisation. ``max_attempts`` (Q.3): when given (``>= 1``), at most this
+    many attempts are made and time is only a safety net (:data:`SAFETY_TIME_S`), so the
+    result does not depend on the machine's speed.
     """
     t0 = time.monotonic()
     budget_s = max(float(time_budget_s), 1e-3)
+    n_attempts = _MAX_ATTEMPTS
+    if max_attempts is not None:
+        n_attempts = max(1, min(int(max_attempts), _MAX_ATTEMPTS))
+        budget_s = max(budget_s, SAFETY_TIME_S)
     try:
         fp = decompose_footprint(prepared.footprint.polygon)
     except ValueError:
@@ -428,28 +473,44 @@ def seed_plan(
         )
     search = _Search(prepared, rulebook, config, fp, seed)
     ctx = search.ctx
-    ctx.memo[DEADLINE_KEY] = t0 + budget_s
+    margin = min(_END_MARGIN_S, _END_MARGIN_SHARE * budget_s)
+    search.deadline = t0 + budget_s - margin
+    ctx.memo[DEADLINE_KEY] = search.deadline
     combos = search.combos()
     best: tuple[tuple[tuple[int, int], tuple[int, float]], Draft, Realization] | None = None
     attempts = 0
     extra = -1  # Q.2: attempts left after the first valid plan (-1: none found yet)
+    slowest_attempt = 0.0
+    slowest_assign = 0.0
     with bounded(
-        max_iter=_MAX_ATTEMPTS, time_budget_s=budget_s, label="seed-restarts", on_exhaust="stop"
+        max_iter=n_attempts, time_budget_s=budget_s, label="seed-restarts", on_exhaust="stop"
     ) as restarts:
-        for k in range(_MAX_ATTEMPTS):
-            if attempts and not restarts.tick():
+        for k in range(n_attempts):
+            # Q311: once a valid plan exists, a new attempt must fit whole; before that,
+            # it only needs room for its realisation (its assignment and repair are guarded).
+            room = slowest_attempt if extra >= 0 else None
+            if attempts and (not restarts.tick() or not search.affords(room)):
                 break
             attempts += 1
+            t_attempt = time.monotonic()
             pos = embed(search.graph, prepared, rulebook, seed=_attempt_seed(seed, k))
             counts = combos[k % len(combos)]
+            # Q311: the assignment cuts its searches short early enough for the realisation.
+            ctx.memo[DEADLINE_KEY] = search.deadline - _STEP_SAFETY * search.slowest
+            t_assign = time.monotonic()
             draft = assign(ctx, counts, pos)
+            slowest_assign = max(slowest_assign, time.monotonic() - t_assign)
             # Q.1: when the assignment expects problems, try the other band counts on the
             # same embedding and keep the best expectation (no realisation needed).
             for other in combos:
                 if draft.estimate == (0, 0) or time.monotonic() - t0 > budget_s / 2:
                     break
+                if not search.affords(slowest_assign + search.slowest):  # Q311
+                    break
                 if other != counts:
+                    t_assign = time.monotonic()
                     alt = assign(ctx, other, pos)
+                    slowest_assign = max(slowest_assign, time.monotonic() - t_assign)
                     if alt.estimate < draft.estimate:
                         draft = alt
             real = search.realise(draft)
@@ -465,7 +526,7 @@ def seed_plan(
             def repack(current: Draft, got: Realization, pos: Positions = pos) -> Draft | None:
                 return _repack(ctx, current, got, pos)
 
-            remaining = budget_s - (time.monotonic() - t0)
+            remaining = search.left() - search.slowest
             if score(real) != (0, 0) and remaining > 0:
                 with bounded(
                     max_iter=4 * len(ctx.reqs) + 40,
@@ -473,6 +534,10 @@ def seed_plan(
                     label="seed-repair",
                     on_exhaust="stop",
                 ) as rep:
+
+                    def tick(rep: Budget = rep) -> bool:
+                        return rep.tick() and search.affords()
+
                     for _ in range(4 * len(ctx.reqs) + 40):
                         step = repair_step(
                             ctx,
@@ -481,7 +546,7 @@ def seed_plan(
                             search.realise,
                             reassign,
                             search.allowed,
-                            rep.tick,
+                            tick,
                             resplit,
                             repack,
                         )
@@ -490,6 +555,7 @@ def seed_plan(
                         draft, real = step
                         if score(real) == (0, 0):
                             break
+            slowest_attempt = max(slowest_attempt, time.monotonic() - t_attempt)
             sc = score(real)
             key = (sc, _rank(real) if sc == (0, 0) else (0, 0.0))
             if best is None or key < best[0]:
@@ -608,7 +674,7 @@ def _improve_adjacency(
 ) -> tuple[Draft, Realization]:
     """RD 5.6: swaps lowering ``required_adjacency`` while staying valid, with no new zone
     split; at most 25 % of the remaining budget."""
-    remaining = budget_s - (time.monotonic() - t0)
+    remaining = min(budget_s - (time.monotonic() - t0), search.left())
     if remaining <= 0:
         return draft, real
     zones = {iid: spec.macro_zone for iid, spec in search.ctx.prepared.instances}
@@ -630,7 +696,7 @@ def _improve_adjacency(
         while improved and cost > 0:
             improved = False
             for a, b in _swap_candidates(search, real):
-                if not budget.tick():
+                if not budget.tick() or not search.affords():
                     return draft, real
                 cand = _swap(draft, a, b)
                 got = search.realise(cand)
@@ -677,7 +743,13 @@ def _facade_candidates(search: _Search, draft: Draft, real: Realization) -> list
     spare = sorted(r for r in contact if not facade.get(r, False))
     moves: list[Draft] = []
     swaps: list[Draft] = []
+    inserts: list[Draft] = []
+    outer = sorted(_outer_slots(ctx, draft))
+    depths = block_depths(ctx, draft, real)
     for a in lacking:
+        here, _ = draft.find(a)
+        # Q.3: the room joins an exterior block; the realiser deepens it (narrower bays).
+        inserts += [move_room(ctx, draft, a, sl, depths[sl]) for sl in outer if sl != here]
         slot, i = draft.find(a)
         bays = draft.blocks[slot]
         for j in (0, len(bays) - 1):
@@ -692,7 +764,7 @@ def _facade_candidates(search: _Search, draft: Draft, real: Realization) -> list
             key=lambda b: (abs(t - ctx.reqs[b].target), b),
         )
         swaps += [_swap(draft, a, b) for b in partners]
-    return moves + swaps
+    return moves + inserts + swaps
 
 
 def _improve_facade(
@@ -701,7 +773,7 @@ def _improve_facade(
     """Q.2: greedy façade pull — accept a candidate of :func:`_facade_candidates` when it
     stays valid, adds no zone split and lowers ``(n_hard, cost)``; at most
     :data:`_FACADE_SHARE` of the remaining budget."""
-    remaining = budget_s - (time.monotonic() - t0)
+    remaining = min(budget_s - (time.monotonic() - t0), search.left())
     if remaining <= 0:
         return draft, real
     zones = {iid: spec.macro_zone for iid, spec in search.ctx.prepared.instances}
@@ -721,6 +793,8 @@ def _improve_facade(
         while improved:
             improved = False
             for cand in _facade_candidates(search, draft, real):
+                if not search.affords():
+                    return draft, real
                 cand_split = splits(cand)
                 if cand_split > n_split:
                     continue
@@ -785,11 +859,13 @@ def _try_inner(
     best = (_rank(real), plan, real)
     for k in range(1, len(eligible) + 1):
         for subset in itertools.combinations(eligible, k):
+            if not search.affords():
+                return best[1], best[2]
             try:
                 cand = with_inner(plan, subset, ctx)
             except ValueError:  # pragma: no cover - markers are always valid here
                 continue
-            got = realize(ctx.prepared, cand, ctx.rulebook, ctx.config, seed=search.seed)
+            got = search.realise_plan(cand)
             if got.layout is not None and _rank(got) < best[0]:
                 best = (_rank(got), cand, got)
     return best[1], best[2]

@@ -8,6 +8,11 @@ temperatures follow ``T = T0 · (T_end / T0) ** f`` with the progress fraction `
 (iterations / ``max_iter`` or elapsed / ``time_budget_s``, whichever is further along) and
 ``T_end = T0 · 1e-3``. Realisations are memoised (:class:`ale.optimize.fastreal.RealizeCache`).
 Deterministic for a seed (``random.Random(seed)`` only) when ``max_iter`` binds.
+
+Ticket Q.3 (deterministic budgets): ``anneal(..., max_iter=N)`` binds the run to ``N``
+iterations before time — progress is ``iterations / N`` only, the ``T_c0`` sampling is
+bounded by its proposal count only, and the wall clock is a safety net of
+:data:`SAFETY_TIME_S` — so the result is the same on any machine, with or without coverage.
 """
 
 from __future__ import annotations
@@ -28,6 +33,7 @@ from ale.geometry.checks import exterior_contacts
 from ale.guards import bounded
 from ale.optimize.fastreal import RealizeCache
 from ale.optimize.moves import MoveContext, propose
+from ale.optimize.polish import polish
 from ale.program.models import PreparedInput
 
 __all__ = [
@@ -70,6 +76,13 @@ T_END_RATIO = 1e-3
 """``T_end / T0`` for both temperatures."""
 CONVERGED_SPAN = 0.25
 """Progress span without improvement of the best that ends the run (``converged``)."""
+POLISH_EVALS = 600
+"""Candidates the final polish (:mod:`ale.optimize.polish`) may evaluate (Q.3)."""
+POLISH_TIME_SHARE = 0.2
+"""Share of a time-bound run kept for the final polish (Q.3)."""
+SAFETY_TIME_S = 3600.0
+"""Time cap of a run bound by an explicit ``max_iter`` (a safety net, never reached by the
+quality tests: it only stops a runaway run)."""
 _FALLBACK_T0 = 1.0
 _END_MARGIN_S = 1.0
 _END_MARGIN_SHARE = 0.03
@@ -198,13 +211,22 @@ def anneal(
     start: CorridorPlan,
     *,
     seed: int,
+    max_iter: int | None = None,
 ) -> AnnealResult:
     """Anneal from ``start`` and return the lexicographically best plan seen.
 
-    Raises ``ValueError`` when ``start`` does not realise.
+    ``max_iter`` (Q.3): when given, the run is bound by this many iterations instead of
+    ``config.optimizer`` (``max_iter`` and ``time_budget_s``); time is then only a safety
+    net (:data:`SAFETY_TIME_S`) and the result is deterministic for ``seed``.
+    Raises ``ValueError`` when ``start`` does not realise or ``max_iter < 1``.
     """
     t_start = time.monotonic()
     opt = config.optimizer
+    if max_iter is not None:
+        if max_iter < 1:
+            raise ValueError(f"max_iter must be >= 1, got {max_iter}")
+        opt = opt.model_copy(update={"max_iter": max_iter, "time_budget_s": SAFETY_TIME_S})
+    by_count = max_iter is not None
     scorer = Scorer(prepared, rulebook, config, seed=seed)
     hard0, cost0, layout0 = scorer(start)
     if layout0 is None:
@@ -238,19 +260,31 @@ def anneal(
     # Ticket Q.2: the loop now runs to the budget (see f_best below), so it stops a margin
     # early for the last realisation in flight.
     margin = min(_END_MARGIN_S, _END_MARGIN_SHARE * opt.time_budget_s)
-    remaining = max(1e-3, opt.time_budget_s - margin - (time.monotonic() - t_start))
+    end_at = t_start + opt.time_budget_s - margin
+    # Q.3: a time-bound loop leaves a share of the budget to the final polish.
+    keep = 0.0 if by_count else POLISH_TIME_SHARE * opt.time_budget_s
+    remaining = max(1e-3, end_at - keep - time.monotonic())
     # Ticket Q.2: the convergence span counts from the start of the annealing loop, not
     # from 0 — the T_c0 sampling may use up to 20 % of the budget, which otherwise left as
     # little as 5 % of the progress before a "converged" stop.
-    f_best = (time.monotonic() - t_start) / opt.time_budget_s
+    f_best = 0.0 if by_count else (time.monotonic() - t_start) / opt.time_budget_s
+
+    def progress(iterations: int) -> float:
+        f = iterations / opt.max_iter
+        if by_count:  # Q.3: the clock never steers a count-bound run
+            return f
+        return max(f, (time.monotonic() - t_start) / opt.time_budget_s)
+
     with bounded(opt.max_iter, remaining, label="anneal", on_exhaust="stop") as budget:
         while budget.tick():
-            f = max(
-                budget.iterations / opt.max_iter,
-                (time.monotonic() - t_start) / opt.time_budget_s,
-            )
+            f = progress(budget.iterations)
             if f - f_best >= CONVERGED_SPAN:
-                break
+                if not by_count:
+                    break
+                # Q.3: a count-bound run uses its whole budget: back to the best plan.
+                current = (best[1], best[0][0], best[0][1])
+                ctx = focus_on(ctx, best[2], min_facade)
+                f_best = f
             _, cand = propose(current[0], ctx, rng)
             if cand is None:
                 continue
@@ -269,7 +303,20 @@ def anneal(
         if budget.exhausted_reason is not None:
             stopped_by = budget.exhausted_reason
         iterations = budget.iterations
-    (final_hard, final_cost), plan, layout = best
+    specs = dict(prepared.instances)
+    plan, score, layout, _ = polish(
+        best[1],
+        best[0],
+        best[2],
+        scorer,
+        specs,
+        ctx,
+        min_facade=min_facade,
+        hard=HARD_CODES,
+        max_evals=POLISH_EVALS,
+        deadline=end_at,
+    )
+    final_hard, final_cost = score
     return AnnealResult(
         plan=plan,
         layout=layout,

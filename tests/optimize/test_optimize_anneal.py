@@ -12,8 +12,9 @@ import time
 from pathlib import Path
 
 import pytest
-from optimize_helpers import optimizer_config
+from optimize_helpers import QualityRun, optimizer_config
 
+from ale.config import AleConfig
 from ale.contracts.models import Rulebook
 from ale.geometry import check_layout, realize
 from ale.optimize import HARD_CODES, anneal
@@ -54,23 +55,23 @@ ANNEAL_SEED = 6
 
 
 @pytest.mark.slow
-@pytest.mark.timeout(120)
+@pytest.mark.timeout(900)
 @pytest.mark.parametrize("name", ["P8", "P25", "P60"])
-def test_O03_improves(name: str, seeded: Seeded, rulebook: Rulebook) -> None:
-    prep, start = seeded[name]
-    cfg = optimizer_config(time_budget_s=15.0)
+def test_O03_improves(name: str, quality_runs: dict[str, QualityRun], rulebook: Rulebook) -> None:
+    """3.4 O03 as originally written (Ticket Q.3 restores it): iteration budgets instead of
+    15 s, so the same result on any machine and under coverage; P25 must improve."""
+    run = quality_runs[name]
+    prep, start, res = run.prepared, run.start, run.result
+    cfg = AleConfig()
     layout0 = start.realization.layout
     assert layout0 is not None
     start_score = (hard_count(layout0), layout0.metrics.total_cost)
-    res = anneal(prep, rulebook, cfg, start.plan, seed=ANNEAL_SEED)
     print(
         f"{name}: hard {res.initial_hard} -> {res.final_hard}, cost {res.initial_cost:.3f} -> "
-        f"{res.final_cost:.3f}, {res.iterations} it, {res.iterations / res.elapsed_s:.0f} it/s, "
-        f"{res.stopped_by}, {res.elapsed_s:.1f} s"
+        f"{res.final_cost:.3f}, {res.iterations} it, {res.stopped_by}, {res.elapsed_s:.1f} s"
     )
+    assert res.stopped_by == "max_iter"
     assert (res.initial_hard, res.initial_cost) == start_score
-    # Q.1: the depth-aware P8 seed-3 start has no hard violation left (it had 6 shape
-    # violations before); P25 / P60 starts still do.
     assert start_score[0] > 0 or name == "P8"
     # The (lexicographic) energy never increases from start to best.
     assert (res.final_hard, res.final_cost) <= start_score
@@ -82,10 +83,7 @@ def test_O03_improves(name: str, seeded: Seeded, rulebook: Rulebook) -> None:
     assert again.layout is not None
     assert again.layout.metrics.total_cost == pytest.approx(res.final_cost)
     if name == "P25":
-        # Q.1: the depth-aware seed-3 start (8 hard) is already about the pre-Q.1 annealed
-        # result (13 -> 7); with few iterations (coverage) the annealer may not improve it,
-        # so "final < initial" became "start <= 8" (final <= initial is asserted above).
-        assert res.initial_hard <= 8
+        assert res.final_hard < res.initial_hard
     if name == "P8":
         assert res.final_hard <= 1
 
