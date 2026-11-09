@@ -100,7 +100,7 @@ def test_P01_prepare_ok(tmp_path: Path, rulebook_path: Path) -> None:
     assert prepared.grid.module_mm == 100
     assert prepared.rulebook_version == "test-3.1"
     assert prepared.site == load_site("site_L")
-    assert prepared.warnings == ()
+    assert [w.code for w in prepared.warnings] == ["W_FACADE_TIGHT"]  # Q.2a F3
     assert prepared.feasibility.required_m2 == pytest.approx(1135.16)
 
 
@@ -393,7 +393,10 @@ def test_prepare_input_rejects_infeasible(tmp_path: Path, rulebook_path: Path) -
     xlsx, yml = fixture_files(tmp_path, "program_25", "site_rect_small")
     with pytest.raises(InputError) as info:
         prepare_input(xlsx, yml, rulebook_path, CONFIG)
-    assert [i.code for i in info.value.issues] == ["E_NOT_FEASIBLE"]
+    assert [i.code for i in info.value.issues] == [
+        "E_NOT_FEASIBLE",
+        "W_FACADE_TIGHT",
+    ]  # Q.2a warning
     tiny = write_site_yaml(
         tmp_path / "tiny.yaml", {"footprint": [[0, 0], [0.05, 0], [0.05, 0.05], [0, 0.05]]}
     )
