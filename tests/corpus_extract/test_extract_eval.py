@@ -401,15 +401,18 @@ def test_W07_other_kinds(tmp_workspace: Workspace, tmp_path: Path, invoke: Invok
 
     result = invoke(["extract", *_ws_args(tmp_workspace)])
     assert result.exit_code == 0, result.output
-    assert "non implémentées (PDF / raster) : 2" in result.stdout
+    assert "exclues : 2" in result.stdout
     result = invoke(["extract", *_ws_args(tmp_workspace), "--kind", "pdf"])
     assert result.exit_code == 0, result.output
-    assert "non implémentées (PDF / raster) : 1" in result.stdout
+    assert "unités sélectionnées : 0" in result.stdout
     result = invoke(["extract", *_ws_args(tmp_workspace), "--kind", "raster", "--only-new"])
-    assert "non implémentées (PDF / raster) : 1" in result.stdout
+    assert "unités sélectionnées : 0" in result.stdout
 
-    assert query(tmp_workspace, "SELECT sha256, page, kind, status, reason FROM units") == before
-    assert event_count(tmp_workspace) == n_events
+    after = query(tmp_workspace, "SELECT sha256, page, kind, status, reason FROM units")
+    assert [r[:3] for r in after] == [r[:3] for r in before]
+    assert all(r[3] == "EXCLUDED" and r[4].startswith("not a plan (score ") for r in after)
+    assert event_count(tmp_workspace) == n_events + 2
+    assert event_count(tmp_workspace, "extract_excluded") == 2
     assert not any(tmp_workspace.path("extracted").iterdir())
 
 

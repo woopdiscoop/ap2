@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import json
 import random
 import re
 import shutil
@@ -11,7 +12,7 @@ from contextlib import closing
 from pathlib import Path
 
 import pytest
-from extract_helpers import Invoke, execute, plan_doc, save_doc, unit_of
+from extract_helpers import Invoke, plan_doc, save_doc, unit_of
 from rulebook_helpers import (
     TODAY,
     RoomDef,
@@ -311,16 +312,13 @@ def test_K10_cli(tmp_workspace: Workspace, tmp_path: Path, invoke: Invoke) -> No
     meta = tmp_path / "plans_meta.csv"
     meta.write_text("filename,north_angle_deg\na.dxf,0\nb.dxf,90\n", encoding="utf-8")
     report = ingest(tmp_workspace, inp, meta=meta)
-    # plans_meta.csv has no north column in Ticket 1.1 (it is ignored with a warning), so the
-    # north is written to files.meta_json where Ticket 2.2 reads it (see eval_report.md).
-    assert any("north_angle_deg" in w for w in report.meta_warnings)
+    # I.1 accepts north metadata directly; do not manually backfill it in this test.
+    assert not any("north_angle_deg" in w for w in report.meta_warnings)
     for rel, north in (("a.dxf", 0), ("b.dxf", 90)):
         sha = unit_of(tmp_workspace, rel)[0]
-        execute(
-            tmp_workspace,
-            "UPDATE files SET meta_json = ? WHERE sha256 = ?",
-            (f'{{"north_angle_deg": {north}}}', sha),
-        )
+        with closing(sqlite3.connect(tmp_workspace.path("corpus.sqlite"))) as conn:
+            stored = conn.execute("SELECT meta_json FROM files WHERE sha256 = ?", (sha,)).fetchone()
+        assert json.loads(stored[0])["north_angle_deg"] == north
     assert invoke(["layers", "--workspace", tmp_workspace.root]).exit_code == 0
     assert invoke(["extract", "--workspace", tmp_workspace.root]).exit_code == 0
     seed_path = tmp_path / "seed.yaml"

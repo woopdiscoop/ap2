@@ -1,49 +1,49 @@
-# I.1 integration evaluation
+# I.1 integration evaluation — Router-authorized revision
 
-**Status: BLOCKED for merge — N9 whole-suite acceptance fails on three conflicting legacy assertions.** Implementation and new acceptance tests are complete within ownership; no existing test was weakened or deleted. Router action is required to reconcile the legacy expectations with I.1. No reader, contract, dependency declaration, or global plan files were modified.
+Rebased cleanly onto `origin/claude/new-session-2hmd3s` at `e6d3aea11cd28871a709873492af2bde7b2bba0b`, retaining contracts 1.3.0, the upstream CI clock fix and P.1. Work remains on `codex/I.1-integration`; existing draft PR #1 targets the Router branch. No merge performed.
 
-Base: `origin/claude/new-session-2hmd3s` at `1d08396`, isolated worktree, branch `codex/I.1-integration`. Python 3.11.17 on Linux. Installation: `python -m pip install -e ".[dev,excel,cad,pdf,raster]"` in a separate `.venv`. Test fixtures are generated at runtime from existing CAD/PDF/raster builders; no reference drawings or binary plan files are committed. Implementation/tests make no network calls.
+The Router's latest instruction and ticket notes authorize the three superseded legacy assertions below. No other existing test was weakened or deleted. Contracts, reader packages, pyproject.toml and the project board are unchanged relative to the new base.
+
+## Exact legacy-test changes (authorized by Router)
+
+| Existing test | Old assertion / setup → new assertion |
+|---|---|
+| `tests/corpus/test_corpus_ingest.py::test_C13_migration` | After ingest, `PRAGMA user_version == 1` → `2`; no-op `migrate(conn) == 1` → `2`. Initial version 0, ale_meta preservation, schema stability and required-table assertions remain unchanged. |
+| `tests/corpus_extract/test_extract_eval.py::test_W07_other_kinds` | Two PDF/raster stubs reported; later kind filters each report one stub; units remain NEW and events unchanged → first run reports two exclusions for these generated **non-plan** fixtures, subsequent kind filters select zero, identities/kinds remain unchanged, both statuses are EXCLUDED with `not a plan (score …)` reasons, and exactly two exclusion events are added. Existing exit-code and no-plan-artifact assertions retained. N1/N2 independently assert successful extraction of actual generated plans. |
+| `tests/rulebook/test_rulebook_eval.py::test_K10_cli` | `north_angle_deg` unknown-column warning required, followed by manual SQL injection → no north-column warning, and assert persisted CSV north values 0/90 directly. The obsolete manual write is removed, replaced with read-only SQL assertions. Only corresponding import cleanup (`execute` → `json`) is added. All later rulebook/output/idempotence assertions remain unchanged. |
+
+Targeted rerun of these three tests: **3 passed in 0.76 s**.
+
+## P.1 / I.2 boundary
+
+The Router's subsequent ruling in `42de038` explicitly withdraws the prepare_image instruction: I.1 remains `image=None, provider=None`. Rendering, image preparation, configured provider wiring and opt-in API calls are deferred to I.2. The provisional optional-image API and its tests were removed before final delivery. No provider or renderer is enabled by this ticket.
 
 ## Evaluation IDs
 
-| ID | Named test | Result | Evidence |
-|---|---|---|---|
-| N1 | `test_N1_pdf_vector` | PASS | Generated mixed PDF: vector plan extracted, two PDF_TEXT rooms and TITLE_BLOCK scale; non-plan text/decorative-line page excluded with score. |
-| N2 | `test_N2_scanned_and_raster` | PASS | Generated scanned page and PNG extracted; UNKNOWN scale and stored scale_unknown flags. |
-| N3 | `test_N3_meta_scale` | PASS | Page metadata overrides file metadata; PNG scale = 100 × 0.0254 / 150; file/page north and DPI persisted. |
-| N4 | `test_N4_cad_also_labelled` | PASS | Persisted CAD plan equals public scale+label pipeline output; geometry retained and flags match review_flags. |
-| N5 | `test_N5_review_page` | PASS | HTMLParser reads one row/SVG per flagged plan, --all adds clean plans, JSON flags match DB, repeated HTML bytes/mtime unchanged. |
-| N6 | `test_N6_migration` | PASS | v1 table set/content migrated to v2 without changing existing table rows; second migration makes no changes. |
-| N7 | `test_N7_idempotent` | PASS | --only-new preserves plan and database bytes/mtime; explicit re-extraction replaces flags without duplicates. |
-| N8 | `test_N8_stubs` | PASS | Review executes with empty valid JSON; last stub entry removed. Authorized cp1252 status test also passes. |
-| N9 | `test_N9_gates` | **FAIL overall** | Named executable static-gate test passes; full-suite gate fails on the three legacy assertions below. Corpus coverage exceeds 90%. |
+| ID | Test | Outcome |
+|---|---|---|
+| N1 | `test_N1_pdf_vector` | PASS: generated vector plan extracted with PDF_TEXT rooms and TITLE_BLOCK scale; text/decorative-path page excluded. |
+| N2 | `test_N2_scanned_and_raster` | PASS: scanned page and PNG extracted with UNKNOWN scale and persisted scale_unknown flags. |
+| N3 | `test_N3_meta_scale` | PASS: page metadata overrides file values; scale 100 × 0.0254 / 150; north/DPI persisted. |
+| N4 | `test_N4_cad_also_labelled` | PASS: CAD pipeline output matches scale+label APIs, geometry retained and flags stored. |
+| N5 | `test_N5_review_page` | PASS: HTMLParser, one row/SVG per flagged plan, --all, DB/JSON consistency and unchanged HTML rewrite. |
+| N6 | `test_N6_migration` | PASS: v1→v2, existing content preserved, rerun no-op. |
+| N7 | `test_N7_idempotent` | PASS: --only-new leaves plan/DB bytes and mtime unchanged; flag replacement deduplicates. |
+| N8 | `test_N8_stubs` | PASS: no review stub; authorized cp1252 status test retained. |
+| N9 | `test_N9_gates` | Static gate test PASS; final whole-suite/coverage results recorded below after completion. |
 
-Focused command: `python -m pytest tests/corpus_extract/test_integration_eval.py tests/review -q` → **13 passed in 3.03 s**. The five additional review checks cover markup escaping, missing/corrupt/mismatched plan files, and Y_DOWN-to-Y_UP previews. A prior focused run including the authorized portability tests passed those tests too.
+Focused I.1 and corrected legacy tests are rerun on the final text-only scope. Generated fixtures only, reused builders, no copyrighted/binary plans committed. No network calls in this implementation or tests.
 
-Optional-extra check: a separate Python 3.11 environment with only `.[dev]`, same focused command → **2 passed, 11 skipped in 0.28 s**. Reader tests importorskip their extras; the N9 static gate requires the full requested extras because existing strict typing imports reader libraries. The initial minimal-environment run exposed that missing gate prerequisite; adding importorskip to the new N9 test corrected it without changing existing tests. This is not a claim that the repository's entire historical suite works without extras.
+## Environment and gates
 
-## Gates and measured coverage
+Python 3.11.17, isolated `.venv`; `python -m pip install -e ".[dev,excel,cad,pdf,raster,vlm]"` (vlm added for upstream P.1). Full-suite command: `python -m pytest --cov=ale.corpus --cov-report=term-missing --cov-report=json:/tmp/ale-i1-evidence/rebased-coverage.json`.
 
-| Command | Outcome |
-|---|---|
-| `python -m pytest --cov=ale.corpus --cov-report=term-missing --cov-report=json:/tmp/ale-i1-evidence/coverage.json` | **FAIL**, 3 failed, 1070 passed, 11 skipped, 2 xfailed in 411.64 s (1086 collected). |
-| `ruff check .` | PASS, all checks passed. |
-| `ruff format --check .` | PASS, 206 files already formatted. |
-| `mypy` | PASS, no issues in 111 source files. |
-| `python -m ale.contracts.lock --check` | PASS, exit 0, OK. |
-| `git diff --check` | PASS. |
-
-`ale.corpus` combined statement/branch coverage: **98.962%** (1040/1047 statements, 295/302 branches); statement coverage 99.331%. Module rounded totals: db 100%, extract 98%, meta 99%, review 97%, ingest 99%, scan 98%, classify 100%. Full-suite evidence predates only the new N9 optional-extra skip guard; that guard was independently rerun with and without extras and does not change full-extra behavior. Production code is identical to the full-suite run.
-
-Existing skips include platform-only cases, optional real-corpus tests, throughput under coverage, and missing historical commits in the shallow checkout. The two existing geometry xfails remain unchanged. They are not claimed as passes.
-
-## Blocking legacy assertions — no out-of-ownership edits
-
-1. `tests/corpus/test_corpus_ingest.py::test_C13_migration` (line 445) expects `PRAGMA user_version == 1`; I.1 N6 requires 2. Measured actual is 2. This file is **outside ownership**; stopped short of changing it.
-2. `tests/corpus_extract/test_extract_eval.py::test_W07_other_kinds` expects PDF/raster to remain NEW, untouched, and reported as unimplemented. I.1 §2 requires processing/exclusion. Kept the test unchanged despite ownership because the user explicitly prohibits weakening/deleting existing tests.
-3. `tests/rulebook/test_rulebook_eval.py::test_K10_cli` (line 316) expects an unknown-column warning for `north_angle_deg`; I.1 §4 requires accepting/storing it. No warning is now emitted. This file is **outside ownership**; stopped short of changing it.
-
-The Router needs to authorize/reconcile these obsolete expectations. Emitting misleading compatibility warnings, falsely reporting schema 1, or bypassing extraction to satisfy them would violate I.1. The branch is not ready to merge under the stated Done definition.
+- Ruff check: PASS.
+- Ruff format --check: PASS, 215 files formatted.
+- Strict mypy: PASS, 114 source files.
+- `python -m ale.contracts.lock --check`: PASS, exit 0.
+- `git diff --check`: PASS.
+- Whole-suite and coverage: final result pending.
 
 ## Literal readings and ambiguities
 
@@ -58,22 +58,8 @@ The Router needs to authorize/reconcile these obsolete expectations. Emitting mi
 - `--json` writes the same HTML and prints row data (including inline SVG strings) to stdout; the human path summary goes to stderr so stdout remains valid JSON. “Open the file path in the summary line” is interpreted as displaying the path to open, not automatically launching a browser.
 - SVG coordinates are normalized to y-up from the plan's declared frame, then SVG's display axis is flipped. No physical rescaling or north rotation is specified/applied. Type colors are deterministic, untyped rooms grey, holes preserved, walls black, doors red. Source text is HTML-escaped. One data row and one inline SVG per plan; the table header is separate. Rendering is fully offline.
 
-## Files changed
+## Changed files and delivery
 
-- Corpus: `extract.py`, `meta.py`, `db.py`, new `review.py`.
-- CLI commands: `extract.py`, `review.py`.
-- Tests: `tests/corpus_extract/conftest.py`, new `test_integration_eval.py`; new `tests/review/conftest.py` and `test_review.py`.
-- Authorized narrow edits: remove review from `tests/cli/test_cli_surface.py` stub mapping; retarget only the cp1252 stub test in `test_portability.py` to status on `Łódź ws`.
-- This report. No other files changed.
+Original scope: corpus extract/meta/db/new review, CLI extract/review, corpus_extract fixtures/integration tests, new review tests, the two narrowly authorized CLI-test edits, and this report. Revision adds only the three Router-authorized legacy test corrections listed above. No other files changed relative to the rebased main branch.
 
-## Delivery blocker
-
-Local implementation commit: `ebf11111c3411dea5abdb905d278ac3ec358ece0` on `codex/I.1-integration` (followed by this delivery-note commit). Publishing was attempted only to the assigned feature branch. `git push origin HEAD:refs/heads/codex/I.1-integration` returned HTTP 403 / permission denied. `gh pr create` with the required title/base/head and draft status returned `Resource not accessible by integration (createPullRequest)`.
-
-The connected GitHub app could read repository metadata (account-level push permission true), but its Git Trees write call also returned HTTP 403 `Resource not accessible by integration`. Account permission does not establish token/application write scope. No remote branch, commit, tree or PR was created by these rejected calls; the base branch was never pushed or merged. No alternate endpoint writes were attempted after the app's write rejection.
-
-Prepared portable artifacts outside the repository: `/tmp/ale-i1-evidence/I.1-integration.bundle`, `I.1-integration.patch`, and `PR.md`. The bundle requires base commit `1d08396844e9f711e354a342fb2586393702d3d6`; the PR body includes all measured failures and interpretation notes. Restore effective Contents and Pull requests write access before retrying publication. Ticket remains blocked for both Router reconciliation of legacy tests and remote delivery.
-
-### Publication access restored
-
-On the user's requested access recheck, pushing `codex/I.1-integration` succeeded. The authentication failures above are historical and no longer block branch delivery. The three documented legacy test conflicts still block merge acceptance; the PR is submitted as a draft for Router review.
+The first delivery's HTTP 403 and three legacy failures are historical, resolved by restored access and the Router ruling. Existing PR: https://github.com/woopdiscoop/ap2/pull/1. Publication after rebase uses an explicit force-with-lease on **only** codex/I.1-integration; base/main are never pushed or merged.
