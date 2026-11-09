@@ -8,3 +8,4 @@ Parked:
 
 ## Review log
 - 2026-11-08 — 13dbfcb: P1–P8 pass; HABS PDFs correctly not vector plans. Rework: plan-likeness must not depend on wall-piece counts (P2 had to be drawn with 8 rectangles) → rule amended (merged walls ≥ 4, rooms ≥ 2, wall length ≥ 0.6 × diagonal). Other readings accepted.
+- 2026-11-09 — Rework eacb75a: merged-wall count (stored walls unmerged), P2 with 6 rectangles plan-likely. **DONE**.

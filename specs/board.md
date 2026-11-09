@@ -29,7 +29,7 @@ Maintained by the Router only. Directive: `specs/DIRECTIVE.md` (v2.2, supersedes
 | 1.1 | Corpus ingestion & classification | **DONE** | — | RD + eval | Real corpus: 439 files → 1734 units (DWG 17 NEEDS_TOOL, PDF_VECTOR 879, PDF_SCANNED 436, RASTER 402), 0 failed, idempotent. |
 | 1.2 | CAD reader (DXF; DWG via converter) | **DONE** (library) | — | RD + eval | Layers (whole-word), units, walls, rooms, labels, openings, multi-plan, DWG→DXF via ODA/accoreconsole. Follow-up 1.2c: wire `ale layers` / `ale extract --kind dxf\|dwg` to the corpus DB. Real DWGs need ODA on the user's workstation. |
 | 1.2c | CAD → corpus CLI (`ale layers`, `ale extract` dxf/dwg) | **DONE** | — | RD + eval | Empty layer map → in-memory proposal + warning; NEEDS_TOOL DWGs retried. |
-| 1.3 | Vector-PDF reader (library) | **IN-PROGRESS** | — | RD + eval | Walls/doors/rooms from PDF paths, PDF_TEXT labels, title-block scale, plan-likeness score. |
+| 1.3 | Vector-PDF reader (library) | **DONE** | — | RD + eval | Plan-likeness on merged walls; HABS PDFs correctly identified as scanned (→ raster path). |
 | 1.4 | Raster reader (classical CV v1, library) | **DONE** | — | RD + eval | Synthetic: wall IoU 1.00 / 0.94 noisy. Real web images: no crash, but fills/double-line walls under-segmented and doors over-counted → learned model (CubiCasa) is the v2 path. |
 | 1.5 | Semantic labelling (library) | **DONE** | — | RD + eval | Text-first; VLM interface + cache with fake providers. For integration: renderer must use the same extent model; real provider must enforce vlm.timeout_s. Real provider = O-3. |
 | 1.6 | Scale reconciliation & review flags (library) | **DONE** | — | RD + eval | Dimension-text rule fixed (plausibility + notation tie-break). |
@@ -75,6 +75,7 @@ with ground truth. The Router will issue an annotation template before Phase 1.
 ## History
 
 - 2026-11-06 — v2.0 workspace initialised (tickets 1.1, 1.2 specified).
+- 2026-11-09 — 1.3 merged after rework.
 - 2026-11-09 — Account usage limit stopped Q.1, 1.3, 1.4, 2.2 (reset 01:20 UTC); all resumed 01:26; scheduled task at 06:30 UTC to resume again if needed. 1.4 merged after review.
 - 2026-11-08 — 2.1 merged after review (shared-length formula fixed by Worker). 2.2 specified and dispatched.
 - 2026-11-08 — 1.5 merged after review (69 tests, 99 %).
