@@ -14,7 +14,7 @@ ALE checks façade contact only, so the test floor had a 9.60 m-deep President's
 ## 3. Rule
 For a `needs_facade` room with façade contact: its **depth** is its extent perpendicular to its longest exterior
 contact. With exterior contact on two opposite sides (a through room), the limit is `2 × max_depth_m`. Violation when
-depth > limit (+ 0 tolerance, integer modules: `ceil` the limit to modules downward, i.e. `floor(max_depth/module)`).
+depth > limit, with no tolerance. In modules the limit is `floor(max_depth_m · 1000 / module_mm)` (doubled for a through room).
 
 ## 4. Geometry consequences
 - **Realiser**: for exterior blocks, the depth search (3.3 §5.1 / Q.3 key) treats `D > floor(max_depth/module)` as one
