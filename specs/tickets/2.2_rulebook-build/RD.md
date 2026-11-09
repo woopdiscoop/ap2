@@ -24,8 +24,7 @@ whose unit is EXTRACTED and not excluded, runs `extract_topology` (skipping plan
 ## 3. Statistics (`stats.py`) — every plan weighted by `rulebook.fidelity_weights[fidelity]`
 - **Adjacency** for each unordered type pair (a, b) (typed rooms only; `unknown`/SPECIAL/CIRCULATION excluded):
   `support` = Σ weights of plans containing both types; `hits` = Σ weights of plans where ≥ 1 pair of such rooms has a
-  contact (WALL or DOOR); `p = (hits + α·p0) / (support + α)` with `α = rulebook.laplace_alpha`, `p0 = seed.adjacency.p(a,b)`
-  if a seed is given else 0.5; `n_support = round(support)` (integer). Pairs with `n_support < min_support` keep the seed
+  contact (WALL or DOOR); `p = (hits + α·0.5) / (support + α)` with `α = rulebook.laplace_alpha` (neutral prior; the seed acts **only** through the blend of §4 — amended at review 2026-11-09 to avoid counting the seed twice); `n_support = round(support)` (integer). Pairs with `n_support < min_support` keep the seed
   value (or are omitted without seed).
 - **Aspect & area** per type, from rooms in plans of fidelity CAD or PDF_VECTOR only: aspect = long/short side of the
   room's minimum rotated rectangle; area m². Weighted quantiles p10/p50/p90 (linear interpolation on the weighted CDF);
@@ -40,7 +39,7 @@ whose unit is EXTRACTED and not excluded, runs `extract_topology` (skipping plan
 For every statistic present in both seed and mined: `final = seed + w × (mined − seed)` with `w = n / (n + rulebook.blend_k)`
 (`n` = support / room count / plan count as above). Quantiles blended per quantile (order preserved). Types only in the seed
 are kept; types only mined are added if their `n ≥ min_support`. `kind = "blended"` with a seed, else `"mined"`;
-`version = "mined-<UTC date>-<first 8 hex of content hash of the inputs>"`; `n_plans`; `source_mix` (count per fidelity).
+`version = "mined-<first 12 hex of the content hash of the inputs + seed>"` (no date — amended at review; the build date goes in `report.md` only); `n_plans`; `source_mix` (count per fidelity).
 
 ## 5. Report (`report.md`, French)
 Summary (plans used/skipped with reasons, source mix), then one table per statistic with value, support and source
