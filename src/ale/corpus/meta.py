@@ -1,7 +1,7 @@
 """``plans_meta.csv`` parsing (Ticket 1.1 RD section 5).
 
 UTF-8 (a BOM is accepted), ``,`` or ``;`` separator auto-detected from the header line.
-Columns: ``filename,page,scale_1_to,units,building_type,floor,exclude``; only
+Columns: ``filename,page,scale_1_to,units,building_type,floor,exclude,north_angle_deg,dpi``; only
 ``filename`` is required. Bad rows become warnings, never errors.
 """
 
@@ -15,7 +15,17 @@ from typing import Any
 
 __all__ = ["COLUMNS", "MetaParse", "MetaRow", "parse_meta", "parse_meta_text"]
 
-COLUMNS = ("filename", "page", "scale_1_to", "units", "building_type", "floor", "exclude")
+COLUMNS = (
+    "filename",
+    "page",
+    "scale_1_to",
+    "units",
+    "building_type",
+    "floor",
+    "exclude",
+    "north_angle_deg",
+    "dpi",
+)
 TRUTHY = frozenset({"1", "oui", "yes", "x", "true", "y", "o", "vrai"})
 FALSY = frozenset({"", "0", "non", "no", "false", "n", "faux"})
 _TEXT_FIELDS = ("units", "building_type", "floor")
@@ -78,6 +88,15 @@ def _parse_row(line: int, record: dict[str, str], warnings: list[str]) -> MetaRo
             warnings.append(f"{where}: scale_1_to {scale_text!r} is not a positive number, ignored")
         else:
             fields["scale_1_to"] = scale
+    for name in ("north_angle_deg", "dpi"):
+        text = record.get(name, "").strip()
+        if not text:
+            continue
+        number = _number(text)
+        if number is None or (name == "dpi" and (not isinstance(number, int) or number <= 0)):
+            warnings.append(f"{where}: {name} {text!r} is invalid, ignored")
+        else:
+            fields[name] = float(number) if name == "north_angle_deg" else number
     for name in _TEXT_FIELDS:
         value = record.get(name, "").strip()
         if value:
