@@ -6,6 +6,12 @@ serpentine path → :func:`ale.geometry.realize` → overflow repair. The first 
 kept (else the least-overflow one) and then improved by swaps that lower the
 ``required_adjacency`` cost term without breaking validity (at most 25 % of the remaining
 budget). Deterministic for a seed as long as the time budget is not exhausted; never raises.
+
+Ticket Q.2: the assignment steers ``needs_facade`` rooms to the exterior blocks first; a
+valid plan is then improved by a greedy façade pull (swaps with non-façade rooms that have a
+façade contact, bays moved to a block end), and multi-band pieces without a cut-side
+connector rule are also tried with an ``"inner"`` connector (kept if ``(n_hard, cost)``
+improves).
 """
 
 from __future__ import annotations
@@ -23,6 +29,7 @@ from ale.contracts.corridor_plan import (
     MAX_BANDS,
     BandPlan,
     BlockPlan,
+    ConnectorBay,
     CorridorPlan,
     FingerBay,
     PiecePlan,
@@ -40,6 +47,7 @@ from ale.topology.depth import DEADLINE_KEY, BandSpec, fill_blocks
 from ale.topology.embed import Positions, embed
 from ale.topology.graph import AVOID, REQUIRED, TopologyReport, build_graph, planarity
 from ale.topology.repair import (
+    Bay,
     Connector,
     Ctx,
     Draft,
@@ -61,6 +69,27 @@ _SWAP_TRIALS_MIN = 10
 _SWAP_TRIALS_MAX = 60
 _SEED_STRIDE = 1000
 _D_T_FACTOR = Fraction(7, 5)
+_EXTRA_ATTEMPTS = 3
+"""Attempts made after the first valid plan; the best ``(n_hard, cost)`` is kept (Q.2)."""
+_EXTRA_SHARE = 0.4
+"""The extra attempts stop once this share of the budget is spent (Q.2)."""
+_FACADE_SHARE = 0.25
+"""Share of the remaining budget the façade pull may use (Q.2)."""
+_FACADE_TRIALS = 300
+"""Realisations the façade pull may try (Q.2)."""
+HARD_CODES: frozenset[str] = frozenset(
+    {
+        "AREA_UNDER",
+        "AREA_OVER",
+        "ASPECT",
+        "MIN_WIDTH",
+        "NO_FACADE",
+        "REQUIRED_ADJ",
+        "AVOID_ADJ",
+        "NO_CIRCULATION_ACCESS",
+    }
+)
+"""The hard violation codes of RD 3.4 §3 (``n_hard``), used to rank seeded plans (Q.2)."""
 
 
 class SeedResult(BaseModel):
@@ -401,8 +430,9 @@ def seed_plan(
     ctx = search.ctx
     ctx.memo[DEADLINE_KEY] = t0 + budget_s
     combos = search.combos()
-    best: tuple[tuple[int, int], Draft, Realization] | None = None
+    best: tuple[tuple[tuple[int, int], tuple[int, float]], Draft, Realization] | None = None
     attempts = 0
+    extra = -1  # Q.2: attempts left after the first valid plan (-1: none found yet)
     with bounded(
         max_iter=_MAX_ATTEMPTS, time_budget_s=budget_s, label="seed-restarts", on_exhaust="stop"
     ) as restarts:
@@ -461,19 +491,30 @@ def seed_plan(
                         if score(real) == (0, 0):
                             break
             sc = score(real)
-            if best is None or sc < best[0]:
-                best = (sc, draft, real)
-            if sc == (0, 0):
+            key = (sc, _rank(real) if sc == (0, 0) else (0, 0.0))
+            if best is None or key < best[0]:
+                best = (key, draft, real)
+            if sc == (0, 0) and extra < 0:
+                extra = _EXTRA_ATTEMPTS
+            elif extra > 0:
+                extra -= 1
+            # Q.2: a few more attempts after the first valid plan, keeping the best
+            # (n_hard, cost) — valid plans differ widely in façade contacts.
+            if extra == 0 or (extra > 0 and time.monotonic() - t0 > _EXTRA_SHARE * budget_s):
                 break
     assert best is not None  # at least one attempt always runs
     _, draft, real = best
     if not real.failures:
         draft, real = _improve_adjacency(search, draft, real, t0, budget_s)
+        draft, real = _improve_facade(search, draft, real, t0, budget_s)
     report = _report(search, prepared, rulebook).model_copy(
         update={"unsatisfiable_required": unsatisfiable(search, draft, real)}
     )
+    plan = draft.to_plan()
+    if not real.failures:
+        plan, real = _try_inner(search, plan, real)
     return SeedResult(
-        plan=draft.to_plan(),
+        plan=plan,
         realization=real,
         report=report,
         attempts=attempts,
@@ -602,6 +643,164 @@ def _improve_adjacency(
                 improved = True
                 break
     return draft, real
+
+
+# ---------------------------------------------------------------------- façade (Q.2)
+def _hard(real: Realization) -> int:
+    """Hard violations of a valid realisation (the annealer's ``n_hard``, RD 3.4 §3)."""
+    assert real.layout is not None
+    return sum(1 for v in real.layout.metrics.violations if v.code in HARD_CODES)
+
+
+def _rank(real: Realization) -> tuple[int, float]:
+    """``(n_hard, total_cost)`` of a valid realisation."""
+    assert real.layout is not None
+    return _hard(real), real.layout.metrics.total_cost
+
+
+def _facade_candidates(search: _Search, draft: Draft, real: Realization) -> list[Draft]:
+    """Drafts that may give a ``NO_FACADE`` room a façade: first, its bay moved to an end of
+    its block whose bay has a façade contact (an end wall); then swaps with rooms without
+    ``needs_facade`` that have a façade contact (similar sizes first)."""
+    layout = real.layout
+    assert layout is not None
+    ctx = search.ctx
+    lacking = sorted(
+        r for v in layout.metrics.violations if v.code == "NO_FACADE" for r in v.instance_ids
+    )
+    facade = {iid: spec.needs_facade for iid, spec in ctx.prepared.instances}
+    contact = {
+        p.instance_id
+        for p in layout.rooms
+        if sum(n for n, _ in exterior_contacts(p.rect, layout.footprint)) >= ctx.k.f
+    }
+    spare = sorted(r for r in contact if not facade.get(r, False))
+    moves: list[Draft] = []
+    swaps: list[Draft] = []
+    for a in lacking:
+        slot, i = draft.find(a)
+        bays = draft.blocks[slot]
+        for j in (0, len(bays) - 1):
+            if j != i and set(bay_rooms(bays[j])) & contact:
+                moved = draft.copy()
+                bay = moved.blocks[slot].pop(i)
+                moved.blocks[slot].insert(j, bay)
+                moves.append(moved)
+        t = ctx.reqs[a].target
+        partners = sorted(
+            spare,
+            key=lambda b: (abs(t - ctx.reqs[b].target), b),
+        )
+        swaps += [_swap(draft, a, b) for b in partners]
+    return moves + swaps
+
+
+def _improve_facade(
+    search: _Search, draft: Draft, real: Realization, t0: float, budget_s: float
+) -> tuple[Draft, Realization]:
+    """Q.2: greedy façade pull — accept a candidate of :func:`_facade_candidates` when it
+    stays valid, adds no zone split and lowers ``(n_hard, cost)``; at most
+    :data:`_FACADE_SHARE` of the remaining budget."""
+    remaining = budget_s - (time.monotonic() - t0)
+    if remaining <= 0:
+        return draft, real
+    zones = {iid: spec.macro_zone for iid, spec in search.ctx.prepared.instances}
+
+    def splits(d: Draft) -> int:
+        return len(d.to_plan().zone_violations(zones))
+
+    best = _rank(real)
+    n_split = splits(draft)
+    with bounded(
+        max_iter=_FACADE_TRIALS,
+        time_budget_s=_FACADE_SHARE * remaining,
+        label="seed-facade-pull",
+        on_exhaust="stop",
+    ) as budget:
+        improved = True
+        while improved:
+            improved = False
+            for cand in _facade_candidates(search, draft, real):
+                cand_split = splits(cand)
+                if cand_split > n_split:
+                    continue
+                if not budget.tick():
+                    return draft, real
+                got = search.realise(cand)
+                if got.failures or _rank(got) >= best:
+                    continue
+                draft, real, best, n_split = cand, got, _rank(got), cand_split
+                improved = True
+                break
+    return draft, real
+
+
+def _marker_at(bays: Sequence[Bay], ctx: Ctx) -> int:
+    """Index of a connector marker at the block's capacity midpoint (estimated widths)."""
+    widths = [
+        Fraction(sum((ctx.reqs[r].target for r in bay_rooms(bay)), Fraction(0))) for bay in bays
+    ]
+    total = sum(widths, Fraction(0))
+    best = (total, 0)
+    cum = Fraction(0)
+    for i, w in enumerate(widths):
+        cum += w
+        best = min(best, (abs(2 * cum - total), i + 1))
+    return best[1]
+
+
+def with_inner(plan: CorridorPlan, pieces: Sequence[int], ctx: Ctx) -> CorridorPlan:
+    """``plan`` with the connector of ``pieces`` set to ``"inner"`` and one marker per block
+    at its capacity midpoint (RD Q.2 §2.2); ``ValueError`` if the contract rejects it."""
+    out: list[PiecePlan] = []
+    for p, piece in enumerate(plan.pieces):
+        if p not in pieces:
+            out.append(piece)
+            continue
+        bands = []
+        for band in piece.bands:
+            blocks = []
+            for block in (band.block_a, band.block_b):
+                plain = [bay for bay in block.bays if not isinstance(bay, ConnectorBay)]
+                bays: list[RoomBay | FingerBay | ConnectorBay] = list(plain)
+                bays.insert(_marker_at(plain, ctx), ConnectorBay())
+                blocks.append(BlockPlan(bays=tuple(bays)))
+            bands.append(BandPlan(block_a=blocks[0], block_b=blocks[1]))
+        out.append(PiecePlan(bands=tuple(bands), connector="inner"))
+    return CorridorPlan(pieces=tuple(out))
+
+
+def _try_inner(
+    search: _Search, plan: CorridorPlan, real: Realization
+) -> tuple[CorridorPlan, Realization]:
+    """Q.2 §2.2: for the multi-band pieces without a cut-side connector rule, also realise
+    the plan with an ``"inner"`` connector; keep the best ``(n_hard, cost)`` (ties: the
+    plan as seeded)."""
+    ctx = search.ctx
+    eligible = [
+        p
+        for p, piece in enumerate(plan.pieces)
+        if len(piece.bands) >= 2 and not _cut_side_required(ctx.fp, plan, p)
+    ]
+    best = (_rank(real), plan, real)
+    for k in range(1, len(eligible) + 1):
+        for subset in itertools.combinations(eligible, k):
+            try:
+                cand = with_inner(plan, subset, ctx)
+            except ValueError:  # pragma: no cover - markers are always valid here
+                continue
+            got = realize(ctx.prepared, cand, ctx.rulebook, ctx.config, seed=search.seed)
+            if got.layout is not None and _rank(got) < best[0]:
+                best = (_rank(got), cand, got)
+    return best[1], best[2]
+
+
+def _cut_side_required(fp: FootprintPieces, plan: CorridorPlan, p: int) -> bool:
+    """Whether the contract requires piece ``p``'s connector on the cut side (J2)."""
+    if fp.junction != "J2" or not any(len(pc.bands) >= 2 for pc in plan.pieces):
+        return False
+    carrier = 0 if len(plan.pieces[0].bands) >= 2 else 1
+    return p == carrier
 
 
 # ---------------------------------------------------------------------- report

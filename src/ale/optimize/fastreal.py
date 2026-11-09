@@ -70,8 +70,7 @@ class _CachedRealizer(_Realizer):
         consts: Consts,
         cache: RealizeCache,
     ) -> None:
-        super().__init__(prepared, plan, fp, consts)
-        self.solver = cache.solver
+        super().__init__(prepared, plan, fp, consts, cache.solver)
         self._cache = cache
         self._local_bands: dict[tuple[int, int, int], Any] = {}
         self._scores: dict[tuple[int, int, str, int], tuple[int, Fraction | int]] = {}

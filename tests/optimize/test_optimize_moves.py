@@ -1,4 +1,4 @@
-"""Ticket 3.4 eval O01-O02: grammar moves G1-G7."""
+"""Ticket 3.4 eval O01-O02: grammar moves G1-G7 (G8-G10: Ticket Q.2, see test_optimize_q2)."""
 
 from __future__ import annotations
 
@@ -101,9 +101,21 @@ def test_O01_moves_valid(seeded: dict[str, tuple[PreparedInput, SeedResult]]) ->
 
 
 def test_O01_weights() -> None:
-    assert set(MOVE_WEIGHTS) == set(MOVES) == {f"G{i}" for i in range(1, 8)}
+    # Ticket Q.2 rescaled the table and added G8-G10.
+    assert set(MOVE_WEIGHTS) == set(MOVES) == {f"G{i}" for i in range(1, 11)}
     assert sum(MOVE_WEIGHTS.values()) == pytest.approx(1.0)
-    assert MOVE_WEIGHTS["G1"] == 0.25 and MOVE_WEIGHTS["G2"] == 0.20
+    assert MOVE_WEIGHTS == {
+        "G1": 0.20,
+        "G2": 0.15,
+        "G3": 0.10,
+        "G4": 0.08,
+        "G5": 0.08,
+        "G6": 0.07,
+        "G7": 0.07,
+        "G8": 0.08,
+        "G9": 0.12,
+        "G10": 0.05,
+    }
 
 
 # ------------------------------------------------------------------------------ O02

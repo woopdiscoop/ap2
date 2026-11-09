@@ -1,4 +1,4 @@
-"""Grammar moves G1-G7 on a :class:`CorridorPlan` (RD 3.4 §2).
+"""Grammar moves G1-G10 on a :class:`CorridorPlan` (RD 3.4 §2, Ticket Q.2).
 
 Every move is a pure function ``move(plan, ctx, rng) -> CorridorPlan | None``: it draws its
 choices from ``rng`` (a seeded ``random.Random``) and returns a new plan that passes the
@@ -17,13 +17,23 @@ result would be invalid. A result that adds macro-zone grammar violations
 * ``G6`` swap the stacks of a finger bay, or reverse one of its stacks.
 * ``G7`` split a band into two (fewer than 6 bands) or merge two adjacent bands of a piece,
   redistributing their bays in order; connectors are fixed per the contract rules.
+* ``G8`` (Q.2) move the connector marker of a block of an ``"inner"`` piece by one bay.
+* ``G9`` (Q.2) façade pull: swap a ``needs_facade`` room without façade contact with a
+  non-façade room of an exterior block (band 0 block A or the last band's block B), of the
+  same zone when there is one, else of any zone (kept only if no zone split is added).
+* ``G10`` (Q.2) switch a multi-band piece's connector among ``start`` / ``end`` /
+  ``inner`` where the contract allows it, inserting the markers (at each block's capacity
+  midpoint) or removing them.
+
+Connector markers (:class:`ConnectorBay`) are like junction fingers for the zone runs: they
+belong to no run and are never moved by G3-G5; G7 and G10 re-place them.
 """
 
 from __future__ import annotations
 
 import random
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from itertools import pairwise, product
 from typing import Literal
 
@@ -33,6 +43,7 @@ from ale.contracts.corridor_plan import (
     MAX_BANDS,
     BandPlan,
     BlockPlan,
+    ConnectorBay,
     CorridorPlan,
     FingerBay,
     PiecePlan,
@@ -53,12 +64,16 @@ __all__ = [
     "g5_move_run",
     "g6_flip_finger",
     "g7_split_merge",
+    "g8_move_marker",
+    "g9_facade_pull",
+    "g10_switch_connector",
     "propose",
 ]
 
-Bay = RoomBay | FingerBay
-Connector = Literal["none", "start", "end"]
-_CONNECTORS: tuple[Connector, ...] = ("none", "start", "end")
+Bay = RoomBay | FingerBay | ConnectorBay
+Connector = Literal["none", "start", "end", "inner"]
+_CONNECTORS: tuple[Connector, ...] = ("none", "start", "end", "inner")
+_SWITCHABLE: tuple[Connector, ...] = ("start", "end", "inner")
 _AREA_TOLERANCE = 0.25
 _FOCUS_SHARE = 0.5
 _FOLD_SHARE = 0.25
@@ -75,11 +90,27 @@ class MoveContext:
     footprint: FootprintPieces
     focus: tuple[str, ...] = ()
     """Rooms the moves pick first half of the time (e.g. rooms with hard violations)."""
+    facade: Mapping[str, bool] = field(default_factory=dict)
+    """``needs_facade`` per room (G9)."""
+    no_facade: tuple[str, ...] = ()
+    """``needs_facade`` rooms currently without façade contact (G9); empty = unknown."""
+    on_facade: tuple[str, ...] = ()
+    """Rooms without ``needs_facade`` that currently have façade contact (G9 partners)."""
 
     def with_focus(self, rooms: Iterable[str]) -> MoveContext:
         """This context with ``focus`` = the sorted known ids of ``rooms``."""
         focus = tuple(sorted(set(rooms) & set(self.instance_ids)))
         return self if focus == self.focus else replace(self, focus=focus)
+
+    def with_no_facade(self, rooms: Iterable[str]) -> MoveContext:
+        """This context with ``no_facade`` = the sorted known ids of ``rooms``."""
+        got = tuple(sorted(set(rooms) & set(self.instance_ids)))
+        return self if got == self.no_facade else replace(self, no_facade=got)
+
+    def with_on_facade(self, rooms: Iterable[str]) -> MoveContext:
+        """This context with ``on_facade`` = the sorted known ids of ``rooms``."""
+        got = tuple(sorted(set(rooms) & set(self.instance_ids)))
+        return self if got == self.on_facade else replace(self, on_facade=got)
 
     @classmethod
     def from_prepared(cls, prepared: PreparedInput) -> MoveContext:
@@ -89,6 +120,7 @@ class MoveContext:
             zone_of={iid: spec.macro_zone for iid, spec in prepared.instances},
             area_of={iid: float(spec.target_area_m2) for iid, spec in prepared.instances},
             footprint=decompose_footprint(prepared.footprint.polygon),
+            facade={iid: spec.needs_facade for iid, spec in prepared.instances},
         )
 
 
@@ -136,11 +168,14 @@ def _blocks(pieces: Sequence[_Piece]) -> list[Block]:
 def _bay_rooms(bay: Bay) -> tuple[str, ...]:
     if isinstance(bay, RoomBay):
         return (bay.room,)
+    if isinstance(bay, ConnectorBay):
+        return ()
     return (*bay.left, *bay.right)
 
 
 def _is_junction(bay: Bay) -> bool:
-    return isinstance(bay, FingerBay) and bay.junction
+    """A bay that belongs to no zone run: a junction finger or a connector marker."""
+    return isinstance(bay, ConnectorBay) or (isinstance(bay, FingerBay) and bay.junction)
 
 
 def _bay_zone(bay: Bay, ctx: MoveContext) -> str | None:
@@ -206,6 +241,8 @@ def _pick_room(rooms: Sequence[str], ctx: MoveContext, rng: random.Random) -> st
 def _rename(bay: Bay, mapping: Mapping[str, str]) -> Bay:
     if isinstance(bay, RoomBay):
         return RoomBay(room=mapping.get(bay.room, bay.room))
+    if isinstance(bay, ConnectorBay):
+        return bay
     return FingerBay(
         left=tuple(mapping.get(r, r) for r in bay.left),
         right=tuple(mapping.get(r, r) for r in bay.right),
@@ -242,7 +279,7 @@ def g1_swap_rooms(plan: CorridorPlan, ctx: MoveContext, rng: random.Random) -> C
 def _remove_room(block: Block, b: int, room: str) -> None:
     """Remove ``room`` from bay ``b`` of ``block`` (dropping an emptied non-junction bay)."""
     bay = block[b]
-    if isinstance(bay, RoomBay):
+    if not isinstance(bay, FingerBay):  # a room bay (``locate`` never names a marker)
         del block[b]
         return
     left = tuple(r for r in bay.left if r != room)
@@ -470,11 +507,48 @@ def _chunks(seq: list[Bay], cuts: list[int]) -> list[list[Bay]]:
     return [seq[a:b] for a, b in pairwise(bounds)]
 
 
+def _marker_index(block: Block, ctx: MoveContext) -> int:
+    """Insertion index of a marker at the block's capacity midpoint: where the target area
+    of the bays before it is closest to half the block's (ties: the lower index)."""
+    areas = [sum(ctx.area_of.get(r, 0.0) for r in _bay_rooms(bay)) for bay in block]
+    total = sum(areas)
+    best = (abs(total), 0)
+    cum = 0.0
+    for i, a in enumerate(areas):
+        cum += a
+        best = min(best, (abs(2 * cum - total), i + 1))
+    return best[1]
+
+
+def _set_markers(piece: _Piece, ctx: MoveContext) -> None:
+    """Exactly one marker per block for an ``"inner"`` piece (missing ones inserted at the
+    capacity midpoint, extra ones dropped), none otherwise."""
+    for band in piece.bands:
+        for block in band:
+            if piece.connector != "inner":
+                block[:] = [bay for bay in block if not isinstance(bay, ConnectorBay)]
+                continue
+            first = next((i for i, bay in enumerate(block) if isinstance(bay, ConnectorBay)), None)
+            if first is None:
+                block.insert(_marker_index(block, ctx), ConnectorBay())
+                continue
+            block[:] = [
+                bay
+                for i, bay in enumerate(block)
+                if i == first or not isinstance(bay, ConnectorBay)
+            ]
+
+
+def _copy_piece(piece: _Piece) -> _Piece:
+    return _Piece(bands=[[list(a), list(b)] for a, b in piece.bands], connector=piece.connector)
+
+
 def _fix_connectors(pieces: list[_Piece], changed: int, ctx: MoveContext) -> bool:
     """Give each piece a connector that the contract accepts, preferring the current ones.
 
-    The changed piece (and, on an L footprint, the other piece) may be re-assigned; ``False``
-    when no assignment passes the piece rule and ``check_against``.
+    The changed piece (and, on an L footprint, the other piece) may be re-assigned; markers
+    follow the connectors (:func:`_set_markers`). ``False`` when no assignment passes the
+    piece rule and ``check_against`` (``pieces`` then unchanged).
     """
     current = [p.connector for p in pieces]
     options: list[tuple[Connector, ...]] = []
@@ -490,17 +564,24 @@ def _fix_connectors(pieces: list[_Piece], changed: int, ctx: MoveContext) -> boo
     for combo in product(*options):
         if any(len(pc.bands) == 1 and c != "none" for pc, c in zip(pieces, combo, strict=True)):
             continue
-        for pc, c in zip(pieces, combo, strict=True):
+        trial = [_copy_piece(pc) for pc in pieces]
+        for pc, c in zip(trial, combo, strict=True):
             pc.connector = c
+            _set_markers(pc, ctx)
         try:
-            trial = _pack(pieces)
+            packed = _pack(trial)
         except (ValidationError, ValueError):
             continue
-        if not trial.check_against(ctx.instance_ids, ctx.footprint):
+        if not packed.check_against(ctx.instance_ids, ctx.footprint):
+            pieces[:] = trial
             return True
-    for pc, c in zip(pieces, current, strict=True):
-        pc.connector = c
     return False
+
+
+def _strip_markers(piece: _Piece) -> None:
+    for band in piece.bands:
+        for block in band:
+            block[:] = [bay for bay in block if not isinstance(bay, ConnectorBay)]
 
 
 def g7_split_merge(plan: CorridorPlan, ctx: MoveContext, rng: random.Random) -> CorridorPlan | None:
@@ -508,6 +589,7 @@ def g7_split_merge(plan: CorridorPlan, ctx: MoveContext, rng: random.Random) -> 
 
     The bays of the band(s), in order (block A then block B, lower band first), are cut into
     four (split: lower A, lower B, upper A, upper B) or two (merge: A, B) contiguous chunks.
+    In an ``"inner"`` piece the markers are re-placed at the capacity midpoints.
     """
     pieces = _unpack(plan)
     ops: list[tuple[str, int, int]] = []
@@ -517,6 +599,7 @@ def g7_split_merge(plan: CorridorPlan, ctx: MoveContext, rng: random.Random) -> 
             ops += [("split", p, k) for k in range(n)]
         ops += [("merge", p, k) for k in range(n - 1)]
     op, p, k = rng.choice(ops)
+    _strip_markers(pieces[p])
     bands = pieces[p].bands
     if op == "split":
         seq = [*bands[k][0], *bands[k][1]]
@@ -531,6 +614,82 @@ def g7_split_merge(plan: CorridorPlan, ctx: MoveContext, rng: random.Random) -> 
     return _finish(plan, pieces, ctx)
 
 
+# ---------------------------------------------------------------------------- G8
+def g8_move_marker(plan: CorridorPlan, ctx: MoveContext, rng: random.Random) -> CorridorPlan | None:
+    """G8: move the connector marker of a block of an ``"inner"`` piece by one bay."""
+    pieces = _unpack(plan)
+    cands: list[tuple[Block, int, int]] = []
+    for pc in pieces:
+        if pc.connector != "inner":
+            continue
+        for band in pc.bands:
+            for block in band:
+                m = next(i for i, bay in enumerate(block) if isinstance(bay, ConnectorBay))
+                cands += [(block, m, d) for d in (-1, 1) if 0 <= m + d < len(block)]
+    if not cands:
+        return None
+    block, m, d = rng.choice(cands)
+    block[m], block[m + d] = block[m + d], block[m]
+    return _finish(plan, pieces, ctx)
+
+
+# ---------------------------------------------------------------------------- G9
+def _exterior(pieces: Sequence[_Piece]) -> list[Block]:
+    """Exterior blocks: band 0 block A and the last band's block B of every piece."""
+    out: list[Block] = []
+    for pc in pieces:
+        out.append(pc.bands[0][0])
+        out.append(pc.bands[-1][1])
+    return out
+
+
+def g9_facade_pull(plan: CorridorPlan, ctx: MoveContext, rng: random.Random) -> CorridorPlan | None:
+    """G9: swap a ``needs_facade`` room without façade contact with a non-façade room of an
+    exterior block (same zone preferred; another zone only without a new zone split).
+
+    Rooms of ``ctx.on_facade`` (non-façade rooms with a façade contact elsewhere, e.g. the
+    first bay of an inner block against an end wall) are partners too.
+    """
+    pieces = _unpack(plan)
+    outside = {r for block in _exterior(pieces) for bay in block for r in _bay_rooms(bay)}
+    present = set(plan.room_ids())
+    lacking = [r for r in ctx.no_facade if r in present]
+    if not lacking:  # contact unknown: the façade rooms outside the exterior blocks
+        lacking = [r for r in plan.room_ids() if ctx.facade.get(r) and r not in outside]
+    if not lacking:
+        return None
+    room = rng.choice(lacking)
+    spare = outside | (set(ctx.on_facade) & present)
+    partners = sorted(r for r in spare if not ctx.facade.get(r, False))
+    if not partners:
+        return None
+    zone = ctx.zone_of.get(room)
+    same = [r for r in partners if ctx.zone_of.get(r) == zone]
+    other = rng.choice(same or partners)
+    mapping = {room: other, other: room}
+    for block in _blocks(pieces):
+        block[:] = [_rename(bay, mapping) for bay in block]
+    return _finish(plan, pieces, ctx)
+
+
+# ---------------------------------------------------------------------------- G10
+def g10_switch_connector(
+    plan: CorridorPlan, ctx: MoveContext, rng: random.Random
+) -> CorridorPlan | None:
+    """G10: switch a multi-band piece's connector among ``start`` / ``end`` / ``inner``
+    (markers inserted at the capacity midpoints or removed); ``None`` if the contract
+    (e.g. a J2 cut-side rule) rejects the result."""
+    pieces = _unpack(plan)
+    multi = [p for p, pc in enumerate(pieces) if len(pc.bands) >= 2]
+    if not multi:
+        return None
+    p = rng.choice(multi)
+    piece = pieces[p]
+    piece.connector = rng.choice([c for c in _SWITCHABLE if c != piece.connector])
+    _set_markers(piece, ctx)
+    return _finish(plan, pieces, ctx)
+
+
 # ------------------------------------------------------------------------ selection
 Move = Callable[[CorridorPlan, MoveContext, random.Random], CorridorPlan | None]
 
@@ -542,19 +701,25 @@ MOVES: dict[str, Move] = {
     "G5": g5_move_run,
     "G6": g6_flip_finger,
     "G7": g7_split_merge,
+    "G8": g8_move_marker,
+    "G9": g9_facade_pull,
+    "G10": g10_switch_connector,
 }
 """The moves by name."""
 
 MOVE_WEIGHTS: dict[str, float] = {
-    "G1": 0.25,
-    "G2": 0.20,
-    "G3": 0.15,
-    "G4": 0.10,
-    "G5": 0.10,
-    "G6": 0.10,
-    "G7": 0.10,
+    "G1": 0.20,
+    "G2": 0.15,
+    "G3": 0.10,
+    "G4": 0.08,
+    "G5": 0.08,
+    "G6": 0.07,
+    "G7": 0.07,
+    "G8": 0.08,
+    "G9": 0.12,
+    "G10": 0.05,
 }
-"""Selection probabilities (RD §2)."""
+"""Selection probabilities (RD 3.4 §2 as rescaled by Ticket Q.2)."""
 
 _NAMES = tuple(MOVES)
 _WEIGHTS = tuple(MOVE_WEIGHTS[n] for n in _NAMES)

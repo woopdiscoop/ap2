@@ -6,6 +6,12 @@ piece depth at the piece's start or end and every band spine starts at it. Each 
 the 3.3 depth search inside its own depth; band depths are then tuned by coordinate descent
 on the internal band boundaries.
 
+Ticket Q.2 (contracts 1.3.0): with an ``"inner"`` connector the connector strip
+``[u_c, u_c + s) x P`` lies inside the piece, ``u_c`` = the largest width of the bays before
+the marker over all blocks; every band spine runs the full length (split in two by the
+connector); a block whose bays before the marker end before ``u_c`` gets a circulation filler
+strip up to ``u_c``; bays after the marker start at ``u_c + s``.
+
 Deterministic and exact (integer modules, ``Fraction`` targets); no randomness — ``seed``
 is only recorded in the layout. Problems with a valid plan become :class:`Failure` entries,
 never exceptions.
@@ -21,10 +27,10 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, StrictStr, model_validator
 
 from ale.contracts.config import AleConfig
-from ale.contracts.corridor_plan import BandPlan, CorridorPlan, FingerBay, RoomBay
+from ale.contracts.corridor_plan import BandPlan, ConnectorBay, CorridorPlan, FingerBay, RoomBay
 from ale.contracts.footprint import FootprintPieces, Piece, decompose_footprint
 from ale.contracts.models import Layout, LayoutMetrics, PlacedRoom, RoomSpec, Rulebook
-from ale.geometry.blocks import BlockOut, Consts, Item, RoomReq, Solver
+from ale.geometry.blocks import AnyBay, BlockOut, Consts, Item, RoomReq, Solver
 from ale.geometry.evaluate import evaluate
 from ale.geometry.junction import (
     across_origin,
@@ -46,7 +52,8 @@ _BAND_BUDGET_S = 5.0
 _MAX_SHIFT = 24
 _SHIFTS = tuple(d for k in range(1, _MAX_SHIFT + 1) for d in (k, -k))
 
-Bays = tuple[RoomBay | FingerBay, ...]
+Bays = tuple[AnyBay, ...]
+Connector = Literal["none", "start", "end", "inner"]
 Fail = tuple[str, str]
 Score = tuple[int, Fraction]
 _NO_SCORE: Score = (1 << 30, Fraction(0))
@@ -124,9 +131,11 @@ class _BandOut:
 class _PieceOut:
     index: int
     piece: Piece
-    connector: Literal["none", "start", "end"]
+    connector: Connector
     bands: list[_BandOut]
     extra: list[Fail] = field(default_factory=list)
+    u_c: int | None = None
+    """Inner connector position (``connector == "inner"``), else ``None``."""
 
     def failures(self) -> list[Fail]:
         return [f for bo in self.bands for f in bo.failures()] + self.extra
@@ -162,14 +171,21 @@ def shared_solver(consts: Consts, reqs: dict[str, RoomReq]) -> Solver:
 
 class _Realizer:
     def __init__(
-        self, prepared: PreparedInput, plan: CorridorPlan, fp: FootprintPieces, consts: Consts
+        self,
+        prepared: PreparedInput,
+        plan: CorridorPlan,
+        fp: FootprintPieces,
+        consts: Consts,
+        solver: Solver | None = None,
     ) -> None:
         self.plan = plan
         self.fp = fp
         self.k = consts
         self.specs: dict[str, RoomSpec] = dict(prepared.instances)
-        reqs = {iid: consts.req(spec) for iid, spec in self.specs.items()}
-        self.solver = shared_solver(consts, reqs)
+        if solver is None:
+            reqs = {iid: consts.req(spec) for iid, spec in self.specs.items()}
+            solver = shared_solver(consts, reqs)
+        self.solver = solver
         self.timed_out = False
         self._blocks: dict[tuple[int, int, str, int], BlockOut] = {}
         self._fixed: dict[tuple[int, int], _PieceOut] = {}
@@ -179,7 +195,7 @@ class _Realizer:
         """``(u0, length)`` of the bands of piece ``p`` (after the connector, if any)."""
         length, _ = frame(self.fp.pieces[p])
         connector = self.plan.pieces[p].connector
-        if connector == "none":
+        if connector in ("none", "inner"):
             return 0, length
         return (self.k.s if connector == "start" else 0), length - self.k.s
 
@@ -209,9 +225,9 @@ class _Realizer:
 
     def depth_candidates(self, band: BandPlan, depth: int) -> range:
         """RD 5.1: forced depth for empty blocks, else ``[low_A, P - s - low_B]``."""
-        if not band.block_a.bays:
+        if not _occupied(band.block_a.bays):
             return range(0, 1)
-        if not band.block_b.bays:
+        if not _occupied(band.block_b.bays):
             return range(depth - self.k.s, depth - self.k.s + 1)
         lo = self.min_depth(band.block_a.bays)
         hi = depth - self.k.s - self.min_depth(band.block_b.bays)
@@ -225,7 +241,7 @@ class _Realizer:
         band = self.plan.pieces[p].bands[0]
         d_b = frame(self.fp.pieces[p])[1] - self.k.s - d_a
         return all(
-            not bays or d >= self.min_depth(bays)
+            not _occupied(bays) or d >= self.min_depth(bays)
             for bays, d in ((band.block_a.bays, d_a), (band.block_b.bays, d_b))
         )
 
@@ -318,7 +334,10 @@ class _Realizer:
                     return None
                 outs.append(bo)
                 v0 += d
-            return _PieceOut(p, pc, plan.connector, outs)
+            po = _PieceOut(p, pc, plan.connector, outs)
+            if plan.connector == "inner":
+                self.place_connector(po)
+            return po
 
         def score(po: _PieceOut | None) -> Score:
             return _NO_SCORE if po is None else po.score()
@@ -357,6 +376,28 @@ class _Realizer:
                         cur_score, depths, current = best
                         improved = True
         return current
+
+    def place_connector(self, po: _PieceOut) -> None:
+        """Q.2: ``u_c`` = max width before the marker over all blocks; a block whose bays
+        then end beyond ``L`` overflows (the part its own layout did not report)."""
+        length, _ = frame(po.piece)
+        s = self.k.s
+        po.u_c = max(
+            (blk.marker or 0 for bo in po.bands for blk in (bo.a, bo.b)),
+            default=0,
+        )
+        for k, bo in enumerate(po.bands):
+            for side, blk in (("A", bo.a), ("B", bo.b)):
+                if blk.marker is None or blk.depth <= 0:
+                    continue
+                end = po.u_c + s + blk.post
+                if end <= length:
+                    continue
+                own = blk.marker + s + blk.post - length  # already reported by the block
+                over = end - length if own <= 0 else po.u_c - blk.marker
+                if over > 0:
+                    where = f"piece {po.index} band {k} block {side}"
+                    po.extra.append(("PLAN_OVERFLOW", f"{where} over by {over} modules"))
 
     # ------------------------------------------------------------------ L shapes
     def search(self) -> list[_PieceOut] | None:
@@ -404,7 +445,13 @@ class _Realizer:
         if self.plan.pieces[1].connector != cut_side(self.fp, 1):
             prim_lo = across_origin(prim_piece)
             prim_hi = prim_lo + frame(prim_piece)[1]
-            for k in range(n_sec):
+            sec_lo = across_origin(sec_piece)
+            sec_hi = sec_lo + frame(sec_piece)[1]
+            # Q.2 (speed): when the secondary lies across the primary's whole connector
+            # span, every spine inside it meets the connector and the link is a no-op
+            # (same search, same result); the band descent then reuses unlinked bands.
+            contained = prim_lo <= sec_lo and sec_hi <= prim_hi
+            for k in range(0 if contained else n_sec):
                 links[k] = self._meets_connector(k, prim_lo, prim_hi)
         secondary = self.piece(1, links)
         if primary is None or secondary is None:  # pragma: no cover - links never skip
@@ -432,11 +479,7 @@ class _Realizer:
         u0, _ = self.region(0)
         s = self.k.s
 
-        def junction(v: int, a: BlockOut, b: BlockOut) -> _Link:
-            block = a if facing == "A" else b
-            if block.junction_u is None:  # pragma: no cover - facing block has depth >= 1
-                return _Link(extra=[("JUNCTION_MISALIGNED", "junction finger not placed")])
-            ju = u0 + block.junction_u
+        def at(ju: int) -> _Link:
             d_sec = j1_secondary_depth(prim_piece, sec_piece, ju)
             if band_fits(sec_piece, d_sec, s):
                 return _Link([self.fixed_piece(1, d_sec)])
@@ -445,23 +488,48 @@ class _Realizer:
             )
             return _Link(extra=[("JUNCTION_MISALIGNED", detail)])
 
+        def junction(v: int, a: BlockOut, b: BlockOut) -> _Link:
+            block = a if facing == "A" else b
+            if block.junction_u is None:  # pragma: no cover - facing block has depth >= 1
+                return _Link(extra=[("JUNCTION_MISALIGNED", "junction finger not placed")])
+            return at(u0 + block.junction_u)
+
         primary = self.piece(0, {jb: junction})
         if primary is None:  # pragma: no cover - the junction link never skips
             return None
+        if primary.u_c is not None and primary.bands:
+            # Inner connector: the search placed the junction as if u_c were its own
+            # block's; re-align the secondary with the final connector position.
+            bo = primary.bands[jb]
+            block = bo.a if facing == "A" else bo.b
+            ju = block.junction_at(primary.u_c)
+            if ju is not None and ju != block.junction_u:
+                fresh = self.band_at(0, jb, bo.depth, bo.d_a)
+                fresh.link = at(u0 + ju)
+                primary.bands[jb] = fresh
         return [primary, *primary.linked()]
 
 
-def _bay_rooms(bay: RoomBay | FingerBay) -> tuple[str, ...]:
-    return (bay.room,) if isinstance(bay, RoomBay) else (*bay.left, *bay.right)
+def _bay_rooms(bay: AnyBay) -> tuple[str, ...]:
+    if isinstance(bay, RoomBay):
+        return (bay.room,)
+    if isinstance(bay, ConnectorBay):
+        return ()
+    return (*bay.left, *bay.right)
+
+
+def _occupied(bays: Bays) -> bool:
+    """Whether a block holds a room or a finger (a lone connector marker does not count)."""
+    return any(not isinstance(bay, ConnectorBay) for bay in bays)
 
 
 def _block_rects(
-    spine_v: int, block: BlockOut, side: str, s: int
+    spine_v: int, items: list[Item], side: str, s: int
 ) -> tuple[list[tuple[Item, int]], list[tuple[Item, int]]]:
     """Rooms and circulation items of a block with their piece-local ``v``."""
     rooms: list[tuple[Item, int]] = []
     circ: list[tuple[Item, int]] = []
-    for it in block.items:
+    for it in items:
         v = spine_v - it.t - it.dt if side == "A" else spine_v + s + it.t
         (rooms if it.kind == "room" else circ).append((it, v))
     circ.sort(key=lambda iv: (iv[0].u, iv[1]))
@@ -489,15 +557,24 @@ def _build_layout(
         pc = po.piece
         full, depth = frame(pc)
         u0, length = real.region(po.index)
-        if po.connector != "none":
+        u_c = po.u_c
+        if u_c is not None:
+            add_circ(pc, u_c, 0, s, depth)
+        elif po.connector != "none":
             add_circ(pc, 0 if po.connector == "start" else full - s, 0, s, depth)
         v0 = 0
         for bo in po.bands:
             spine_v = v0 + bo.d_a
             v0 += bo.depth
-            add_circ(pc, u0, spine_v, length, s)
+            if u_c is None:
+                add_circ(pc, u0, spine_v, length, s)
+            else:  # the inner connector crosses the spine
+                for a, b in ((0, u_c), (u_c + s, length)):
+                    if b > a:
+                        add_circ(pc, a, spine_v, b - a, s)
             for side, block in (("A", bo.a), ("B", bo.b)):
-                block_rooms, block_circ = _block_rects(spine_v, block, side, s)
+                items = block.placed(u_c, length, s)
+                block_rooms, block_circ = _block_rects(spine_v, items, side, s)
                 for it, v in block_circ:
                     add_circ(pc, u0 + it.u, v, it.du, it.dt)
                 for it, v in block_rooms:
