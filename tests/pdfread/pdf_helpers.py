@@ -75,13 +75,11 @@ def draw_plan_lines(page: Any) -> None:
 
 
 def wall_rects() -> list[Rect]:
-    """Reference plan walls as rectangles (each piece ≥ 5x as long as thick)."""
+    """Reference plan walls as 6 rectangles: one per façade, the partition split by the door."""
     h = T / 2.0
     return [
-        (-h, -h, 4.0, h),  # top, left part
-        (4.0, -h, 10 + h, h),  # top, right part
-        (-h, 6 - h, 4.0, 6 + h),  # bottom, left part
-        (4.0, 6 - h, 10 + h, 6 + h),  # bottom, right part
+        (-h, -h, 10 + h, h),  # top
+        (-h, 6 - h, 10 + h, 6 + h),  # bottom
         (-h, h, h, 6 - h),  # left
         (10 - h, h, 10 + h, 6 - h),  # right
         (4 - h, -h, 4 + h, DOOR_Y[0]),  # partition, upper piece

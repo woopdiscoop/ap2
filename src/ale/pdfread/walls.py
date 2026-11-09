@@ -58,6 +58,7 @@ __all__ = [
     "door_closures",
     "extract_walls",
     "fit_arc",
+    "merged_wall_count",
 ]
 
 Pt = tuple[float, float]
@@ -471,3 +472,57 @@ def door_closures(openings: Sequence[Opening], walls: Sequence[Wall]) -> list[Se
             q = (x0 + ux * (sc + half) + nx * off, y0 + uy * (sc + half) + ny * off)
             out.append((p, q))
     return out
+
+
+# --------------------------------------------------------------------------- merged count
+
+MERGE_GAP_EXTRA_PT = 1.0
+
+
+def _collinear_touching(a: Wall, b: Wall) -> bool:
+    """Parallel within 1°, on one line (offset ≤ half the thicker wall + 1 pt), and
+    overlapping or end to end with a gap ≤ the thicker wall's thickness + 1 pt."""
+    (ax, ay), (bx, by) = a.centerline.coords[0], a.centerline.coords[-1]
+    (cx, cy), (dx, dy) = b.centerline.coords[0], b.centerline.coords[-1]
+    la, lb = _len((ax, ay), (bx, by)), _len((cx, cy), (dx, dy))
+    if la == 0.0 or lb == 0.0:
+        return False
+    ux, uy = (bx - ax) / la, (by - ay) / la
+    vx, vy = (dx - cx) / lb, (dy - cy) / lb
+    if abs(ux * vy - uy * vx) > math.sin(math.radians(PAIR_ANGLE_DEG)):
+        return False
+    t = max(a.thickness or 0.0, b.thickness or 0.0)
+    for px, py in ((cx, cy), (dx, dy)):
+        if abs(ux * (py - ay) - uy * (px - ax)) > t / 2.0 + MERGE_GAP_EXTRA_PT:
+            return False
+    s0 = (cx - ax) * ux + (cy - ay) * uy
+    s1 = (dx - ax) * ux + (dy - ay) * uy
+    gap = max(min(s0, s1) - la, -max(s0, s1), 0.0)
+    return gap <= t + MERGE_GAP_EXTRA_PT
+
+
+def merged_wall_count(walls: Sequence[Wall]) -> int:
+    """Number of walls once collinear touching pieces are merged (connected components)."""
+    n = len(walls)
+    if n == 0:
+        return 0
+    lines = [shapely.LineString(w.centerline.coords) for w in walls]
+    tree = shapely.STRtree(lines)
+    qi, qj = tree.query(lines, predicate="dwithin", distance=PAIR_MAX_PT + MERGE_GAP_EXTRA_PT)
+    parent = list(range(n))
+
+    def find(i: int) -> int:
+        root = i
+        for _ in range(n):  # bounded: a parent chain is at most n long
+            if parent[root] == root:
+                break
+            root = parent[root]
+        parent[i] = root
+        return root
+
+    for i, j in zip(qi.tolist(), qj.tolist(), strict=True):
+        if i < j and _collinear_touching(walls[i], walls[j]):
+            ri, rj = find(i), find(j)
+            if ri != rj:
+                parent[max(ri, rj)] = min(ri, rj)
+    return len({find(i) for i in range(n)})

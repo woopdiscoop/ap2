@@ -7,7 +7,7 @@ file is committed). Python 3.13, PyMuPDF 1.28.6, shapely 2.2.
 | ID | Test | Result |
 |---|---|---|
 | P1 | `test_pdfread_eval.py::test_P1_two_room_plan` | PASS — 1 plan, 8 walls (0.2 m), rooms office / meeting_room (PDF_TEXT, conf 1.0), scale 0.0254·100/72 (TITLE_BLOCK, 0.9), areas 22.04 / 33.64 m² (exact to 1e-3), door 0.89999 m, `area_text_m2` 33.64 |
-| P2 | `test_pdfread_eval.py::test_P2_filled_walls` | PASS — same rooms and areas (±2 % of the line version and of ground truth) |
+| P2 | `test_pdfread_eval.py::test_P2_filled_walls` | PASS — 6 filled rectangles (one per façade + 2 partition pieces): same rooms and areas (±2 %), `is_plan_likely True` |
 | P3 | `test_pdfread_eval.py::test_P3_scale_choice` | PASS — `1:100` near the plan + `1:500` in a corner inset → 1:100, confidence 0.6; no scale text → UNKNOWN, `width_m` None |
 | P4 | `test_pdfread_eval.py::test_P4_not_a_plan` | PASS — text page score 0.0; bar chart (20 pt bars, axes, grid) score 0.667, `plans == ()` |
 | P5 | `test_pdfread_eval.py::test_P5_robustness` | PASS — empty page, 20 000 random segments (≈ 3.5 s), AES-256 encrypted, corrupt, non-PDF, missing file, page out of range: no exception |
@@ -26,7 +26,7 @@ polygonize filters, labels (exact / prefix / unknown / area text), path collecti
 - `ruff check .` — All checks passed; `ruff format --check .` — 160 files already formatted
 - `mypy` (strict, `src/ale`) — Success: no issues found in 88 source files
 - `python -m ale.contracts.lock --check` — OK (exit 0)
-- Whole suite: `pytest --cov=ale` — 809 passed, 9 skipped, 2 xfailed; total coverage 97 %
+- Whole suite (after merging `claude/new-session-2hmd3s`, review rework): 988 passed, 8 skipped, 2 xfailed
 - Coverage of `ale.pdfread`: `__init__` 100 %, `read` 97 %, `rooms` 89 %, `scale` 99 %,
   `walls` 95 % (≥ 85 % target)
 
@@ -42,16 +42,15 @@ worst page time 1.0 s.
 
 ## Interpretations and spec issues (literal readings, to be confirmed)
 
-1. **Plan-likeness length criterion** — "wall length ≥ 20 % of page diagonal × 3" read
-   literally as total wall centreline length ≥ 0.6 × page diagonal.
-   `plan_score = (min(1, W/8) + min(1, R/2) + min(1, L/(0.6·D))) / 3`, so the score is 1
-   exactly when the page is plan-likely (documented in `read.py`).
-2. **"walls ≥ 8" counts wall pieces.** Collinear paired walls are deliberately *not*
-   merged (unlike 1.2) — merging would leave the P1 plan with ~6 walls and make a 2-room
-   plan non-plan-likely. The P1 plan yields exactly 8 walls; for P2 the walls are drawn
-   as 8 rectangles (top/bottom split at the partition, partition split by the door) — a
-   single rectangle per façade would give 6 walls and fail the literal threshold. A
-   2-room plan sits right at the threshold; real plans have far more pieces.
+1. **Plan-likeness (RD amended at review 2026-11-08, implemented)** — collinear touching
+   wall pieces are merged *for the count* (parallel ≤ 1°, offset ≤ half the thicker wall
+   + 1 pt, gap ≤ its thickness + 1 pt; `walls.merged_wall_count`); likely iff merged
+   walls ≥ 4, rooms ≥ 2 and total wall length ≥ 0.6 × page diagonal.
+   `plan_score = (min(1, W/4) + min(1, R/2) + min(1, L/(0.6·D))) / 3` (1 exactly when
+   likely). `PlanGeometry.walls` still holds the unmerged pieces (door `host_wall`
+   indexes them). The reference plan gives 6 merged walls (8 pieces with lines, 6
+   rectangles filled).
+2. *(superseded by 1: the earlier "walls ≥ 8 pieces" reading and the 8-rectangle P2.)*
 3. **Unpaired thin lines are not walls** (unlike 1.2, where layers say which lines are
    walls); faces used for polygonize are only the *paired parts* of segments (+0.5 pt
    extension), filled-wall outlines and thick-stroke bands. Using whole paired segments

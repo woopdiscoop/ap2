@@ -9,11 +9,12 @@ Pipeline: walls (:mod:`ale.pdfread.walls`) → scale (:mod:`ale.pdfread.scale`, 
 to the walls' bounding box) → door arcs → rooms (:mod:`ale.pdfread.rooms`) →
 plan-likeness. One page gives at most one plan (``plan_index`` 0).
 
-Plan-likeness: with ``W`` walls, ``R`` rooms, ``L`` the total wall centreline length and
-``D`` the page diagonal (points)::
+Plan-likeness (RD amended 2026-11-08): with ``W`` walls *after merging collinear touching
+pieces* (the count only: ``PlanGeometry.walls`` keeps the pieces), ``R`` rooms, ``L`` the
+total wall centreline length and ``D`` the page diagonal (points)::
 
-    likely     = W >= 8 and R >= 2 and L >= 0.2 * D * 3
-    plan_score = (min(1, W / 8) + min(1, R / 2) + min(1, L / (0.6 * D))) / 3
+    likely     = W >= 4 and R >= 2 and L >= 0.6 * D
+    plan_score = (min(1, W / 4) + min(1, R / 2) + min(1, L / (0.6 * D))) / 3
 
 so ``plan_score`` ∈ [0, 1] and equals 1 exactly when the page is plan-likely. A page
 that is not plan-likely returns ``plans == ()``.
@@ -48,6 +49,7 @@ from ale.pdfread.walls import (
     build_doors,
     door_closures,
     extract_walls,
+    merged_wall_count,
 )
 
 __all__ = [
@@ -62,7 +64,7 @@ __all__ = [
 
 log = logging.getLogger(__name__)
 
-PLAN_MIN_WALLS = 8
+PLAN_MIN_WALLS = 4  # merged walls (collinear touching pieces merged)
 PLAN_MIN_ROOMS = 2
 PLAN_LENGTH_DIAGONALS = 0.6  # "wall length ≥ 20 % of page diagonal x 3" (0.2 * 3)
 MAX_PATH_ITEMS = 1_000_000
@@ -258,15 +260,15 @@ def _collect_texts(text_dict: dict[str, Any], out: _Page) -> None:
 
 
 def plan_likeness(
-    n_walls: int, n_rooms: int, wall_length: float, diagonal: float
+    n_merged_walls: int, n_rooms: int, wall_length: float, diagonal: float
 ) -> tuple[bool, float]:
     """``(is_plan_likely, plan_score)`` (see module docstring)."""
     need = PLAN_LENGTH_DIAGONALS * diagonal
     length_term = 1.0 if need <= 0.0 else min(1.0, wall_length / need)
     score = (
-        min(1.0, n_walls / PLAN_MIN_WALLS) + min(1.0, n_rooms / PLAN_MIN_ROOMS) + length_term
+        min(1.0, n_merged_walls / PLAN_MIN_WALLS) + min(1.0, n_rooms / PLAN_MIN_ROOMS) + length_term
     ) / 3.0
-    likely = n_walls >= PLAN_MIN_WALLS and n_rooms >= PLAN_MIN_ROOMS and wall_length >= need
+    likely = n_merged_walls >= PLAN_MIN_WALLS and n_rooms >= PLAN_MIN_ROOMS and wall_length >= need
     return likely, min(1.0, max(0.0, score))
 
 
@@ -301,10 +303,11 @@ def _analyse(
     faces = polygonize_rooms(lines, wr.material, scale.m_per_unit, warnings)
     rooms = label_rooms(faces, col.room_texts, warnings)
     wall_length = sum(math.dist(w.centerline.coords[0], w.centerline.coords[-1]) for w in walls)
-    likely, score = plan_likeness(len(walls), len(rooms), wall_length, diagonal)
+    n_merged = merged_wall_count(walls)
+    likely, score = plan_likeness(n_merged, len(rooms), wall_length, diagonal)
     if not likely:
         warnings.append(
-            f"not a plan: {len(walls)} walls, {len(rooms)} rooms, "
+            f"not a plan: {n_merged} merged walls ({len(walls)} pieces), {len(rooms)} rooms, "
             f"wall length {wall_length:.1f} pt (score {score:.3f})"
         )
         return None, False, score, warnings

@@ -25,6 +25,7 @@ from ale.pdfread.walls import (
     door_closures,
     extract_walls,
     fit_arc,
+    merged_wall_count,
 )
 
 # --------------------------------------------------------------------------- scale
@@ -73,9 +74,10 @@ def test_find_scale_rules() -> None:
 
 
 def test_plan_likeness_formula() -> None:
-    assert plan_likeness(8, 2, 600.0, 1000.0) == (True, 1.0)
-    likely, score = plan_likeness(4, 1, 300.0, 1000.0)
+    assert plan_likeness(4, 2, 600.0, 1000.0) == (True, 1.0)
+    likely, score = plan_likeness(2, 1, 300.0, 1000.0)
     assert not likely and score == pytest.approx(0.5)
+    assert plan_likeness(3, 5, 1e4, 1000.0)[0] is False
     assert plan_likeness(0, 0, 0.0, 0.0) == (False, pytest.approx(1 / 3))
     assert plan_likeness(100, 100, 1e9, 10.0) == (True, 1.0)
 
@@ -106,6 +108,20 @@ def test_pairing_thresholds() -> None:
     a = (100 * math.cos(math.radians(179.6)), 100 * math.sin(math.radians(179.6)))
     res = extract_walls([_s((0, 0), (100, 0)), _s((100, 8), (100 + a[0], 8 + a[1]))], [])
     assert len(res.walls) == 1
+
+
+def test_merged_wall_count() -> None:
+    assert merged_wall_count([]) == 0
+    pieces = [
+        _wall((0, 0), (100, 0)),
+        _wall((106, 0), (200, 0)),  # gap 6 ≤ thickness + 1: same wall
+        _wall((300, 0.5), (200, 0.5)),  # touching, reversed, offset 0.5
+        _wall((240, 0), (260, 0)),  # overlapping
+        _wall((215, 0), (215, 100)),  # perpendicular
+        _wall((0, 20), (100, 20)),  # parallel, 20 pt away
+        _wall((330, 0), (400, 0)),  # gap 30: separate
+    ]
+    assert merged_wall_count(pieces) == 4
 
 
 def test_degenerate_inputs() -> None:

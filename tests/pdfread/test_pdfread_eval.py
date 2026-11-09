@@ -71,7 +71,8 @@ def test_P1_two_room_plan(tmp_path: Path) -> None:
 
 def test_P2_filled_walls(tmp_path: Path) -> None:
     res = read(save_page(tmp_path / "filled.pdf", reference_page(filled=True)))
-    assert res.is_plan_likely and len(res.plans) == 1
+    assert res.is_plan_likely is True and len(res.plans) == 1
+    assert len(res.plans[0].walls) == 6  # one rectangle per façade + 2 partition pieces
     plan = res.plans[0]
     assert len(plan.rooms) == 2
     _check_rooms(plan)
