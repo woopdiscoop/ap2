@@ -1,4 +1,4 @@
-"""``ale program template`` / ``ale program check`` (Ticket 3.1).
+"""``ale program template`` / ``check`` (Ticket 3.1) and ``import`` (Ticket P.2).
 
 ``ale.program`` (openpyxl) is imported lazily so that the CLI starts without the
 ``excel`` extra.
@@ -17,12 +17,14 @@ import typer
 from ale.cli.commands._common import (
     EXIT_OK,
     EXIT_RUNTIME,
+    EXIT_USAGE,
     WorkspaceOption,
     open_workspace_or_exit,
 )
 from ale.config import AleConfig
 
 if TYPE_CHECKING:
+    from ale.program.annexe import AnnexeResult
     from ale.program.models import FeasibilityReport, Issue
 
 app = typer.Typer(
@@ -136,3 +138,73 @@ def check(
         lines.append("OK" if not errors else "ÉCHEC : corrigez les erreurs ci-dessus.")
         typer.echo("\n".join(lines))
     raise typer.Exit(EXIT_OK if not errors else EXIT_RUNTIME)
+
+
+def _import_summary(result: AnnexeResult, written: list[Path]) -> list[str]:
+    lines = [f"Bâtiments : {len(result.buildings)}"]
+    for b in result.buildings:
+        lines.append(
+            f"  {b.name} : {len(b.lines)} lignes, {b.instances} instances, "
+            f"{float(b.useful_m2):.2f} m² utiles"
+        )
+    lines.append(f"Lignes ignorées ({len(result.skipped)}) :")
+    lines += [f"  {s.building}, ligne {s.row} : {s.espace} ({s.reason})" for s in result.skipped]
+    lines.append(f"Contrôle des totaux ({len(result.totals)}) :")
+    for t in result.totals:
+        verdict = "OK" if t.ok else "ÉCART"
+        lines.append(
+            f"  {t.building}, ligne {t.row} : déclaré {float(t.stated_m2):.2f} m², "
+            f"lu {float(t.computed_m2):.2f} m² : {verdict}"
+        )
+    lines.append(f"Avertissements ({len(result.warnings)}) :")
+    lines += [f"  {w}" for w in result.warnings]
+    lines.append("Fichiers écrits :")
+    lines += [f"  {p}" for p in written]
+    return lines
+
+
+@app.command("import")
+def import_annexe(
+    annexe: Annotated[
+        Path, typer.Option("--annexe", dir_okay=False, help="Programme physique (.xlsx).")
+    ],
+    out: Annotated[Path, typer.Option("--out", file_okay=False, help="Output directory.")],
+    rules: Annotated[
+        Path | None,
+        typer.Option("--rules", dir_okay=False, help="Mapping rules YAML (before the defaults)."),
+    ] = None,
+    building: Annotated[
+        str | None, typer.Option("--building", help="Import only this building (name or slug).")
+    ] = None,
+) -> None:
+    """Convert a "programme physique" (Annexe format) into ALE programme templates."""
+    if importlib.util.find_spec("openpyxl") is None:  # pragma: no cover - extra in tests
+        typer.echo(_EXTRA_HINT, err=True)
+        raise typer.Exit(EXIT_RUNTIME)
+    from ale.program.annexe import AnnexeError, fold_name, load_rules, read_annexe, write_outputs
+
+    try:
+        result = read_annexe(annexe, load_rules(rules))
+    except AnnexeError as exc:
+        typer.echo(f"ERREUR : {exc}", err=True)
+        raise typer.Exit(EXIT_USAGE) from exc
+    if result.unmatched:
+        lines = [f"ERREUR : espaces sans règle de correspondance ({len(result.unmatched)}) :"]
+        lines += [f"  {u.building}, ligne {u.row} : « {u.espace} »" for u in result.unmatched]
+        lines.append("Ajoutez une règle (--rules FICHIER). Aucun fichier écrit.")
+        typer.echo("\n".join(lines), err=True)
+        raise typer.Exit(EXIT_USAGE)
+    if building is not None:
+        wanted = fold_name(building)
+        chosen = [b for b in result.buildings if wanted in (fold_name(b.name), b.slug)]
+        if not chosen:
+            names = ", ".join(f"« {b.name} »" for b in result.buildings) or "aucun"
+            typer.echo(f"ERREUR : bâtiment « {building} » introuvable (lus : {names}).", err=True)
+            raise typer.Exit(EXIT_USAGE)
+        result.buildings = chosen
+    if not result.buildings:
+        typer.echo("ERREUR : aucune ligne de programme importée.", err=True)
+        raise typer.Exit(EXIT_USAGE)
+    written = write_outputs(result.buildings, out)
+    typer.echo("\n".join(_import_summary(result, written)))
+    raise typer.Exit(EXIT_OK)
