@@ -8,24 +8,31 @@ Everything here works in integer modules in a block-local frame: ``u`` along the
 Ticket Q.1: every room placed here satisfies the area rule, ``aspect <= amax`` and its
 ``wmin``. A room bay or stack that cannot is a block failure (``ROOM_INFEASIBLE`` /
 ``STACK_INFEASIBLE``) instead of the former rule-breaking fallbacks.
+
+Ticket Q.2 (inner connector): a block may hold one :class:`ConnectorBay` marker. Its bays
+before the marker are laid out from ``u = 0``; the bays after it from ``pre + s`` (as if the
+connector sat right after this block's own bays). The piece fixes the connector position
+``u_c`` from all its blocks; :meth:`BlockOut.placed` then shifts the bays after the marker
+to ``u_c + s`` and adds the filler strip ``[pre, u_c)`` and the end strip.
 """
 
 from __future__ import annotations
 
 import math
 from collections.abc import Iterator, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from fractions import Fraction
 from typing import Literal
 
 from ale.contracts.area_rule import AreaTolerance, area_bounds_mm2
 from ale.contracts.config import AleConfig
-from ale.contracts.corridor_plan import FingerBay, RoomBay
+from ale.contracts.corridor_plan import ConnectorBay, FingerBay, RoomBay
 from ale.contracts.models import RoomSpec
 from ale.contracts.units import to_decimal
 from ale.guards import bounded
 
 __all__ = [
+    "AnyBay",
     "BlockOut",
     "Consts",
     "Item",
@@ -39,7 +46,8 @@ __all__ = [
 _MM2_PER_M2 = 1_000_000
 _LOOP_BUDGET_S = 5.0
 
-ItemKind = Literal["room", "finger", "stack_strip", "end_strip"]
+ItemKind = Literal["room", "finger", "stack_strip", "end_strip", "filler"]
+AnyBay = RoomBay | FingerBay | ConnectorBay
 
 
 def _ceil_div(a: int, b: int) -> int:
@@ -165,6 +173,15 @@ class BlockOut:
     strip_cells: int = 0  # stack-end strips
     end_cells: int = 0  # end strip
     junction_u: int | None = None
+    depth: int = 0
+    marker: int | None = None
+    """Σ widths of the bays before the connector marker (``None``: no marker)."""
+    post: int = 0
+    """Σ widths of the bays after the marker."""
+    split: int = 0
+    """Index in ``items`` of the first item after the marker."""
+    junction_post: bool = False
+    """Whether the junction finger lies after the marker."""
     _dev: Fraction | None = field(default=None, repr=False, compare=False)
 
     def dev(self) -> Fraction:
@@ -172,6 +189,37 @@ class BlockOut:
         if self._dev is None:
             self._dev = self.area_dev + self.strip_cells
         return self._dev
+
+    def shift(self, u_c: int) -> int:
+        """How far the bays after the marker move when the connector sits at ``u_c``."""
+        return 0 if self.marker is None else max(0, u_c - self.marker)
+
+    def junction_at(self, u_c: int | None) -> int | None:
+        """Block-local ``u`` of the junction finger with the connector at ``u_c``."""
+        if self.junction_u is None or u_c is None or not self.junction_post:
+            return self.junction_u
+        return self.junction_u + self.shift(u_c)
+
+    def placed(self, u_c: int | None, length: int, s: int) -> list[Item]:
+        """Items with the connector at ``u_c`` (Q.2): bays after the marker shifted to
+        ``u_c + s``, a filler strip ``[pre, u_c)`` and the end strip ``[u_c + s + post,
+        length)``. Without a marker (or ``u_c``) the items as laid out."""
+        if self.marker is None or u_c is None:
+            return self.items
+        if self.depth <= 0:
+            return []
+        shift = self.shift(u_c)
+        out: list[Item] = []
+        for i, it in enumerate(self.items):
+            if it.kind == "end_strip":
+                continue
+            out.append(replace(it, u=it.u + shift) if i >= self.split else it)
+        if shift > 0:
+            out.append(Item("filler", None, self.marker, 0, shift, self.depth))
+        end = self.marker + shift + s + self.post
+        if end < length:
+            out.append(Item("end_strip", None, end, 0, length - end, self.depth))
+        return out
 
 
 class Solver:
@@ -305,23 +353,38 @@ class Solver:
     # ------------------------------------------------------------------ 5.4 block
     def block(
         self,
-        bays: tuple[RoomBay | FingerBay, ...],
+        bays: tuple[AnyBay, ...],
         depth: int,
         length: int,
         where: str,
     ) -> BlockOut:
-        """Lay out ``bays`` in a block of ``depth`` x ``length``; ``where`` names it."""
-        out = BlockOut()
-        if not bays:
+        """Lay out ``bays`` in a block of ``depth`` x ``length``; ``where`` names it.
+
+        A :class:`ConnectorBay` marker takes ``s`` along the spine right after the bays
+        before it (the piece moves it to its connector, see :meth:`BlockOut.placed`).
+        """
+        out = BlockOut(depth=depth)
+        s = self.k.s
+        has_marker = any(isinstance(bay, ConnectorBay) for bay in bays)
+        if all(isinstance(bay, ConnectorBay) for bay in bays):
+            if has_marker:
+                out.marker = 0
             if depth > 0:
-                out.items.append(Item("end_strip", None, 0, 0, length, depth))
-                out.end_cells += length * depth
+                start = s if has_marker else 0
+                if length > start:
+                    out.items.append(Item("end_strip", None, start, 0, length - start, depth))
+                    out.end_cells += (length - start) * depth
             return out
         if depth <= 0:
             out.failures.append(("BLOCK_TOO_SHALLOW", f"{where} has rooms but depth {depth}"))
             return out
         u = 0
         for b, bay in enumerate(bays):
+            if isinstance(bay, ConnectorBay):
+                out.marker = u
+                out.split = len(out.items)
+                u += s
+                continue
             if isinstance(bay, RoomBay):
                 req = self.reqs[bay.room]
                 found = self.room_bay_width(req, depth)
@@ -338,13 +401,16 @@ class Solver:
                 continue
             w_left = self._stack_items(out, bay.left, u, depth, f"{where} bay {b} left")
             finger_u = u + w_left
-            out.items.append(Item("finger", None, finger_u, 0, self.k.s, depth))
+            out.items.append(Item("finger", None, finger_u, 0, s, depth))
             if bay.junction:
                 out.junction_u = finger_u
+                out.junction_post = out.marker is not None
             w_right = self._stack_items(
-                out, bay.right, finger_u + self.k.s, depth, f"{where} bay {b} right"
+                out, bay.right, finger_u + s, depth, f"{where} bay {b} right"
             )
-            u = finger_u + self.k.s + w_right
+            u = finger_u + s + w_right
+        if out.marker is not None:
+            out.post = u - out.marker - s
         extra = length - u
         if extra > 0:
             out.items.append(Item("end_strip", None, u, 0, extra, depth))

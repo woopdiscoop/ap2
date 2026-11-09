@@ -32,6 +32,20 @@ connector. J2: if both pieces have one band, spines are collinear; otherwise the
 connector lies on the cut side and the secondary needs none. J1: the secondary has exactly one
 band; the junction finger is in the primary's band adjacent to the cut (band 0 if facing_block is
 A, else the last band), in that band's facing block.
+
+Inner connector (contracts 1.3.0)
+---------------------------------
+With ``connector == "inner"`` (≥ 2 bands), the connector is a corridor strip of width ``s``
+spanning the full piece depth at a position ``u_c`` chosen by realisation, somewhere inside the
+piece's length. Every block of every band of such a piece holds exactly one
+:class:`ConnectorBay` marker (an otherwise empty block holds just the marker): in each block,
+bays listed before the marker lie at ``u < u_c``, those after at ``u ≥ u_c + s``. Band spines
+cross the connector and run the full piece length. Markers hold no room: ``room_ids`` and
+``locate`` skip them (bay indices count markers, so ``locate(...).bay`` still indexes
+``bays``), and for macro-zone contiguity a marker splits its block into two runs (a zone may
+appear once on each side). On a J2 footprint, a rule requiring a connector on the cut side is
+satisfied only by ``"start"``/``"end"``; ``"inner"`` is allowed for pieces where no cut-side
+connector is required.
 """
 
 from __future__ import annotations
@@ -51,6 +65,7 @@ __all__ = [
     "BandPlan",
     "Bay",
     "BlockPlan",
+    "ConnectorBay",
     "CorridorPlan",
     "FingerBay",
     "InstanceId",
@@ -98,8 +113,19 @@ class FingerBay(BaseModel):
         return self
 
 
-Bay = Annotated[RoomBay | FingerBay, Field(discriminator="kind")]
-"""A room bay or a finger bay (discriminated by ``kind``)."""
+class ConnectorBay(BaseModel):
+    """Marker for the crossing of an ``"inner"`` connector in a block (holds no room).
+
+    Bays before the marker lie before the connector along the spine, bays after it beyond.
+    """
+
+    model_config = _CONFIG
+
+    kind: Literal["connector"] = "connector"
+
+
+Bay = Annotated[RoomBay | FingerBay | ConnectorBay, Field(discriminator="kind")]
+"""A room bay, a finger bay or a connector marker (discriminated by ``kind``)."""
 
 
 class BlockPlan(BaseModel):
@@ -127,18 +153,35 @@ class PiecePlan(BaseModel):
     """The bands of a piece, ordered from the piece's min v (across the spine axis) upward.
 
     ``connector``: where the connector corridor lies along the spine axis (``"start"`` at
-    ``u ∈ [0, s)``, ``"end"`` at ``u ∈ [L - s, L)``); a 1-band piece must have ``"none"``.
+    ``u ∈ [0, s)``, ``"end"`` at ``u ∈ [L - s, L)``, ``"inner"`` at ``u ∈ [u_c, u_c + s)``
+    with ``u_c`` chosen by realisation); a 1-band piece must have ``"none"``. With
+    ``"inner"`` every block of every band holds exactly one :class:`ConnectorBay`; with any
+    other value no block holds one.
     """
 
     model_config = _CONFIG
 
     bands: tuple[BandPlan, ...] = Field(min_length=1, max_length=MAX_BANDS)
-    connector: Literal["none", "start", "end"] = "none"
+    connector: Literal["none", "start", "end", "inner"] = "none"
 
     @model_validator(mode="after")
     def _connector(self) -> PiecePlan:
         if len(self.bands) == 1 and self.connector != "none":
             raise ValueError(f"a 1-band piece has no connector, got {self.connector!r}")
+        for k, band in enumerate(self.bands):
+            for name, block in _blocks(band):
+                markers = sum(isinstance(bay, ConnectorBay) for bay in block.bays)
+                where = f"band {k} block {name}"
+                if self.connector == "inner" and markers != 1:
+                    raise ValueError(
+                        f"an inner-connector piece needs exactly one connector bay per block,"
+                        f" got {markers} in {where}"
+                    )
+                if self.connector != "inner" and markers:
+                    raise ValueError(
+                        f"a connector bay is only allowed in an inner-connector piece"
+                        f" (connector {self.connector!r}, {where})"
+                    )
         return self
 
 
@@ -147,10 +190,17 @@ def _blocks(band: BandPlan) -> tuple[tuple[BlockName, BlockPlan], ...]:
     return (("A", band.block_a), ("B", band.block_b))
 
 
-def _bay_rooms(bay: RoomBay | FingerBay) -> tuple[str, ...]:
-    """Rooms of a bay: the room of a room bay; left then right stack of a finger bay."""
+AnyBay = RoomBay | FingerBay | ConnectorBay
+"""The bay classes (the plain union behind :data:`Bay`)."""
+
+
+def _bay_rooms(bay: AnyBay) -> tuple[str, ...]:
+    """Rooms of a bay: the room of a room bay; left then right stack of a finger bay; none for
+    a connector marker."""
     if isinstance(bay, RoomBay):
         return (bay.room,)
+    if isinstance(bay, ConnectorBay):
+        return ()
     return (*bay.left, *bay.right)
 
 
@@ -202,7 +252,7 @@ class CorridorPlan(BaseModel):
                 raise ValueError("a junction finger is only allowed in pieces[0]")
         return self
 
-    def _bays(self) -> Iterator[tuple[BayPosition, RoomBay | FingerBay]]:
+    def _bays(self) -> Iterator[tuple[BayPosition, AnyBay]]:
         """Every bay with its ``(piece, band, block, bay)`` position, in plan order."""
         for p, piece in enumerate(self.pieces):
             for k, band in enumerate(piece.bands):
@@ -225,6 +275,8 @@ class CorridorPlan(BaseModel):
                 if bay.room == instance_id:
                     return RoomPosition(piece=p, band=k, block=block, bay=b, stack=None, index=None)
                 continue
+            if isinstance(bay, ConnectorBay):
+                continue
             stacks: tuple[tuple[Literal["left", "right"], tuple[str, ...]], ...] = (
                 ("left", bay.left),
                 ("right", bay.right),
@@ -245,7 +297,8 @@ class CorridorPlan(BaseModel):
         """Macro-zone grammar violations, sorted.
 
         A zone in more than one contiguous run of rooms within a band block (rooms in plan
-        order, junction finger ignored) → ``"zone <Z> split in piece <p> band <k> block <B>"``;
+        order, junction finger ignored; a connector marker splits the block into two parts, each
+        checked on its own) → ``"zone <Z> split in piece <p> band <k> block <B>"``;
         a finger bay whose stacks hold more than one zone → ``"finger bay <i> of piece <p>
         band <k> block <B> mixes zones"``. ``KeyError`` for an id missing from ``zone_of``.
         """
@@ -254,8 +307,13 @@ class CorridorPlan(BaseModel):
             for k, band in enumerate(piece.bands):
                 for name, block in _blocks(band):
                     where = f"piece {p} band {k} block {name}"
+                    split: set[str] = set()
                     runs: list[str] = []
                     for b, bay in enumerate(block.bays):
+                        if isinstance(bay, ConnectorBay):
+                            split |= _repeated(runs)
+                            runs = []
+                            continue
                         rooms = _bay_rooms(bay)
                         if isinstance(bay, FingerBay):
                             if len({str(zone_of[r]) for r in rooms}) > 1:
@@ -266,9 +324,8 @@ class CorridorPlan(BaseModel):
                             zone = str(zone_of[r])
                             if not runs or runs[-1] != zone:
                                 runs.append(zone)
-                    for zone, count in Counter(runs).items():
-                        if count > 1:
-                            out.append(f"zone {zone} split in {where}")
+                    split |= _repeated(runs)
+                    out += [f"zone {zone} split in {where}" for zone in split]
         return tuple(sorted(out))
 
     def check_against(
@@ -326,6 +383,11 @@ class CorridorPlan(BaseModel):
         if (junction[1], junction[2]) != (band, facing):
             out.append(f"junction finger must be in band {band} block {facing}")
         return out
+
+
+def _repeated(runs: list[str]) -> set[str]:
+    """Zones appearing in more than one run."""
+    return {zone for zone, count in Counter(runs).items() if count > 1}
 
 
 def _cut_side(footprint: FootprintPieces, p: int) -> Literal["start", "end"]:

@@ -23,6 +23,8 @@ from pydantic import BaseModel, ConfigDict
 from ale.contracts.config import AleConfig
 from ale.contracts.corridor_plan import CorridorPlan
 from ale.contracts.models import Layout, Rulebook
+from ale.geometry.blocks import Consts
+from ale.geometry.checks import exterior_contacts
 from ale.guards import bounded
 from ale.optimize.fastreal import RealizeCache
 from ale.optimize.moves import MoveContext, propose
@@ -34,6 +36,7 @@ __all__ = [
     "Scorer",
     "accept_move",
     "anneal",
+    "focus_on",
     "hard_count",
     "hard_rooms",
     "initial_temperature",
@@ -68,6 +71,8 @@ T_END_RATIO = 1e-3
 CONVERGED_SPAN = 0.25
 """Progress span without improvement of the best that ends the run (``converged``)."""
 _FALLBACK_T0 = 1.0
+_END_MARGIN_S = 1.0
+_END_MARGIN_SHARE = 0.03
 _CACHE_MAX = 50_000
 
 Score = tuple[int, float]
@@ -99,6 +104,22 @@ def hard_count(layout: Layout) -> int:
 def hard_rooms(layout: Layout) -> set[str]:
     """Rooms named by the hard violations of ``layout``."""
     return {r for v in layout.metrics.violations if v.code in HARD_CODES for r in v.instance_ids}
+
+
+def focus_on(ctx: MoveContext, layout: Layout, min_facade: int) -> MoveContext:
+    """``ctx`` focused on the hard-violation rooms of ``layout``; for the façade pull (G9):
+    its ``NO_FACADE`` rooms, and the rooms without ``needs_facade`` that have a façade
+    contact of at least ``min_facade`` modules."""
+    lacking = {
+        r for v in layout.metrics.violations if v.code == "NO_FACADE" for r in v.instance_ids
+    }
+    spare = {
+        p.instance_id
+        for p in layout.rooms
+        if not ctx.facade.get(p.instance_id, False)
+        and sum(n for n, _ in exterior_contacts(p.rect, layout.footprint)) >= min_facade
+    }
+    return ctx.with_focus(hard_rooms(layout)).with_no_facade(lacking).with_on_facade(spare)
 
 
 def metropolis_accept(delta: float, temperature: float, rng: random.Random) -> bool:
@@ -207,14 +228,21 @@ def anneal(
             if layout is not None and n_hard == hard0 and cost > cost0:
                 uphill.append(cost - cost0)
     t_cost0 = initial_temperature(uphill, opt.initial_acceptance)
-    ctx = ctx.with_focus(hard_rooms(layout0))
+    min_facade = Consts.from_config(config).f
+    ctx = focus_on(ctx, layout0, min_facade)
 
     current: tuple[CorridorPlan, int, float] = (start, hard0, cost0)
     best: tuple[Score, CorridorPlan, Layout] = ((hard0, cost0), start, layout0)
     accepted = 0
-    f_best = 0.0
     stopped_by: Literal["max_iter", "time_budget", "converged"] = "converged"
-    remaining = max(1e-3, opt.time_budget_s - (time.monotonic() - t_start))
+    # Ticket Q.2: the loop now runs to the budget (see f_best below), so it stops a margin
+    # early for the last realisation in flight.
+    margin = min(_END_MARGIN_S, _END_MARGIN_SHARE * opt.time_budget_s)
+    remaining = max(1e-3, opt.time_budget_s - margin - (time.monotonic() - t_start))
+    # Ticket Q.2: the convergence span counts from the start of the annealing loop, not
+    # from 0 — the T_c0 sampling may use up to 20 % of the budget, which otherwise left as
+    # little as 5 % of the progress before a "converged" stop.
+    f_best = (time.monotonic() - t_start) / opt.time_budget_s
     with bounded(opt.max_iter, remaining, label="anneal", on_exhaust="stop") as budget:
         while budget.tick():
             f = max(
@@ -233,7 +261,7 @@ def anneal(
             t_cost = temperature_at(t_cost0, f)
             if accept_move(n_hard - current[1], cost - current[2], t_hard, t_cost, rng):
                 current = (cand, n_hard, cost)
-                ctx = ctx.with_focus(hard_rooms(layout))
+                ctx = focus_on(ctx, layout, min_facade)
                 accepted += 1
                 if (n_hard, cost) < best[0]:
                     best = ((n_hard, cost), cand, layout)
