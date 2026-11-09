@@ -65,3 +65,11 @@ The Router needs to authorize/reconcile these obsolete expectations. Emitting mi
 - Tests: `tests/corpus_extract/conftest.py`, new `test_integration_eval.py`; new `tests/review/conftest.py` and `test_review.py`.
 - Authorized narrow edits: remove review from `tests/cli/test_cli_surface.py` stub mapping; retarget only the cp1252 stub test in `test_portability.py` to status on `Łódź ws`.
 - This report. No other files changed.
+
+## Delivery blocker
+
+Local implementation commit: `ebf11111c3411dea5abdb905d278ac3ec358ece0` on `codex/I.1-integration` (followed by this delivery-note commit). Publishing was attempted only to the assigned feature branch. `git push origin HEAD:refs/heads/codex/I.1-integration` returned HTTP 403 / permission denied. `gh pr create` with the required title/base/head and draft status returned `Resource not accessible by integration (createPullRequest)`.
+
+The connected GitHub app could read repository metadata (account-level push permission true), but its Git Trees write call also returned HTTP 403 `Resource not accessible by integration`. Account permission does not establish token/application write scope. No remote branch, commit, tree or PR was created by these rejected calls; the base branch was never pushed or merged. No alternate endpoint writes were attempted after the app's write rejection.
+
+Prepared portable artifacts outside the repository: `/tmp/ale-i1-evidence/I.1-integration.bundle`, `I.1-integration.patch`, and `PR.md`. The bundle requires base commit `1d08396844e9f711e354a342fb2586393702d3d6`; the PR body includes all measured failures and interpretation notes. Restore effective Contents and Pull requests write access before retrying publication. Ticket remains blocked for both Router reconciliation of legacy tests and remote delivery.
