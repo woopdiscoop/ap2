@@ -22,7 +22,7 @@ Maintained by the Router only. Directive: `specs/DIRECTIVE.md` (v2.2, supersedes
 | A.1 | Contract amendment: CorridorPlan + footprint decomposition | **DONE** | — | RD + eval | Contracts 1.0.0 → 1.1.0; adds `corridor_plan.py`, `footprint.py`; regenerates lock. |
 | A.2 | Contract amendment: bands | **DONE** | — | RD + eval | Contracts 1.2.0 (CorridorPlan /2). |
 | Q.1 | Realisation never emits rule-breaking rooms + depth-aware seeding | **DONE** | — | RD + eval | 0 area/aspect/min-width breaks; hard after SA (15 s): P8 0, P25 6, P60 ≈ 19. |
-| A.3 | Contract: inner connector | **IN-PROGRESS** | — | RD + eval | Contracts 1.3.0, backward compatible. |
+| A.3 | Contract: inner connector | **ACCEPTED (held)** | — | RD + eval | Contracts 1.3.0, backward compatible; merged together with Q.2. |
 | Q.2a | Façade capacity in feasibility | **DONE** | — | RD + eval | usable façade: site_rect 43.2 m, site_L 90.0 m; P60 demand 117.9 m → W_FACADE_TIGHT. |
 | Q.2 | Façade-aware layouts (+ A.3 merge) | **IN-PROGRESS** | — (Q.1, A.3 done) | RD + eval | Inner connector in geometry/seeding/moves; façade-pull move; fixes A.3 mypy errors. |
 | Q.3 | Cache into geometry + reliability | BLOCKED | Q.2 | — | + restore strict P25 gate in 3.4 O03 (weakened in Q.1 to 'start ≤ 8'); find the flaky full-suite test (1 failure in 1 of 2 full runs); P8 ≤ 1 for all seeds; seed/anneal budget split in generate. |
@@ -76,6 +76,7 @@ with ground truth. The Router will issue an annotation template before Phase 1.
 ## History
 
 - 2026-11-06 — v2.0 workspace initialised (tickets 1.1, 1.2 specified).
+- 2026-11-09 06:30 — Scheduled check: no Worker stopped by the usage limit; Q.1/1.3/1.4/2.2 already merged; Q.2 running (A.3 merged into its branch); I.1 with Codex.
 - 2026-11-09 — Repository made public by the user (Actions minutes free → CI unblocked). I.1 specified and assigned to the user's Codex agent (works on its own branch, opens a PR; Router reviews before merge).
 - 2026-11-09 — Q.1 merged after review: integrated with all later merges, full suite 1062 pass (first full run had 1 flaky failure, unreproduced). Follow-ups moved to Q.3.
 - 2026-11-09 — 2.2 merged after rework. **CI not running since run #46 (2026-11-08 20:51 UTC)**: all jobs fail in ~3 s with no steps/logs → most likely GitHub Actions minutes/spending limit exhausted (macOS ×10, Windows ×2 multipliers; 49 runs × 9 jobs). Local full-suite verification continues meanwhile.
