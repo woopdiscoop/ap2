@@ -123,7 +123,7 @@ class _CachedRealizer(_Realizer):
 
     def band(self, p: int, k: int, v0: int, depth: int, link: Any) -> Any:
         if link is not None:
-            return super().band(p, k, v0, depth, link)
+            return self._linked_band(p, k, v0, depth, link)
         local = (p, k, depth)
         if local in self._local_bands:
             return self._local_bands[local]
@@ -141,6 +141,44 @@ class _CachedRealizer(_Realizer):
                 memo.clear()
             memo[key] = out
         self._local_bands[local] = out
+        return out
+
+    def _linked_band(self, p: int, k: int, v0: int, depth: int, link: Any) -> _BandOut | None:
+        """``_Realizer.band`` with a link: the same search and key, block terms from the
+        cached scaled scores (Ticket Q.1: linked bands dominate the J2 band descent)."""
+        plan = self.plan.pieces[p].bands[k]
+        scale = self._cache.scale
+        best: tuple[int, Any] | None = None
+        best_key: tuple[int, Fraction | int, int, int] | None = None
+        s = self.k.s
+        with bounded(
+            max_iter=depth + 1,
+            time_budget_s=_DEPTH_BUDGET_S,
+            label="depth-search",
+            on_exhaust="stop",
+        ) as budget:
+            for d_a in self.depth_candidates(plan, depth):
+                if not budget.tick():  # pragma: no cover - needs a 5 s depth search
+                    self.timed_out = True
+                    break
+                d_b = depth - s - d_a
+                got = link(v0 + d_a, self.block(p, k, "A", d_a), self.block(p, k, "B", d_b))
+                if got is None:
+                    continue
+                fa, da = self._score(p, k, "A", d_a)
+                fb, db = self._score(p, k, "B", d_b)
+                n_fail = fa + fb + len(got.extra)
+                dev: Fraction | int = da + db
+                for po in got.pieces:
+                    n_fail += len(po.failures())
+                    dev = dev + scale * po.cost()
+                key = (n_fail, dev, abs(d_a - d_b), d_a)
+                if best_key is None or key < best_key:
+                    best, best_key = (d_a, got), key
+        if best is None:
+            return None
+        out = self.band_at(p, k, depth, best[0])
+        out.link = best[1]
         return out
 
     def _unlinked_band(self, p: int, k: int, depth: int) -> _BandOut | None:

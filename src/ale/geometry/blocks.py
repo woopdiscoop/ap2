@@ -120,6 +120,13 @@ class RoomReq:
     lo: int
     hi: int
     wmin: int
+    _hash: int = field(init=False, repr=False, compare=False, default=0)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "_hash", hash((self.target, self.lo, self.hi, self.wmin)))
+
+    def __hash__(self) -> int:  # cached: requirements key every solver memo
+        return self._hash
 
     def ceil_div(self, side: int) -> int:
         """``ceil(target / side)`` in integer arithmetic."""
@@ -158,6 +165,13 @@ class BlockOut:
     strip_cells: int = 0  # stack-end strips
     end_cells: int = 0  # end strip
     junction_u: int | None = None
+    _dev: Fraction | None = field(default=None, repr=False, compare=False)
+
+    def dev(self) -> Fraction:
+        """``area_dev + strip_cells`` (depth-search term), computed once the block is final."""
+        if self._dev is None:
+            self._dev = self.area_dev + self.strip_cells
+        return self._dev
 
 
 class Solver:
@@ -181,15 +195,18 @@ class Solver:
     def _room_bay_width(self, req: RoomReq, depth: int) -> int | None:
         if depth < req.wmin:
             return None
-        amax = self.k.amax
+        an, ad = self.k.amax.numerator, self.k.amax.denominator
+        # aspect_ok(w, D) <=> ceil(D / amax) <= w <= floor(D · amax) (amax >= 1): the 3.3
+        # up / down scans reduce to the first / last width of that range in their window.
+        a_lo, a_hi = _ceil_div(depth * ad, an), (depth * an) // ad
         w_up = max(req.wmin, req.ceil_div(depth))
-        for w in guarded_range(w_up, req.hi // depth + 1, label="room-bay-width"):
-            if aspect_ok(w, depth, amax):
-                return w
+        w = max(w_up, a_lo)
+        if w <= min(req.hi // depth, a_hi):
+            return w
         w_lo = max(req.wmin, _ceil_div(req.lo, depth))
-        for w in guarded_range(w_up - 1, w_lo - 1, step=-1, label="room-bay-width-down"):
-            if aspect_ok(w, depth, amax):  # w < ceil(T / D) here, so lo <= w·D < T
-                return w
+        w = min(w_up - 1, a_hi)  # w < ceil(T / D) here, so lo <= w·D < T
+        if w >= max(w_lo, a_lo):
+            return w
         return None
 
     # ------------------------------------------------------------------ 5.3 stack

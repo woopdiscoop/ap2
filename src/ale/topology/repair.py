@@ -31,8 +31,9 @@ from ale.contracts.corridor_plan import (
 from ale.contracts.footprint import FootprintPieces
 from ale.contracts.models import Rulebook
 from ale.geometry import Realization
-from ale.geometry.blocks import Consts, RoomReq, aspect_ok
+from ale.geometry.blocks import Consts, RoomReq, Solver, aspect_ok
 from ale.geometry.junction import frame
+from ale.geometry.realize import shared_solver
 from ale.program.models import PreparedInput
 
 __all__ = [
@@ -58,6 +59,8 @@ FINGER_FACTOR = Fraction(3, 5)
 
 _WHERE = re.compile(r"piece (\d+) band (\d+) block ([AB])")
 _OVER = re.compile(r"over by (\d+) modules")
+_ROOM_INFEASIBLE = re.compile(r"^(\S+) in piece (\d+) band (\d+) block ([AB]):")
+_STACK_ROOMS = re.compile(r"no compliant stack width for (.+) at depth -?\d+$")
 _OTHER_FAILURE_WEIGHT = 1
 
 
@@ -73,6 +76,14 @@ class Ctx:
     reqs: dict[str, RoomReq]
     zone: dict[str, str]
     order: dict[str, int]
+    solver: Solver = field(compare=False, repr=False, default=None)  # type: ignore[assignment]
+    """Exact room-bay / stack solver of :mod:`ale.geometry` (Q.1: depth compatibility)."""
+    memo: dict[object, object] = field(default_factory=dict, compare=False, repr=False)
+    """Cache of the depth-aware assignment (:mod:`ale.topology.depth`)."""
+
+    def __post_init__(self) -> None:
+        if self.solver is None:  # the realiser's shared solver: warm memos across calls
+            object.__setattr__(self, "solver", shared_solver(self.k, self.reqs))
 
     @classmethod
     def build(
@@ -89,6 +100,37 @@ class Ctx:
             zone={iid: str(spec.macro_zone) for iid, spec in prepared.instances},
             order={iid: i for i, (iid, _) in enumerate(prepared.instances)},
         )
+
+    # ------------------------------------------------------------------ depth rules (Q.1)
+    def bay_ok(self, room: str, depth: int) -> bool:
+        """Whether ``room`` can be a compliant room bay at block depth ``depth``."""
+        return depth > 0 and self.solver.room_bay_width(self.reqs[room], depth) is not None
+
+    def exact_room_width(self, room: str, depth: int) -> int | None:
+        """Compliant room-bay width of ``room`` at ``depth`` (``None``: infeasible)."""
+        if depth <= 0:
+            return None
+        return self.solver.room_bay_width(self.reqs[room], depth)
+
+    def exact_stack_width(self, rooms: Sequence[str], depth: int) -> int | None:
+        """Compliant stack width of ``rooms`` (spine outward) at ``depth`` (``None``:
+        infeasible); ``0`` for an empty stack."""
+        if not rooms:
+            return 0
+        if depth <= 0:
+            return None
+        sol = self.solver.stack(tuple(self.reqs[r] for r in rooms), depth)
+        return None if sol is None else sol.w
+
+    def exact_bay_width(self, bay: Bay, depth: int) -> int | None:
+        """Compliant width of ``bay`` at ``depth`` (``None`` when a room cannot comply)."""
+        if isinstance(bay, RoomBay):
+            return self.exact_room_width(bay.room, depth)
+        left = self.exact_stack_width(bay.left, depth)
+        right = self.exact_stack_width(bay.right, depth)
+        if left is None or right is None:
+            return None
+        return left + self.k.s + right
 
     # ------------------------------------------------------------------ widths
     def small(self, room: str, depth: Fraction) -> bool:
@@ -167,12 +209,18 @@ class Draft:
     counts: list[int]
     connectors: list[Connector]
     blocks: dict[Slot, list[Bay]] = field(default_factory=dict)
+    depths: dict[Slot, int] = field(default_factory=dict)
+    """Target block depths chosen by the depth-aware assignment (Q.1 §4); empty = unknown."""
+    estimate: tuple[int, int] = (0, 0)
+    """``(non-compliant rooms, overflow)`` the assignment expects at its target depths."""
 
     def copy(self) -> Draft:
         return Draft(
             list(self.counts),
             list(self.connectors),
             {slot: list(bays) for slot, bays in self.blocks.items()},
+            dict(self.depths),
+            self.estimate,
         )
 
     def slots(self) -> list[Slot]:
@@ -234,6 +282,8 @@ def block_depths(ctx: Ctx, draft: Draft, real: Realization | None = None) -> dic
                 out[(p, k, "A")] = Fraction(max(1, d_a))
                 out[(p, k, "B")] = Fraction(max(1, d_b))
         return out
+    if draft.depths and all(slot in draft.depths for slot in draft.slots()):
+        return {slot: Fraction(max(1, draft.depths[slot])) for slot in draft.slots()}
     for p, n in enumerate(draft.counts):
         for k, d in enumerate(band_depths(ctx, p, n)):
             half = Fraction(max(1, d - s), 2)
@@ -424,6 +474,96 @@ def _shift_junction(draft: Draft, step: int) -> Draft | None:
     return None
 
 
+# ---------------------------------------------------------------------- Q.1 moves
+def infeasible_rooms(real: Realization) -> list[str]:
+    """Rooms named by ``ROOM_INFEASIBLE`` failures, then the outermost room of every
+    ``STACK_INFEASIBLE`` stack (in failure order, without duplicates)."""
+    out: list[str] = []
+    for f in real.failures:
+        room: str | None = None
+        if f.code == "ROOM_INFEASIBLE":
+            m = _ROOM_INFEASIBLE.search(f.detail)
+            room = m.group(1) if m else None
+        elif f.code == "STACK_INFEASIBLE":
+            m = _STACK_ROOMS.search(f.detail)
+            room = m.group(1).split(", ")[-1] if m else None
+        if room is not None and room not in out:
+            out.append(room)
+    return out
+
+
+def _insert_bay(ctx: Ctx, bays: list[Bay], bay: Bay, zone: str) -> None:
+    """Insert ``bay`` after the last bay of ``zone`` (or at the end)."""
+    last = -1
+    for i, b in enumerate(bays):
+        rooms = bay_rooms(b)
+        if rooms and ctx.zone[rooms[0]] == zone:
+            last = i
+    bays.insert(last + 1 if last >= 0 else len(bays), bay)
+
+
+def move_to_compatible(
+    ctx: Ctx, draft: Draft, room: str, depths: dict[Slot, Fraction]
+) -> Draft | None:
+    """(e) move ``room`` as a room bay to the block with the most slack whose depth lies in
+    its compliant depth interval."""
+    try:
+        src, _ = draft.find(room)
+    except KeyError:
+        return None
+    free = slack(ctx, draft, depths)
+    cands = [sl for sl in draft.slots() if sl != src and ctx.bay_ok(room, math.floor(depths[sl]))]
+    if not cands:
+        return None
+    dst = max(cands, key=lambda sl: (free[sl], [-x for x in _key(sl)]))
+    out = draft.copy()
+    _remove(out.blocks[src], room)
+    _insert_bay(ctx, out.blocks.setdefault(dst, []), RoomBay(room=room), ctx.zone[room])
+    return out
+
+
+def move_to_stack(ctx: Ctx, draft: Draft, room: str, depths: dict[Slot, Fraction]) -> Draft | None:
+    """(f) put ``room`` into a compliant stack: a same-zone finger of its own block (or, if
+    none fits, of the block with the most slack where it can be stacked), else a new finger
+    bay holding it alone."""
+    try:
+        src, _ = draft.find(room)
+    except KeyError:
+        return None
+    free = slack(ctx, draft, depths)
+    others = sorted((sl for sl in draft.slots() if sl != src), key=lambda sl: (-free[sl], _key(sl)))
+    order = [src, *others]
+    zone = ctx.zone[room]
+    for sl in order:
+        d = math.floor(depths[sl])
+        if ctx.exact_stack_width([room], d) is None:
+            continue
+        out = draft.copy()
+        _remove(out.blocks[src], room)
+        bays = out.blocks.setdefault(sl, [])
+        for i, bay in enumerate(bays):
+            if not isinstance(bay, FingerBay) or bay.junction:
+                continue
+            rooms = bay_rooms(bay)
+            if not rooms or ctx.zone[rooms[0]] != zone:
+                continue
+            if ctx.exact_stack_width([*bay.left, room], d) is not None:
+                bays[i] = FingerBay(left=(*bay.left, room), right=bay.right)
+                return out
+            if ctx.exact_stack_width([*bay.right, room], d) is not None:
+                bays[i] = FingerBay(left=bay.left, right=(*bay.right, room))
+                return out
+        _insert_bay(ctx, bays, FingerBay(left=(room,)), zone)
+        return out
+    return None
+
+
+Resplit = Callable[[Draft, Slot, str], Draft | None]
+"""(g) re-assign with the depth split of a band changed so that a room fits its block."""
+
+Repack = Callable[[Draft, Realization], Draft | None]
+"""Re-assign the rooms with every band's split fixed to the realised one (Q.1 (g))."""
+
 Realise = Callable[[Draft], Realization]
 Reassign = Callable[[list[int]], Draft | None]
 
@@ -448,8 +588,12 @@ def repair_step(
     reassign: Reassign,
     allowed: Sequence[Sequence[int]],
     tick: Callable[[], bool],
+    resplit: Resplit | None = None,
+    repack: Repack | None = None,
 ) -> tuple[Draft, Realization] | None:
-    """One repair step (RD 5.4): the first move that lowers :func:`score`, or ``None``.
+    """One repair step (RD 5.4 + Q.1 §4): the first move that lowers :func:`score`, or
+    ``None``. Rooms of ``ROOM_INFEASIBLE`` / ``STACK_INFEASIBLE`` failures are tried first
+    with (e) :func:`move_to_compatible`, (f) :func:`move_to_stack` and (g) ``resplit``.
 
     ``realise`` realises a draft, ``reassign`` rebuilds a draft for new band counts,
     ``allowed[p]`` lists the band counts piece ``p`` may take, ``tick`` is the budget (one
@@ -462,6 +606,19 @@ def repair_step(
     candidates: list[Callable[[], Draft | None]] = []
     if junction_failure:
         candidates += [lambda: _shift_junction(draft, 1), lambda: _shift_junction(draft, -1)]
+    if repack is not None:
+        candidates.append(lambda: repack(draft, real))
+    for room in infeasible_rooms(real)[:3]:  # Q.1 moves (e) (f) (g)
+        candidates += [
+            lambda r=room: move_to_compatible(ctx, draft, r, depths),  # type: ignore[misc]
+            lambda r=room: move_to_stack(ctx, draft, r, depths),  # type: ignore[misc]
+        ]
+        if resplit is not None:
+            try:
+                slot, _ = draft.find(room)
+            except KeyError:  # pragma: no cover - realised rooms are in the draft
+                continue
+            candidates.append(lambda sl=slot, r=room: resplit(draft, sl, r))  # type: ignore[misc]
     worst: Slot | None = None
     if over:
         worst = max(over, key=lambda s: (over[s], [-x for x in _key(s)]))

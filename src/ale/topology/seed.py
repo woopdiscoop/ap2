@@ -32,9 +32,11 @@ from ale.contracts.footprint import FootprintPieces, Piece, decompose_footprint
 from ale.contracts.geometry import ModuleRect
 from ale.contracts.models import Rulebook
 from ale.geometry import Realization, realize
+from ale.geometry.checks import exterior_contacts
 from ale.geometry.junction import across_origin, along_origin, cut_side, frame, to_abs
 from ale.guards import bounded
 from ale.program.models import PreparedInput
+from ale.topology.depth import DEADLINE_KEY, BandSpec, fill_blocks
 from ale.topology.embed import Positions, embed
 from ale.topology.graph import AVOID, REQUIRED, TopologyReport, build_graph, planarity
 from ale.topology.repair import (
@@ -45,7 +47,6 @@ from ale.topology.repair import (
     band_depths,
     bay_rooms,
     block_depths,
-    form_bays,
     repair_step,
     score,
     usable_length,
@@ -60,9 +61,6 @@ _SWAP_TRIALS_MIN = 10
 _SWAP_TRIALS_MAX = 60
 _SEED_STRIDE = 1000
 _D_T_FACTOR = Fraction(7, 5)
-_RHO_LOW = Fraction(7, 10)
-_RHO_HIGH = Fraction(3, 2)
-_RHO_STEPS = 32
 
 
 class SeedResult(BaseModel):
@@ -203,13 +201,6 @@ def _path_position(
     return 0.0 if best is None else best[1]
 
 
-def _share(ctx: Ctx, room: str, depth: Fraction) -> Fraction:
-    """Length share of ``room`` in a block of depth ``depth`` (fill estimate)."""
-    if ctx.small(room, depth):
-        return ctx.reqs[room].target / max(Fraction(1), depth) + Fraction(ctx.k.s, 4)
-    return Fraction(ctx.room_width(room, depth))
-
-
 def _junction_slot(ctx: Ctx, counts: Sequence[int]) -> Slot | None:
     if ctx.fp.junction != "J1":
         return None
@@ -217,62 +208,92 @@ def _junction_slot(ctx: Ctx, counts: Sequence[int]) -> Slot | None:
     return (0, 0 if facing == "A" else counts[0] - 1, facing)
 
 
-def assign(ctx: Ctx, counts: Sequence[int], pos: Positions) -> Draft:
-    """RD 5.3: fill the blocks in serpentine order with the rooms sorted along the path,
-    keeping every block at the same estimated fill ratio."""
+def assign(
+    ctx: Ctx,
+    counts: Sequence[int],
+    pos: Positions,
+    fixed: dict[tuple[int, int], int] | None = None,
+) -> Draft:
+    """RD 3.2 §5 step 3 as replaced by Q.1 §4: target block depths from the rooms' compliant
+    depth intervals, then rooms packed into compatible blocks near their position on the
+    serpentine path (see :mod:`ale.topology.depth`). ``fixed`` forces the ``D_A`` of some
+    bands ``(piece, band)``."""
     draft = Draft(list(counts), _connectors(ctx, counts))
-    depths = block_depths(ctx, draft)
-    segs = _segments(ctx, draft, depths)
+    depths0 = block_depths(ctx, draft)
+    segs = _segments(ctx, draft, depths0)
     slots = [seg[0] for seg in segs]
-    rooms = sorted(ctx.reqs, key=lambda r: (_path_position(pos[r], segs), ctx.order[r]))
     jslot = _junction_slot(ctx, counts)
-    caps = [
-        Fraction(usable_length(ctx, draft, sl[0]) - (ctx.k.s if sl == jslot else 0)) for sl in slots
+    caps = {sl: usable_length(ctx, draft, sl[0]) - (ctx.k.s if sl == jslot else 0) for sl in slots}
+    centers: dict[Slot, float] = {}
+    offset = 0.0
+    for sl, a, b in segs:
+        length = math.hypot(b[0] - a[0], b[1] - a[1])
+        centers[sl] = offset + length / 2
+        offset += length
+    ppos = {r: _path_position(pos[r], segs) for r in ctx.reqs}
+    bands = [
+        BandSpec(p, k, d - ctx.k.s)
+        for p, n in enumerate(counts)
+        for k, d in enumerate(band_depths(ctx, p, n))
     ]
-    total_cap = sum(caps, Fraction(0))
-    demand = sum((_share(ctx, r, depths[slots[0]]) for r in rooms), Fraction(0))
-    rho0 = demand / total_cap if total_cap > 0 else Fraction(1)
-
-    def fill(rho: Fraction) -> dict[Slot, list[RoomBay | FingerBay]]:
-        members: dict[Slot, list[str]] = {sl: [] for sl in slots}
-        b = 0
-        used = Fraction(0)
-        cum_cap = caps[0]
-        for r in rooms:
-            w = _share(ctx, r, depths[slots[b]])
-            while b + 1 < len(slots) and used + w / 2 > rho * cum_cap:
-                b += 1
-                cum_cap += caps[b]
-                w = _share(ctx, r, depths[slots[b]])
-            members[slots[b]].append(r)
-            used += w
-        return {
-            sl: form_bays(ctx, members[sl] if sl[2] == "A" else members[sl][::-1], depths[sl])
-            for sl in slots
-        }
-
-    def key(blocks: dict[Slot, list[RoomBay | FingerBay]]) -> tuple[int, Fraction]:
-        over = 0
-        worst = Fraction(0)
-        for sl, cap in zip(slots, caps, strict=True):
-            width = ctx.block_width(blocks[sl], depths[sl])
-            over += max(0, width - math.floor(cap))
-            if cap > 0:
-                worst = max(worst, width / cap)
-        return over, worst
-
-    best: tuple[tuple[int, Fraction], dict[Slot, list[RoomBay | FingerBay]]] | None = None
-    for i in range(_RHO_STEPS + 1):
-        rho = rho0 * (_RHO_LOW + (_RHO_HIGH - _RHO_LOW) * Fraction(i, _RHO_STEPS))
-        blocks = fill(rho)
-        k = key(blocks)
-        if best is None or k < best[0]:
-            best = (k, blocks)
-    assert best is not None
-    draft.blocks = best[1]
+    facade = {iid: spec.needs_facade for iid, spec in ctx.prepared.instances}
+    outer = _outer_slots(ctx, draft)
+    draft.depths, draft.blocks, draft.estimate = fill_blocks(
+        ctx, bands, slots, caps, ppos, centers, fixed, facade, outer
+    )
     if jslot is not None:
-        _place_junction(ctx, draft, jslot, depths[jslot])
+        _place_junction(ctx, draft, jslot, Fraction(max(1, draft.depths[jslot])))
     return draft
+
+
+def _outer_slots(ctx: Ctx, draft: Draft) -> frozenset[Slot]:
+    """Blocks whose outer long side lies on the footprint exterior (at least half of it)."""
+    poly = ctx.prepared.footprint.polygon
+    out: set[Slot] = set()
+    for p, n in enumerate(draft.counts):
+        piece = ctx.fp.pieces[p]
+        _, depth = frame(piece)
+        u0 = ctx.k.s if draft.connectors[p] == "start" else 0
+        length = usable_length(ctx, draft, p)
+        for slot, v in (((p, 0, "A"), 0), ((p, n - 1, "B"), depth - 1)):
+            rect = to_abs(piece, u0, v, length, 1)
+            if 2 * sum(ln for ln, _ in exterior_contacts(rect, poly)) >= length:
+                out.add(slot)
+    return frozenset(out)
+
+
+def _repack(ctx: Ctx, draft: Draft, real: Realization, pos: Positions) -> Draft | None:
+    """(g) re-assign ``draft``'s band counts with every band split fixed to the realised one
+    (the realiser may pick other depths than the assignment's targets)."""
+    if len(real.depths) != sum(draft.counts):
+        return None
+    fixed: dict[tuple[int, int], int] = {}
+    i = 0
+    for p, n in enumerate(draft.counts):
+        for k, band_depth in enumerate(band_depths(ctx, p, n)):
+            d_a, d_b = real.depths[i]
+            i += 1
+            inner = band_depth - ctx.k.s
+            if d_a > 0 and d_b > 0 and ctx.k.c <= d_a <= inner - ctx.k.c:
+                fixed[(p, k)] = d_a
+    out = assign(ctx, draft.counts, pos, fixed=fixed)
+    return None if out.blocks == draft.blocks else out
+
+
+def _resplit(ctx: Ctx, draft: Draft, slot: Slot, room: str, pos: Positions) -> Draft | None:
+    """(g) re-assign ``draft``'s band counts with the split of ``slot``'s band moved to the
+    compliant depth of ``room`` nearest to the block's target depth."""
+    p, k, side = slot
+    inner = band_depths(ctx, p, draft.counts[p])[k] - ctx.k.s
+    current = draft.depths.get(slot, inner // 2)
+    c = ctx.k.c
+    ok = [d for d in range(c, inner - c + 1) if ctx.bay_ok(room, d)]
+    if not ok:
+        return None
+    d = min(ok, key=lambda x: (abs(x - current), x))
+    d_a = d if side == "A" else inner - d
+    out = assign(ctx, draft.counts, pos, fixed={(p, k): d_a})
+    return None if out.blocks == draft.blocks else out
 
 
 def _place_junction(ctx: Ctx, draft: Draft, slot: Slot, depth: Fraction) -> None:
@@ -378,6 +399,7 @@ def seed_plan(
         )
     search = _Search(prepared, rulebook, config, fp, seed)
     ctx = search.ctx
+    ctx.memo[DEADLINE_KEY] = t0 + budget_s
     combos = search.combos()
     best: tuple[tuple[int, int], Draft, Realization] | None = None
     attempts = 0
@@ -391,10 +413,27 @@ def seed_plan(
             pos = embed(search.graph, prepared, rulebook, seed=_attempt_seed(seed, k))
             counts = combos[k % len(combos)]
             draft = assign(ctx, counts, pos)
+            # Q.1: when the assignment expects problems, try the other band counts on the
+            # same embedding and keep the best expectation (no realisation needed).
+            for other in combos:
+                if draft.estimate == (0, 0) or time.monotonic() - t0 > budget_s / 2:
+                    break
+                if other != counts:
+                    alt = assign(ctx, other, pos)
+                    if alt.estimate < draft.estimate:
+                        draft = alt
             real = search.realise(draft)
 
             def reassign(new_counts: list[int], pos: Positions = pos) -> Draft | None:
                 return assign(ctx, new_counts, pos)
+
+            def resplit(
+                current: Draft, slot: Slot, room: str, pos: Positions = pos
+            ) -> Draft | None:
+                return _resplit(ctx, current, slot, room, pos)
+
+            def repack(current: Draft, got: Realization, pos: Positions = pos) -> Draft | None:
+                return _repack(ctx, current, got, pos)
 
             remaining = budget_s - (time.monotonic() - t0)
             if score(real) != (0, 0) and remaining > 0:
@@ -406,7 +445,15 @@ def seed_plan(
                 ) as rep:
                     for _ in range(4 * len(ctx.reqs) + 40):
                         step = repair_step(
-                            ctx, draft, real, search.realise, reassign, search.allowed, rep.tick
+                            ctx,
+                            draft,
+                            real,
+                            search.realise,
+                            reassign,
+                            search.allowed,
+                            rep.tick,
+                            resplit,
+                            repack,
                         )
                         if step is None:
                             break
