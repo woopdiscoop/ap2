@@ -34,7 +34,7 @@ Maintained by the Router only. Directive: `specs/DIRECTIVE.md` (v2.2, supersedes
 | 1.5 | Semantic labelling (library) | **DONE** | — | RD + eval | Text-first; VLM interface + cache with fake providers. For integration: renderer must use the same extent model; real provider must enforce vlm.timeout_s. Real provider = O-3. |
 | 1.6 | Scale reconciliation & review flags (library) | **DONE** | — | RD + eval | Dimension-text rule fixed (plausibility + notation tie-break). |
 | 2.1 | Topology extraction (library) | **DONE** | — | RD + eval | Facing-edge shared length (formula fixed); DOOR contacts; façade lengths. |
-| 2.2 | Rulebook build (library + `ale rulebook build`) | **IN-PROGRESS** | — | RD + eval | Fidelity-weighted adjacency, quantiles, core offset, orientation; blend with seed; report.md. |
+| 2.2 | Rulebook build (`ale rulebook build`) | **DONE** | — | RD + eval | Fidelity-weighted, neutral prior, blended with seed; date-free version; French report. Gap → I.1: `north_angle_deg` meta column. |
 
 **External blocker for all Phase 1 tickets:** the annotated test set (directive §7) — ≥ 12 plans
 (4 DWG/DXF incl. one multi-plan model space and one without `$INSUNITS`, 4 vector PDF, 4 JPEG/scanned)
@@ -75,6 +75,7 @@ with ground truth. The Router will issue an annotation template before Phase 1.
 ## History
 
 - 2026-11-06 — v2.0 workspace initialised (tickets 1.1, 1.2 specified).
+- 2026-11-09 — 2.2 merged after rework. **CI not running since run #46 (2026-11-08 20:51 UTC)**: all jobs fail in ~3 s with no steps/logs → most likely GitHub Actions minutes/spending limit exhausted (macOS ×10, Windows ×2 multipliers; 49 runs × 9 jobs). Local full-suite verification continues meanwhile.
 - 2026-11-09 — 1.3 merged after rework.
 - 2026-11-09 — Account usage limit stopped Q.1, 1.3, 1.4, 2.2 (reset 01:20 UTC); all resumed 01:26; scheduled task at 06:30 UTC to resume again if needed. 1.4 merged after review.
 - 2026-11-08 — 2.1 merged after review (shared-length formula fixed by Worker). 2.2 specified and dispatched.

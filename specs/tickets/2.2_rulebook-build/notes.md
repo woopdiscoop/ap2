@@ -5,3 +5,4 @@ Blend rule `final = blend(seed, mined, n/(n+k))` with `k = rulebook.blend_k`; bl
 
 ## Review log
 - 2026-11-09 — b171fba (redone in a fresh worktree after the limit; nothing had been lost). Router spec errors found: seed counted twice (Laplace prior + blend) → neutral prior; version contained the date → content hash only. Gap for integration ticket: `north_angle_deg` column missing from `ale.corpus.meta.COLUMNS`. Other readings accepted (Hazen quantiles, clip all three quantiles, same-type pairs need ≥ 2 rooms, config-sourced weights). Rework requested.
+- 2026-11-09 — Rework fafb8fa: neutral prior 0.5, content-hash version. **DONE**.
