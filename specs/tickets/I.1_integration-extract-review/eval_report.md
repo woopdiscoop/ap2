@@ -1,6 +1,6 @@
 # I.1 integration evaluation — Router-authorized revision
 
-Rebased cleanly onto `origin/claude/new-session-2hmd3s` at `e6d3aea11cd28871a709873492af2bde7b2bba0b`, retaining contracts 1.3.0, the upstream CI clock fix and P.1. Work remains on `codex/I.1-integration`; existing draft PR #1 targets the Router branch. No merge performed.
+Rebased cleanly onto `origin/claude/new-session-2hmd3s` at `b48e39ea96e12f6106020de61f919961741b5e46`, retaining contracts 1.3.0, the upstream CI clock fix and P.1. Work remains on `codex/I.1-integration`; existing draft PR #1 targets the Router branch. No merge performed.
 
 The Router's latest instruction and ticket notes authorize the three superseded legacy assertions below. No other existing test was weakened or deleted. Contracts, reader packages, pyproject.toml and the project board are unchanged relative to the new base.
 
@@ -30,20 +30,24 @@ The Router's subsequent ruling in `42de038` explicitly withdraws the prepare_ima
 | N6 | `test_N6_migration` | PASS: v1→v2, existing content preserved, rerun no-op. |
 | N7 | `test_N7_idempotent` | PASS: --only-new leaves plan/DB bytes and mtime unchanged; flag replacement deduplicates. |
 | N8 | `test_N8_stubs` | PASS: no review stub; authorized cp1252 status test retained. |
-| N9 | `test_N9_gates` | Static gate test PASS; final whole-suite/coverage results recorded below after completion. |
+| N9 | `test_N9_gates` | PASS: whole suite has zero failures; static gates clean; corpus coverage 98.962%. |
 
-Focused I.1 and corrected legacy tests are rerun on the final text-only scope. Generated fixtures only, reused builders, no copyrighted/binary plans committed. No network calls in this implementation or tests.
+Focused I.1 and corrected legacy tests: **16 passed in 2.66 s**. Generated fixtures only, reused builders, no copyrighted/binary plans committed. No network calls in this implementation or tests.
 
 ## Environment and gates
 
-Python 3.11.17, isolated `.venv`; `python -m pip install -e ".[dev,excel,cad,pdf,raster,vlm]"` (vlm added for upstream P.1). Full-suite command: `python -m pytest --cov=ale.corpus --cov-report=term-missing --cov-report=json:/tmp/ale-i1-evidence/rebased-coverage.json`.
+Python 3.11.17, isolated `.venv`; `python -m pip install -e ".[dev,excel,cad,pdf,raster,vlm]"` (vlm added for upstream P.1). Full-suite command: `python -m pytest --cov=ale.corpus --cov-report=term-missing --cov-report=json:/tmp/ale-i1-evidence/final-coverage.json`.
 
 - Ruff check: PASS.
 - Ruff format --check: PASS, 215 files formatted.
 - Strict mypy: PASS, 114 source files.
 - `python -m ale.contracts.lock --check`: PASS, exit 0.
 - `git diff --check`: PASS.
-- Whole-suite and coverage: final result pending.
+- Whole suite: **1142 passed, 12 skipped, 4 xfailed, zero failures**, exit 0, 620.12 s (10m20s), 1158 collected.
+- `ale.corpus` coverage: **98.962%** combined statements/branches (1040/1047 statements; 295/302 branches); statement coverage **99.331%**.
+- Separate `.[dev]` environment, focused I.1 tests without reader extras: **2 passed, 11 skipped in 0.32 s**.
+
+The full run tested the code at base `42de038`; the final rebase includes only upstream documentation changes in `b48e39e` (board and I.2 specifications), with no source/test/config difference. All four expected failures are existing geometry/optimizer cases on the new base, not introduced or changed here. The 12 existing skips include platform-only, optional corpus/live-provider, throughput-under-coverage and missing-history cases; they are not claimed as passes. An earlier run containing the now-withdrawn optional-image work was terminated and is not used as final evidence.
 
 ## Literal readings and ambiguities
 
