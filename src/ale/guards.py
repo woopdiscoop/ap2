@@ -149,7 +149,7 @@ class Budget:
         label: str,
         snapshot: Callable[[], object] | None = None,
         on_exhaust: OnExhaust = "raise",
-        clock: Clock = time.monotonic,
+        clock: Clock = time.perf_counter,
     ) -> None:
         self.max_iter: int = _check_max_iter(max_iter)
         self.time_budget_s: float = _check_time_budget(time_budget_s)
@@ -245,7 +245,7 @@ def bounded(
     label: str,
     snapshot: Callable[[], object] | None = None,
     on_exhaust: OnExhaust = "raise",
-    clock: Clock = time.monotonic,
+    clock: Clock = time.perf_counter,
 ) -> AbstractContextManager[Budget]:
     """Context manager yielding a started :class:`Budget`.
 
@@ -278,7 +278,7 @@ def bounded_range(
     label: str,
     snapshot: Callable[[], object] | None = None,
     on_exhaust: OnExhaust = "raise",
-    clock: Clock = time.monotonic,
+    clock: Clock = time.perf_counter,
 ) -> Iterator[int]:
     """Yield 0, 1, 2, ... with one :meth:`Budget.tick` per item.
 

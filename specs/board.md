@@ -79,6 +79,7 @@ with ground truth. The Router will issue an annotation template before Phase 1.
 
 - 2026-11-06 — v2.0 workspace initialised (tickets 1.1, 1.2 specified).
 - 2026-11-09 — User: yes to seed-rulebook draft and Claude as VLM. Seed draft written and validated; P.1 specified and dispatched. CI: raster extra added to the install line.
+- 2026-11-09 — CI back (repo public): macOS 3/3 green; Linux/Windows failed only on timing — Windows `time.monotonic` resolution (~16 ms) made 1e-12 budget tests never expire, and D12 (10k random lines) took 21–24 s under coverage vs a 20 s limit. Fix: `guards` default clock → `time.perf_counter`; D12 test limit 60 s (eval amended).
 - 2026-11-09 06:30 — Scheduled check: no Worker stopped by the usage limit; Q.1/1.3/1.4/2.2 already merged; Q.2 running (A.3 merged into its branch); I.1 with Codex.
 - 2026-11-09 — Repository made public by the user (Actions minutes free → CI unblocked). I.1 specified and assigned to the user's Codex agent (works on its own branch, opens a PR; Router reviews before merge).
 - 2026-11-09 — Q.1 merged after review: integrated with all later merges, full suite 1062 pass (first full run had 1 flaky failure, unreproduced). Follow-ups moved to Q.3.

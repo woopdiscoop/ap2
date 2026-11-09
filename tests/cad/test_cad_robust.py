@@ -65,7 +65,8 @@ def test_D12_robustness_random_lines(tmp_path: Path) -> None:
     path = save(doc, tmp_path / "random.dxf")
     t0 = time.monotonic()
     res = read(path)
-    assert time.monotonic() - t0 < 20.0
+    # CI runners under coverage take ~21-24 s; 60 s still proves the runtime is bounded.
+    assert time.monotonic() - t0 < 60.0
     assert isinstance(res.warnings, tuple)
 
 

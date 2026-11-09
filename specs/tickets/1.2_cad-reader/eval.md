@@ -16,7 +16,7 @@ corpus is never committed; DWG conversion is tested with a fake converter.
 | D09 | multi_plan | Two copies of the plan 30 m apart in one model space → 2 PlanGeometry, `plan_index` 0 = top-left; a 3-line fragment far away → ignored with warning. |
 | D10 | blocks_and_xrefs | Plan geometry placed inside a block inserted with rotation 90° and scale 2 → coordinates transformed correctly; a missing XREF → warning, no crash. |
 | D11 | dwg_convert | Fake ODA (a Python script that copies a prepared DXF to the output folder) configured via `tools.oda_file_converter` → `convert_dwg` returns the cached DXF; second call reuses the cache without running the tool; no converter → `NEEDS_TOOL`; tool timeout → FAILED report, no exception. Source DWG unchanged (hash). |
-| D12 | robustness | Empty DXF, DXF with only text, self-intersecting zone polyline, 10 000 random lines → never raises; bounded runtime (< 20 s). |
+| D12 | robustness | Empty DXF, DXF with only text, self-intersecting zone polyline, 10 000 random lines → never raises; bounded runtime (< 20 s locally; test limit 60 s since CI runners under coverage take ~21–24 s — amended 2026-11-09). |
 | D13 | contract_valid | Every produced `PlanGeometry` validates (round-trip `canonical_json`), `frame Y_UP`, `source_kind DXF`. |
 | D14 | real_corpus_smoke (optional) | If env `ALE_CORPUS_DIR` is set, read every `*.dxf` found (none expected — the corpus has DWG only; report that) and, if an ODA converter is detected, the DWGs; print per-file plan/wall/room counts. Never in CI. |
 | D15 | gates | ruff, ruff format, mypy strict clean; coverage of `ale.cad` ≥ 85 % line; `lock --check`; whole suite passes. |
