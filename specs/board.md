@@ -12,7 +12,7 @@ Maintained by the Router only. Directive: `specs/DIRECTIVE.md` (v2.2, supersedes
 |---|---|---|---|---|---|
 | 0.1 | Scaffolding & CLI | **DONE** | — | RD + eval | Owns `pyproject.toml`, CLI, `ale.toml` contract (`AleConfig`). Parallel-safe with 0.2 (disjoint files). |
 | 0.2 | Data contracts | **DONE** | — | RD + eval + taxonomy v1 | Frozen at 1.0.0 via `CONTRACTS.lock` once 0.1 and 0.2 are DONE. |
-| 0.3 | Seed rulebook | **READY (user input)** | user values; validation needs 0.2 | template + RD + eval | Aspect pre-filled (U-2); remaining ≈ 196 entries: area + orientation per type, 30 pairs, core offset. Unused types can be deleted. |
+| 0.3 | Seed rulebook | **DRAFT — awaiting architect validation** | user review | template + draft `seed_rulebook.yaml` | Router draft (23 types, 30 pairs) validates; fixture types covered; all targets buildable. Architect to correct values. |
 | 0.4 | Guards & test harness | **DONE** | — | RD + eval + fixtures | `ale.guards.bounded`, `ale.proc.run_tool`, fixtures P8/P25/P60 + 3 sites (Router-verified). Dispatch right after 0.1/0.2 merge. |
 | 3.1 | Program & site ingestion | **DONE** | — (0.2, 0.4 done) | RD + eval | Excel → Program with full French error report; site.yaml/DXF → module footprint; feasibility; template + `ale program check`. |
 | 3.2 | Topology & seeding | **DONE** | — | RD + eval | Valid first plan at attempt 1 for P8 (0.07 s), P25 (0.49 s), P60 (1.55 s); adjacency far better than random. |
@@ -29,6 +29,7 @@ Maintained by the Router only. Directive: `specs/DIRECTIVE.md` (v2.2, supersedes
 | 1.1 | Corpus ingestion & classification | **DONE** | — | RD + eval | Real corpus: 439 files → 1734 units (DWG 17 NEEDS_TOOL, PDF_VECTOR 879, PDF_SCANNED 436, RASTER 402), 0 failed, idempotent. |
 | 1.2 | CAD reader (DXF; DWG via converter) | **DONE** (library) | — | RD + eval | Layers (whole-word), units, walls, rooms, labels, openings, multi-plan, DWG→DXF via ODA/accoreconsole. Follow-up 1.2c: wire `ale layers` / `ale extract --kind dxf\|dwg` to the corpus DB. Real DWGs need ODA on the user's workstation. |
 | 1.2c | CAD → corpus CLI (`ale layers`, `ale extract` dxf/dwg) | **DONE** | — | RD + eval | Empty layer map → in-memory proposal + warning; NEEDS_TOOL DWGs retried. |
+| P.1 | Claude VLM provider | **IN-PROGRESS** | — | RD + eval | User decision U-8: VLM = Claude (claude-opus-5-5, effort low, structured output, no sampling params, cached). |
 | I.1 | Integration: PDF/raster extract, labels, scale, `ale review` | **IN-PROGRESS (Codex)** | — | RD + eval | Assigned to an external Codex agent; PR to be reviewed by the Router. |
 | 1.3 | Vector-PDF reader (library) | **DONE** | — | RD + eval | Plan-likeness on merged walls; HABS PDFs correctly identified as scanned (→ raster path). |
 | 1.4 | Raster reader (classical CV v1, library) | **DONE** | — | RD + eval | Synthetic: wall IoU 1.00 / 0.94 noisy. Real web images: no crash, but fills/double-line walls under-segmented and doors over-counted → learned model (CubiCasa) is the v2 path. |
@@ -51,6 +52,7 @@ with ground truth. The Router will issue an annotation template before Phase 1.
 | U-5 | **More room types.** | Taxonomy v1.1: 25 → 75 types (retail, food service, education, health, sport, culture, services, outdoor), from Uniclass 2015 SL + French ERP types. Seed template: 23 core types active, 49 optional types listed commented-out. |
 | U-6 | **Corridor grammar** for circulation (instead of a free slicing tree + penalty). | Every room touches a corridor by construction; circulation always connected. Spine per footprint piece, blocks of room bays / finger bays; L shapes via J1 (corner finger) / J2 (collinear spines). Replaces directive §3.B.1 free tree and 3.4 moves M1–M3 with grammar moves G1–G6. Design: `specs/design/corridor_grammar.md`. Contract amendment A.1. |
 | U-7 | **Bands**: several parallel corridors per piece, joined by a connector corridor. | Deep plates (P60's 30 m piece) become feasible. Contract amendment A.2 (CorridorPlan /2, contracts 1.2.0), then 3.3 rework. Design note §8. |
+| U-8 | **VLM provider = Claude** (Anthropic API); Router to draft seed rulebook values for architect review. | O-3 resolved. Ticket P.1. Seed draft in 0.3. |
 | U-3 | **Corridor minimum width 1.2 m.** | `circulation.min_width_m` default 1.8 → 1.2 m (12 modules). |
 
 ## Open decisions
@@ -76,6 +78,7 @@ with ground truth. The Router will issue an annotation template before Phase 1.
 ## History
 
 - 2026-11-06 — v2.0 workspace initialised (tickets 1.1, 1.2 specified).
+- 2026-11-09 — User: yes to seed-rulebook draft and Claude as VLM. Seed draft written and validated; P.1 specified and dispatched. CI: raster extra added to the install line.
 - 2026-11-09 06:30 — Scheduled check: no Worker stopped by the usage limit; Q.1/1.3/1.4/2.2 already merged; Q.2 running (A.3 merged into its branch); I.1 with Codex.
 - 2026-11-09 — Repository made public by the user (Actions minutes free → CI unblocked). I.1 specified and assigned to the user's Codex agent (works on its own branch, opens a PR; Router reviews before merge).
 - 2026-11-09 — Q.1 merged after review: integrated with all later merges, full suite 1062 pass (first full run had 1 flaky failure, unreproduced). Follow-ups moved to Q.3.

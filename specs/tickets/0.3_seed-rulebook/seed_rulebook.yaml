@@ -1,0 +1,432 @@
+# ALE seed rulebook — DRAFT (2026-11-09), written by the Router agent for the architect to validate.
+# Sources of the values: common French tertiary programming practice (individual offices 9–18 m²,
+# meeting rooms ~2 m²/person, accessible WC ≥ 1.5 m turning circle ≈ 4.5 m², etc.) and a temperate-climate
+# orientation logic (France / Morocco): workspaces avoid west (afternoon overheating), break areas seek south,
+# service/IT rooms prefer the north side. Proportions follow the architect's rule (1:1 to 2:1; p50 1.4 is a default).
+# EVERY value is a proposal: change anything that does not match your practice, then validate with
+#   python -m ale.contracts.validate rulebook specs/tickets/0.3_seed-rulebook/seed_rulebook.yaml
+schema_version: ale.rulebook/1
+version: seed-draft-1
+kind: seed
+n_plans: 0
+author: Draft by the ALE Router agent — to be validated by the architect
+date: '2026-11-09'
+types:
+  office:
+    aspect:
+      p10: 1.0
+      p50: 1.4
+      p90: 2.0
+    area_m2:
+      p10: 9.0
+      p50: 12.0
+      p90: 18.0
+    orientation:
+      N: 0.5
+      E: 0.6
+      S: 0.5
+      W: -0.3
+  open_office:
+    aspect:
+      p10: 1.0
+      p50: 1.4
+      p90: 2.0
+    area_m2:
+      p10: 40.0
+      p50: 80.0
+      p90: 200.0
+    orientation:
+      N: 0.6
+      E: 0.5
+      S: 0.4
+      W: -0.3
+  meeting_room:
+    aspect:
+      p10: 1.0
+      p50: 1.4
+      p90: 2.0
+    area_m2:
+      p10: 12.0
+      p50: 20.0
+      p90: 40.0
+    orientation:
+      N: 0.4
+      E: 0.4
+      S: 0.3
+      W: -0.2
+  break_room:
+    aspect:
+      p10: 1.0
+      p50: 1.4
+      p90: 2.0
+    area_m2:
+      p10: 12.0
+      p50: 20.0
+      p90: 40.0
+    orientation:
+      N: 0.0
+      E: 0.5
+      S: 0.8
+      W: 0.3
+  kitchenette:
+    aspect:
+      p10: 1.0
+      p50: 1.4
+      p90: 2.0
+    area_m2:
+      p10: 4.0
+      p50: 6.0
+      p90: 10.0
+    orientation:
+      N: 0.0
+      E: 0.0
+      S: 0.0
+      W: 0.0
+  print_room:
+    aspect:
+      p10: 1.0
+      p50: 1.4
+      p90: 2.0
+    area_m2:
+      p10: 4.0
+      p50: 8.0
+      p90: 12.0
+    orientation:
+      N: 0.0
+      E: 0.0
+      S: 0.0
+      W: 0.0
+  entrance_hall:
+    aspect:
+      p10: 1.0
+      p50: 1.4
+      p90: 2.0
+    area_m2:
+      p10: 20.0
+      p50: 40.0
+      p90: 120.0
+    orientation:
+      N: 0.2
+      E: 0.3
+      S: 0.5
+      W: 0.3
+  reception:
+    aspect:
+      p10: 1.0
+      p50: 1.4
+      p90: 2.0
+    area_m2:
+      p10: 8.0
+      p50: 12.0
+      p90: 25.0
+    orientation:
+      N: 0.2
+      E: 0.3
+      S: 0.3
+      W: 0.2
+  waiting_area:
+    aspect:
+      p10: 1.0
+      p50: 1.4
+      p90: 2.0
+    area_m2:
+      p10: 8.0
+      p50: 15.0
+      p90: 30.0
+    orientation:
+      N: 0.2
+      E: 0.4
+      S: 0.5
+      W: 0.2
+  training_room:
+    aspect:
+      p10: 1.0
+      p50: 1.4
+      p90: 2.0
+    area_m2:
+      p10: 30.0
+      p50: 50.0
+      p90: 80.0
+    orientation:
+      N: 0.5
+      E: 0.4
+      S: 0.3
+      W: -0.3
+  multipurpose_room:
+    aspect:
+      p10: 1.0
+      p50: 1.4
+      p90: 2.0
+    area_m2:
+      p10: 60.0
+      p50: 100.0
+      p90: 200.0
+    orientation:
+      N: 0.3
+      E: 0.3
+      S: 0.3
+      W: -0.2
+  sanitary:
+    aspect:
+      p10: 1.0
+      p50: 1.4
+      p90: 2.0
+    area_m2:
+      p10: 3.0
+      p50: 10.0
+      p90: 20.0
+    orientation:
+      N: 0.3
+      E: 0.0
+      S: -0.5
+      W: -0.3
+  sanitary_accessible:
+    aspect:
+      p10: 1.0
+      p50: 1.4
+      p90: 2.0
+    area_m2:
+      p10: 3.5
+      p50: 4.5
+      p90: 6.0
+    orientation:
+      N: 0.3
+      E: 0.0
+      S: -0.5
+      W: -0.3
+  shower:
+    aspect:
+      p10: 1.0
+      p50: 1.4
+      p90: 2.0
+    area_m2:
+      p10: 2.0
+      p50: 4.0
+      p90: 8.0
+    orientation:
+      N: 0.3
+      E: 0.0
+      S: -0.5
+      W: -0.3
+  locker_room:
+    aspect:
+      p10: 1.0
+      p50: 1.4
+      p90: 2.0
+    area_m2:
+      p10: 8.0
+      p50: 15.0
+      p90: 30.0
+    orientation:
+      N: 0.3
+      E: 0.0
+      S: -0.5
+      W: -0.3
+  storage:
+    aspect:
+      p10: 1.0
+      p50: 1.4
+      p90: 2.0
+    area_m2:
+      p10: 2.0
+      p50: 6.0
+      p90: 15.0
+    orientation:
+      N: 0.3
+      E: 0.0
+      S: -0.3
+      W: 0.0
+  archive:
+    aspect:
+      p10: 1.0
+      p50: 1.4
+      p90: 2.0
+    area_m2:
+      p10: 8.0
+      p50: 15.0
+      p90: 40.0
+    orientation:
+      N: 0.5
+      E: 0.0
+      S: -0.5
+      W: 0.0
+  technical_room:
+    aspect:
+      p10: 1.0
+      p50: 1.4
+      p90: 2.0
+    area_m2:
+      p10: 4.0
+      p50: 10.0
+      p90: 30.0
+    orientation:
+      N: 0.5
+      E: 0.0
+      S: -0.5
+      W: 0.0
+  it_room:
+    aspect:
+      p10: 1.0
+      p50: 1.4
+      p90: 2.0
+    area_m2:
+      p10: 4.0
+      p50: 8.0
+      p90: 15.0
+    orientation:
+      N: 0.6
+      E: 0.0
+      S: -0.8
+      W: -0.5
+  cleaning_room:
+    aspect:
+      p10: 1.0
+      p50: 1.4
+      p90: 2.0
+    area_m2:
+      p10: 2.0
+      p50: 3.0
+      p90: 6.0
+    orientation:
+      N: 0.3
+      E: 0.0
+      S: -0.3
+      W: 0.0
+  waste_room:
+    aspect:
+      p10: 1.0
+      p50: 1.4
+      p90: 2.0
+    area_m2:
+      p10: 4.0
+      p50: 8.0
+      p90: 15.0
+    orientation:
+      N: 0.3
+      E: 0.0
+      S: -0.3
+      W: 0.0
+  stair:
+    aspect:
+      p10: 1.0
+      p50: 1.4
+      p90: 2.0
+    area_m2:
+      p10: 12.0
+      p50: 18.0
+      p90: 25.0
+    orientation:
+      N: 0.0
+      E: 0.0
+      S: 0.0
+      W: 0.0
+  lift:
+    aspect:
+      p10: 1.0
+      p50: 1.4
+      p90: 2.0
+    area_m2:
+      p10: 4.0
+      p50: 5.0
+      p90: 8.0
+    orientation:
+      N: 0.0
+      E: 0.0
+      S: 0.0
+      W: 0.0
+adjacency:
+  default_p: 0.5
+  pairs:
+  - a: entrance_hall
+    b: reception
+    p: 0.9
+  - a: reception
+    b: waiting_area
+    p: 0.8
+  - a: entrance_hall
+    b: waiting_area
+    p: 0.7
+  - a: meeting_room
+    b: reception
+    p: 0.6
+  - a: office
+    b: office
+    p: 0.8
+  - a: office
+    b: meeting_room
+    p: 0.6
+  - a: office
+    b: open_office
+    p: 0.6
+  - a: meeting_room
+    b: open_office
+    p: 0.6
+  - a: open_office
+    b: print_room
+    p: 0.7
+  - a: archive
+    b: office
+    p: 0.5
+  - a: office
+    b: storage
+    p: 0.5
+  - a: break_room
+    b: kitchenette
+    p: 0.9
+  - a: sanitary
+    b: sanitary_accessible
+    p: 0.9
+  - a: locker_room
+    b: shower
+    p: 0.9
+  - a: locker_room
+    b: sanitary
+    p: 0.7
+  - a: cleaning_room
+    b: sanitary
+    p: 0.7
+  - a: it_room
+    b: technical_room
+    p: 0.7
+  - a: lift
+    b: stair
+    p: 0.9
+  - a: sanitary
+    b: stair
+    p: 0.6
+  - a: entrance_hall
+    b: lift
+    p: 0.8
+  - a: multipurpose_room
+    b: training_room
+    p: 0.6
+  - a: entrance_hall
+    b: training_room
+    p: 0.5
+  - a: meeting_room
+    b: sanitary
+    p: 0.15
+  - a: kitchenette
+    b: sanitary
+    p: 0.1
+  - a: meeting_room
+    b: technical_room
+    p: 0.15
+  - a: office
+    b: technical_room
+    p: 0.2
+  - a: kitchenette
+    b: waste_room
+    p: 0.1
+  - a: reception
+    b: waste_room
+    p: 0.05
+  - a: it_room
+    b: sanitary
+    p: 0.05
+  - a: break_room
+    b: meeting_room
+    p: 0.3
+core_offset:
+  dx_norm: 0.0
+  dy_norm: 0.0
