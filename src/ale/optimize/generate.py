@@ -1,4 +1,10 @@
-"""Variant generation: prepare → seed → anneal → export, N variants (RD 3.4 §4)."""
+"""Variant generation: prepare → seed → anneal → export, N variants (RD 3.4 §4).
+
+Ticket Q.3 (budget split): per variant the seeder gets
+``min(SEED_TIME_BUDGET_S, SEED_SHARE * optimizer.time_budget_s)`` and the annealer the rest of
+``optimizer.time_budget_s`` (through a copy of the config), so a variant takes about
+``time_budget_s`` in all.
+"""
 
 from __future__ import annotations
 
@@ -21,6 +27,8 @@ __all__ = ["SUMMARY_NAME", "GenerateResult", "VariantResult", "generate", "rende
 SUMMARY_NAME = "summary.md"
 SEED_TIME_BUDGET_S = 20.0
 """Upper bound of the time given to :func:`seed_plan` per variant."""
+SEED_SHARE = 0.25
+"""Share of ``optimizer.time_budget_s`` the seeder may use at most (Q.3)."""
 _VARIANTS_TIME_S = 1e9
 """The variant loop is bounded by ``variants``; each variant bounds its own time."""
 
@@ -119,7 +127,15 @@ def generate(
     out = Path(out)
     results: list[VariantResult] = []
     finals: dict[str, int] = {}
-    seed_budget = min(SEED_TIME_BUDGET_S, config.optimizer.time_budget_s)
+    total_s = config.optimizer.time_budget_s
+    seed_budget = min(SEED_TIME_BUDGET_S, SEED_SHARE * total_s)
+    anneal_config = config.model_copy(
+        update={
+            "optimizer": config.optimizer.model_copy(
+                update={"time_budget_s": total_s - seed_budget}
+            )
+        }
+    )
     footprint_m2 = prepared.feasibility.footprint_m2
     for k in bounded_range(
         variants, _VARIANTS_TIME_S, label="generate-variants", on_exhaust="stop"
@@ -137,7 +153,7 @@ def generate(
                 )
             )
             continue
-        res = anneal(prepared, rb, config, seeded.plan, seed=seed_k)
+        res = anneal(prepared, rb, anneal_config, seeded.plan, seed=seed_k)
         target = out / f"variant_{index:02d}"
         export_run(
             res.layout,

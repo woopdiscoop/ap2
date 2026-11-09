@@ -2,11 +2,22 @@
 
 from __future__ import annotations
 
+import time
+
 import pytest
-from optimize_helpers import load_test_rulebook, prepare
+from optimize_helpers import (
+    ANNEAL_ITER,
+    ANNEAL_SEED,
+    SEED_ATTEMPTS,
+    QualityRun,
+    hard_codes,
+    load_test_rulebook,
+    prepare,
+)
 
 from ale.config import AleConfig
 from ale.contracts.models import Program, Rulebook, SiteSpec
+from ale.optimize import anneal
 from ale.program.models import PreparedInput
 from ale.topology import SeedResult, seed_plan
 
@@ -51,7 +62,28 @@ def seeded(
     cfg = AleConfig()
     out: dict[str, tuple[PreparedInput, SeedResult]] = {}
     for name, prep in (("P8", prep_8), ("P25", prep_25), ("P60", prep_60)):
-        res = seed_plan(prep, rulebook, cfg, seed=START_SEED)
+        res = seed_plan(prep, rulebook, cfg, seed=START_SEED, max_attempts=SEED_ATTEMPTS)
         assert res.realization.layout is not None, (name, res.realization.failures)
         out[name] = (prep, res)
+    return out
+
+
+@pytest.fixture(scope="session")
+def quality_runs(
+    seeded: dict[str, tuple[PreparedInput, SeedResult]], rulebook: Rulebook
+) -> dict[str, QualityRun]:
+    """Ticket Q.3: the seed-3 starts annealed with seed 6 and :data:`ANNEAL_ITER` iterations
+    (identical on any machine, with or without coverage)."""
+    cfg = AleConfig()
+    out: dict[str, QualityRun] = {}
+    for name in ("P8", "P25", "P60"):
+        prep, start = seeded[name]
+        layout0 = start.realization.layout
+        assert layout0 is not None
+        t0 = time.monotonic()
+        res = anneal(prep, rulebook, cfg, start.plan, seed=ANNEAL_SEED, max_iter=ANNEAL_ITER[name])
+        seconds = time.monotonic() - t0
+        run = QualityRun(prep, start, res, hard_codes(layout0), hard_codes(res.layout), seconds)
+        print(f"{name}: {run.before} -> {run.after} ({res.iterations} it, {seconds:.1f} s)")
+        out[name] = run
     return out

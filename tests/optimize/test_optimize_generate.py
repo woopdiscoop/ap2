@@ -94,12 +94,13 @@ def test_O07_generate_cli(tmp_path: Path, p25_inputs: tuple[Path, Path]) -> None
     assert "synthèse" in res.stdout
 
 
-@pytest.mark.timeout(120)
+@pytest.mark.timeout(240)
 def test_generate_cli_default_seed(tmp_path: Path, p25_inputs: tuple[Path, Path]) -> None:
     xlsx, yml = p25_inputs
     # Q.1: seeding P25 with compliant rooms needs ~2 s for seed 5 (2 restarts; 3-4x more
-    # under coverage); the per-variant seed budget is min(20, time_budget_s): 1 s → 12 s.
-    ws = _workspace(tmp_path, 12.0)
+    # under coverage). Q.3: the per-variant seed budget is min(20, 0.25 x time_budget_s),
+    # so 40 s gives the seeder 10 s (the annealer the other 30 s).
+    ws = _workspace(tmp_path, 40.0)
     toml = ws / "ale.toml"
     text = toml.read_text(encoding="utf-8")
     toml.write_text(text.replace("seed = 42", "seed = 5"), encoding="utf-8")

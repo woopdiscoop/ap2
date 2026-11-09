@@ -14,6 +14,16 @@ before the marker are laid out from ``u = 0``; the bays after it from ``pre + s`
 connector sat right after this block's own bays). The piece fixes the connector position
 ``u_c`` from all its blocks; :meth:`BlockOut.placed` then shifts the bays after the marker
 to ``u_c + s`` and adds the filler strip ``[pre, u_c)`` and the end strip.
+
+Ticket Q.3 (façade-aware widths): in an *exterior* block (its outer long side on the
+footprint exterior, see :mod:`ale.geometry.realize`) a room bay holding a ``needs_facade``
+room takes the **smallest** width that satisfies the area rule, ``aspect <= amax`` and
+``wmin`` (raised to the façade minimum ``f`` when that width still complies), so more such
+rooms fit along the frontage. Elsewhere the RD 3.3 §5.2 width is unchanged. Every block also
+counts its ``needs_facade`` rooms predicted to end with less than ``f`` of façade
+(:attr:`BlockOut.no_facade`, the realiser's depth-search key): a room bay has façade = its
+width when the block is exterior, else none; a stack room has façade = the stack width only
+when it is the outermost room of its stack (no stack-end strip) in an exterior block.
 """
 
 from __future__ import annotations
@@ -116,7 +126,11 @@ class Consts:
         lo_mm2, hi_mm2 = area_bounds_mm2(spec.target_area_m2, self.tol)
         target = Fraction(to_decimal(spec.target_area_m2)) * _MM2_PER_M2 / cell
         return RoomReq(
-            target=target, lo=_ceil_div(lo_mm2, cell), hi=hi_mm2 // cell, wmin=self.wmin(spec)
+            target=target,
+            lo=_ceil_div(lo_mm2, cell),
+            hi=hi_mm2 // cell,
+            wmin=self.wmin(spec),
+            facade=spec.needs_facade,
         )
 
 
@@ -128,10 +142,14 @@ class RoomReq:
     lo: int
     hi: int
     wmin: int
+    facade: bool = False
+    """``needs_facade`` (Q.3: façade-aware width in exterior blocks)."""
     _hash: int = field(init=False, repr=False, compare=False, default=0)
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "_hash", hash((self.target, self.lo, self.hi, self.wmin)))
+        object.__setattr__(
+            self, "_hash", hash((self.target, self.lo, self.hi, self.wmin, self.facade))
+        )
 
     def __hash__(self) -> int:  # cached: requirements key every solver memo
         return self._hash
@@ -182,6 +200,8 @@ class BlockOut:
     """Index in ``items`` of the first item after the marker."""
     junction_post: bool = False
     """Whether the junction finger lies after the marker."""
+    no_facade: int = 0
+    """``needs_facade`` rooms predicted to end with façade ``< f`` (Q.3 depth key)."""
     _dev: Fraction | None = field(default=None, repr=False, compare=False)
 
     def dev(self) -> Fraction:
@@ -228,17 +248,37 @@ class Solver:
     def __init__(self, consts: Consts, reqs: Mapping[str, RoomReq]) -> None:
         self.k = consts
         self.reqs = reqs
-        self._bay_cache: dict[tuple[RoomReq, int], int | None] = {}
+        self._bay_cache: dict[tuple[RoomReq, int, bool], int | None] = {}
         self._stack_cache: dict[tuple[tuple[RoomReq, ...], int], StackSol | None] = {}
 
     # ------------------------------------------------------------------ 5.2 room bay
-    def room_bay_width(self, req: RoomReq, depth: int) -> int | None:
+    def room_bay_width(self, req: RoomReq, depth: int, exterior: bool = False) -> int | None:
         """Width of a room bay at ``depth`` satisfying the area rule, ``aspect <= amax`` and
-        ``wmin`` (RD 3.3 §5.2), or ``None`` when no width does (Q.1: ``ROOM_INFEASIBLE``)."""
-        key = (req, depth)
+        ``wmin`` (RD 3.3 §5.2), or ``None`` when no width does (Q.1: ``ROOM_INFEASIBLE``).
+
+        Q.3: a ``needs_facade`` room in an ``exterior`` block takes the smallest compliant
+        width instead (see :meth:`facade_width`); the set of depths with a width is the same.
+        """
+        narrow = exterior and req.facade
+        key = (req, depth, narrow)
         if key not in self._bay_cache:
-            self._bay_cache[key] = self._room_bay_width(req, depth)
+            got = self._room_bay_width(req, depth)
+            if narrow and got is not None:
+                got = self.facade_width(req, depth)
+            self._bay_cache[key] = got
         return self._bay_cache[key]
+
+    def facade_width(self, req: RoomReq, depth: int) -> int | None:
+        """Q.3: the smallest width ``w`` with ``lo <= w·D <= hi``, ``aspect <= amax`` and
+        ``w >= wmin``, raised to ``f`` when ``f`` still complies (``None`` if none does)."""
+        if depth < req.wmin:
+            return None
+        an, ad = self.k.amax.numerator, self.k.amax.denominator
+        lo = max(req.wmin, _ceil_div(req.lo, depth), _ceil_div(depth * ad, an))
+        hi = min(req.hi // depth, (depth * an) // ad)
+        if lo > hi:
+            return None
+        return max(lo, self.k.f) if self.k.f <= hi else lo
 
     def _room_bay_width(self, req: RoomReq, depth: int) -> int | None:
         if depth < req.wmin:
@@ -357,11 +397,13 @@ class Solver:
         depth: int,
         length: int,
         where: str,
+        exterior: bool = False,
     ) -> BlockOut:
         """Lay out ``bays`` in a block of ``depth`` x ``length``; ``where`` names it.
 
         A :class:`ConnectorBay` marker takes ``s`` along the spine right after the bays
         before it (the piece moves it to its connector, see :meth:`BlockOut.placed`).
+        ``exterior``: the block's outer long side lies on the footprint exterior (Q.3).
         """
         out = BlockOut(depth=depth)
         s = self.k.s
@@ -377,6 +419,12 @@ class Solver:
             return out
         if depth <= 0:
             out.failures.append(("BLOCK_TOO_SHALLOW", f"{where} has rooms but depth {depth}"))
+            out.no_facade = sum(
+                self.reqs[r].facade
+                for bay in bays
+                if not isinstance(bay, ConnectorBay)
+                for r in ((bay.room,) if isinstance(bay, RoomBay) else (*bay.left, *bay.right))
+            )
             return out
         u = 0
         for b, bay in enumerate(bays):
@@ -387,7 +435,7 @@ class Solver:
                 continue
             if isinstance(bay, RoomBay):
                 req = self.reqs[bay.room]
-                found = self.room_bay_width(req, depth)
+                found = self.room_bay_width(req, depth, exterior)
                 if found is None:
                     out.failures.append(
                         (
@@ -396,17 +444,19 @@ class Solver:
                         )
                     )
                 w = max(req.wmin, req.ceil_div(depth)) if found is None else found
+                if req.facade and not (exterior and w >= self.k.f):
+                    out.no_facade += 1
                 self._room(out, bay.room, req, u, 0, w, depth)
                 u += w
                 continue
-            w_left = self._stack_items(out, bay.left, u, depth, f"{where} bay {b} left")
+            w_left = self._stack_items(out, bay.left, u, depth, f"{where} bay {b} left", exterior)
             finger_u = u + w_left
             out.items.append(Item("finger", None, finger_u, 0, s, depth))
             if bay.junction:
                 out.junction_u = finger_u
                 out.junction_post = out.marker is not None
             w_right = self._stack_items(
-                out, bay.right, finger_u + s, depth, f"{where} bay {b} right"
+                out, bay.right, finger_u + s, depth, f"{where} bay {b} right", exterior
             )
             u = finger_u + s + w_right
         if out.marker is not None:
@@ -428,13 +478,21 @@ class Solver:
         out.area_dev += abs(du * dt - req.target)
 
     def _stack_items(
-        self, out: BlockOut, rooms: tuple[str, ...], u: int, depth: int, where: str
+        self,
+        out: BlockOut,
+        rooms: tuple[str, ...],
+        u: int,
+        depth: int,
+        where: str,
+        exterior: bool = False,
     ) -> int:
         """Append a stack's rooms (and stack-end strip) at ``u``; return its width."""
         if not rooms:
             return 0
         reqs = tuple(self.reqs[r] for r in rooms)
         sol = self.stack(reqs, depth)
+        lit = exterior and sol is not None and sol.rest == 0 and sol.w >= self.k.f
+        out.no_facade += sum(r.facade for r in reqs[:-1]) + (reqs[-1].facade and not lit)
         if sol is None:
             out.failures.append(
                 (
