@@ -10,6 +10,14 @@ Ready-made inputs to run the layout generator without preparing anything.
 | `rulebook_seed_draft.yaml` | draft rulebook (awaiting architect validation) | |
 | `rulebook_test.yaml` | rulebook used by the test suite | |
 
+## 0. See results without installing
+
+`sample_output/p25/` holds a real run on the 25-room example (seed 42, 2 variants, draft rulebook):
+[summary](sample_output/p25/summary.md) ·
+[variant 2 preview](sample_output/p25/variant_02/preview.svg) ·
+[variant 2 report](sample_output/p25/variant_02/report.md) ·
+`variant_02/layout.dxf` (download, open in a DXF viewer).
+
 ## 1. Install (once)
 
 Python 3.11, 3.12 or 3.13. From the repository root:
@@ -35,7 +43,7 @@ ale generate --workspace my_ws \
 ```
 
 Each variant takes about the optimiser's time budget (`[optimizer] time_budget_s` in `my_ws/ale.toml`,
-default 120 s; set it to 30 for quick tries). Outputs in `my_ws/runs/p25/`:
+default 120 s; set it to 30 for quick tries). Outputs are written **on your machine** in `my_ws/runs/p25/` (not in the repository):
 
 - `summary.md` — one line per variant: cost, number of hard-rule violations, circulation %;
 - `variant_NN/preview.svg` — open in a web browser;

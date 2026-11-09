@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="0 -18 24 18" width="1200" height="900">
+<g id="rooms">
+<rect id="room-B01#01" x="16.3" y="-18" width="2.5" height="4.8" fill="#9ad1d4" stroke="#333333" stroke-width="0.036"/>
+<rect id="room-B01#02" x="3.8" y="-18" width="2.5" height="4.8" fill="#9ad1d4" stroke="#333333" stroke-width="0.036"/>
+<rect id="room-B01#03" x="0" y="-12" width="4.8" height="2.5" fill="#9ad1d4" stroke="#333333" stroke-width="0.036"/>
+<rect id="room-B01#04" x="0" y="-9.5" width="4.3" height="2.8" fill="#9ad1d4" stroke="#333333" stroke-width="0.036"/>
+<rect id="room-B01#05" x="4.8" y="-12" width="4.8" height="2.5" fill="#9ad1d4" stroke="#333333" stroke-width="0.036"/>
+<rect id="room-B01#06" x="6.3" y="-18" width="2.5" height="4.8" fill="#9ad1d4" stroke="#333333" stroke-width="0.036"/>
+<rect id="room-B01#07" x="8.8" y="-18" width="2.5" height="4.8" fill="#9ad1d4" stroke="#333333" stroke-width="0.036"/>
+<rect id="room-B01#08" x="13.8" y="-18" width="2.5" height="4.8" fill="#9ad1d4" stroke="#333333" stroke-width="0.036"/>
+<rect id="room-B01#09" x="9.6" y="-12" width="4.8" height="2.5" fill="#9ad1d4" stroke="#333333" stroke-width="0.036"/>
+<rect id="room-B01#10" x="11.3" y="-18" width="2.5" height="4.8" fill="#9ad1d4" stroke="#333333" stroke-width="0.036"/>
+<rect id="room-B02" x="0" y="-5.5" width="11" height="5.5" fill="#9ad1d4" stroke="#333333" stroke-width="0.036"/>
+<rect id="room-H01" x="14.3" y="-5.5" width="4.6" height="5.5" fill="#f4d35e" stroke="#333333" stroke-width="0.036"/>
+<rect id="room-H02" x="18.9" y="-5.5" width="2.5" height="5" fill="#f4d35e" stroke="#333333" stroke-width="0.036"/>
+<rect id="room-K01" x="15.6" y="-12" width="3.2" height="2.5" fill="#9ad1d4" stroke="#333333" stroke-width="0.036"/>
+<rect id="room-M01#1" x="0" y="-18" width="3.8" height="4.8" fill="#9ad1d4" stroke="#333333" stroke-width="0.036"/>
+<rect id="room-M01#2" x="18.8" y="-18" width="3.8" height="4.8" fill="#9ad1d4" stroke="#333333" stroke-width="0.036"/>
+<rect id="room-S01#1" x="9.4" y="-9.5" width="3.6" height="2.8" fill="#c8c8c8" stroke="#333333" stroke-width="0.036"/>
+<rect id="room-S01#2" x="4.3" y="-9.5" width="3.6" height="2.8" fill="#c8c8c8" stroke="#333333" stroke-width="0.036"/>
+<rect id="room-S02" x="7.9" y="-9.5" width="1.5" height="2.8" fill="#c8c8c8" stroke="#333333" stroke-width="0.036"/>
+<rect id="room-T01#1" x="18.8" y="-12" width="2.4" height="2.5" fill="#c8c8c8" stroke="#333333" stroke-width="0.036"/>
+<rect id="room-T01#2" x="19.9" y="-9.5" width="2.2" height="2.8" fill="#c8c8c8" stroke="#333333" stroke-width="0.036"/>
+<rect id="room-T02" x="14.8" y="-9.5" width="2.9" height="2.8" fill="#c8c8c8" stroke="#333333" stroke-width="0.036"/>
+<rect id="room-T03" x="17.7" y="-9.5" width="2.2" height="2.8" fill="#c8c8c8" stroke="#333333" stroke-width="0.036"/>
+<rect id="room-V01" x="11" y="-5.5" width="3.3" height="5.5" fill="#c8c8c8" stroke="#333333" stroke-width="0.036"/>
+<rect id="room-V02" x="13" y="-9.5" width="1.8" height="2.8" fill="#c8c8c8" stroke="#333333" stroke-width="0.036"/>
+</g>
+<g id="circulation">
+<rect id="circ-circ-001" x="22.8" y="-18" width="1.2" height="18" fill="#eeeeee" stroke="#ffffff" stroke-width="0.036"/>
+<rect id="circ-circ-002" x="0" y="-6.7" width="22.8" height="1.2" fill="#eeeeee" stroke="#ffffff" stroke-width="0.036"/>
+<rect id="circ-circ-003" x="18.9" y="-0.5" width="2.5" height="0.5" fill="#eeeeee" stroke="#ffffff" stroke-width="0.036"/>
+<rect id="circ-circ-004" x="21.4" y="-5.5" width="1.2" height="5.5" fill="#eeeeee" stroke="#ffffff" stroke-width="0.036"/>
+<rect id="circ-circ-005" x="22.6" y="-5.5" width="0.2" height="5.5" fill="#eeeeee" stroke="#ffffff" stroke-width="0.036"/>
+<rect id="circ-circ-006" x="22.1" y="-9.5" width="0.7" height="2.8" fill="#eeeeee" stroke="#ffffff" stroke-width="0.036"/>
+<rect id="circ-circ-007" x="0" y="-13.2" width="22.8" height="1.2" fill="#eeeeee" stroke="#ffffff" stroke-width="0.036"/>
+<rect id="circ-circ-008" x="14.4" y="-12" width="1.2" height="2.5" fill="#eeeeee" stroke="#ffffff" stroke-width="0.036"/>
+<rect id="circ-circ-009" x="21.2" y="-12" width="1.6" height="2.5" fill="#eeeeee" stroke="#ffffff" stroke-width="0.036"/>
+<rect id="circ-circ-010" x="22.6" y="-18" width="0.2" height="4.8" fill="#eeeeee" stroke="#ffffff" stroke-width="0.036"/>
+</g>
+<polygon id="footprint" points="0,0 24,0 24,-18 0,-18" fill="none" stroke="#000000" stroke-width="0.09"/>
+<g id="labels" font-family="sans-serif" font-size="0.25" text-anchor="middle" fill="#000000">
+<text x="17.55" y="-15.6"><tspan x="17.55" dy="-0.05">Bureau #01</tspan><tspan x="17.55" dy="0.3">12,00 m²</tspan></text>
+<text x="5.05" y="-15.6"><tspan x="5.05" dy="-0.05">Bureau #02</tspan><tspan x="5.05" dy="0.3">12,00 m²</tspan></text>
+<text x="2.4" y="-10.75"><tspan x="2.4" dy="-0.05">Bureau #03</tspan><tspan x="2.4" dy="0.3">12,00 m²</tspan></text>
+<text x="2.15" y="-8.1"><tspan x="2.15" dy="-0.05">Bureau #04</tspan><tspan x="2.15" dy="0.3">12,04 m²</tspan></text>
+<text x="7.2" y="-10.75"><tspan x="7.2" dy="-0.05">Bureau #05</tspan><tspan x="7.2" dy="0.3">12,00 m²</tspan></text>
+<text x="7.55" y="-15.6"><tspan x="7.55" dy="-0.05">Bureau #06</tspan><tspan x="7.55" dy="0.3">12,00 m²</tspan></text>
+<text x="10.05" y="-15.6"><tspan x="10.05" dy="-0.05">Bureau #07</tspan><tspan x="10.05" dy="0.3">12,00 m²</tspan></text>
+<text x="15.05" y="-15.6"><tspan x="15.05" dy="-0.05">Bureau #08</tspan><tspan x="15.05" dy="0.3">12,00 m²</tspan></text>
+<text x="12" y="-10.75"><tspan x="12" dy="-0.05">Bureau #09</tspan><tspan x="12" dy="0.3">12,00 m²</tspan></text>
+<text x="12.55" y="-15.6"><tspan x="12.55" dy="-0.05">Bureau #10</tspan><tspan x="12.55" dy="0.3">12,00 m²</tspan></text>
+<text x="5.5" y="-2.75"><tspan x="5.5" dy="-0.05">Plateau</tspan><tspan x="5.5" dy="0.3">60,50 m²</tspan></text>
+<text x="16.6" y="-2.75"><tspan x="16.6" dy="-0.05">Hall d'entrée</tspan><tspan x="16.6" dy="0.3">25,30 m²</tspan></text>
+<text x="20.15" y="-3"><tspan x="20.15" dy="-0.05">Accueil</tspan><tspan x="20.15" dy="0.3">12,50 m²</tspan></text>
+<text x="17.2" y="-10.75"><tspan x="17.2" dy="-0.05">Office</tspan><tspan x="17.2" dy="0.3">8,00 m²</tspan></text>
+<text x="1.9" y="-15.6"><tspan x="1.9" dy="-0.05">Salle de réunion #1</tspan><tspan x="1.9" dy="0.3">18,24 m²</tspan></text>
+<text x="20.7" y="-15.6"><tspan x="20.7" dy="-0.05">Salle de réunion #2</tspan><tspan x="20.7" dy="0.3">18,24 m²</tspan></text>
+<text x="11.2" y="-8.1"><tspan x="11.2" dy="-0.05">Sanitaires #1</tspan><tspan x="11.2" dy="0.3">10,08 m²</tspan></text>
+<text x="6.1" y="-8.1"><tspan x="6.1" dy="-0.05">Sanitaires #2</tspan><tspan x="6.1" dy="0.3">10,08 m²</tspan></text>
+<text x="8.65" y="-8.1"><tspan x="8.65" dy="-0.05">WC PMR</tspan><tspan x="8.65" dy="0.3">4,20 m²</tspan></text>
+<text x="20" y="-10.75"><tspan x="20" dy="-0.05">Rangement #1</tspan><tspan x="20" dy="0.3">6,00 m²</tspan></text>
+<text x="21" y="-8.1"><tspan x="21" dy="-0.05">Rangement #2</tspan><tspan x="21" dy="0.3">6,16 m²</tspan></text>
+<text x="16.25" y="-8.1"><tspan x="16.25" dy="-0.05">Local technique</tspan><tspan x="16.25" dy="0.3">8,12 m²</tspan></text>
+<text x="18.8" y="-8.1"><tspan x="18.8" dy="-0.05">Local informatique</tspan><tspan x="18.8" dy="0.3">6,16 m²</tspan></text>
+<text x="12.65" y="-2.75"><tspan x="12.65" dy="-0.05">Escalier</tspan><tspan x="12.65" dy="0.3">18,15 m²</tspan></text>
+<text x="13.9" y="-8.1"><tspan x="13.9" dy="-0.05">Ascenseur</tspan><tspan x="13.9" dy="0.3">5,04 m²</tspan></text>
+</g>
+<g id="north-arrow" data-north-angle-deg="0"><path d="M 22.56,-15.84 L 22.56,-17.28" stroke="#000000" stroke-width="0.09" fill="none"/><path d="M 22.56,-17.28 L 22.74,-16.92 L 22.38,-16.92 Z" fill="#000000"/><text x="22.56" y="-17.64" font-size="0.25" text-anchor="middle" dominant-baseline="middle">N</text></g>
+</svg>
