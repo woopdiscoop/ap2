@@ -24,7 +24,7 @@ Maintained by the Router only. Directive: `specs/DIRECTIVE.md` (v2.2, supersedes
 | Q.1 | Realisation never emits rule-breaking rooms + depth-aware seeding | **DONE** | — | RD + eval | 0 area/aspect/min-width breaks; hard after SA (15 s): P8 0, P25 6, P60 ≈ 19. |
 | A.3 | Contract: inner connector | **IN-PROGRESS** | — | RD + eval | Contracts 1.3.0, backward compatible. |
 | Q.2a | Façade capacity in feasibility | **DONE** | — | RD + eval | usable façade: site_rect 43.2 m, site_L 90.0 m; P60 demand 117.9 m → W_FACADE_TIGHT. |
-| Q.2 | Façade-aware layouts (+ A.3 merge) | **READY** | — (Q.1, A.3 done) | spec next | Inner connector in geometry/seeding/moves; façade-pull move; fixes A.3 mypy errors. |
+| Q.2 | Façade-aware layouts (+ A.3 merge) | **IN-PROGRESS** | — (Q.1, A.3 done) | RD + eval | Inner connector in geometry/seeding/moves; façade-pull move; fixes A.3 mypy errors. |
 | Q.3 | Cache into geometry + reliability | BLOCKED | Q.2 | — | + restore strict P25 gate in 3.4 O03 (weakened in Q.1 to 'start ≤ 8'); find the flaky full-suite test (1 failure in 1 of 2 full runs); P8 ≤ 1 for all seeds; seed/anneal budget split in generate. |
 | 1.1 | Corpus ingestion & classification | **DONE** | — | RD + eval | Real corpus: 439 files → 1734 units (DWG 17 NEEDS_TOOL, PDF_VECTOR 879, PDF_SCANNED 436, RASTER 402), 0 failed, idempotent. |
 | 1.2 | CAD reader (DXF; DWG via converter) | **DONE** (library) | — | RD + eval | Layers (whole-word), units, walls, rooms, labels, openings, multi-plan, DWG→DXF via ODA/accoreconsole. Follow-up 1.2c: wire `ale layers` / `ale extract --kind dxf\|dwg` to the corpus DB. Real DWGs need ODA on the user's workstation. |
