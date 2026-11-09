@@ -28,6 +28,8 @@ class SourceKind(enum.StrEnum):
 def format_extract(report: ExtractReport) -> str:
     """French summary printed by ``ale extract``."""
     lines: list[str] = []
+    if report.vlm_warning is not None:
+        lines.append(f"avertissement : {report.vlm_warning}")
     if report.proposed_layers is not None:
         lines.append(
             "avertissement : layer_map.yaml ne contient aucun calque ; "
@@ -44,6 +46,11 @@ def format_extract(report: ExtractReport) -> str:
         f"  outil manquant : {report.needs_tool}",
         f"  exclues : {report.excluded}",
     ]
+    if report.vlm_enabled:
+        lines.append(
+            f"  VLM : {report.vlm_plans} plan(s) envoyé(s), "
+            f"{report.vlm_cache_hits} réponse(s) du cache, {report.vlm_errors} erreur(s)"
+        )
     lines.extend(
         f"  {kind} : {count} unité(s) extraite(s)" for kind, count in sorted(report.by_kind.items())
     )
@@ -60,11 +67,17 @@ def extract(
     kind: Annotated[
         SourceKind | None, typer.Option("--kind", help="Only this kind of source.")
     ] = None,
+    no_vlm: Annotated[
+        bool,
+        typer.Option("--no-vlm", help="Label rooms from drawing text only (no VLM call)."),
+    ] = False,
 ) -> None:
     """Extract geometry and labels from ingested sources."""
     ws = open_workspace_or_exit(ctx, require_workspace(workspace))
     try:
-        report = run_extract(ws, only_new=only_new, kind=None if kind is None else kind.value)
+        report = run_extract(
+            ws, only_new=only_new, kind=None if kind is None else kind.value, no_vlm=no_vlm
+        )
     except WorkspaceError as exc:
         for line in exc.lines:
             typer.echo(line, err=True)
