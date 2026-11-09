@@ -79,6 +79,7 @@ with ground truth. The Router will issue an annotation template before Phase 1.
 
 - 2026-11-06 — v2.0 workspace initialised (tickets 1.1, 1.2 specified).
 - 2026-11-09 — User: yes to seed-rulebook draft and Claude as VLM. Seed draft written and validated; P.1 specified and dispatched. CI: raster extra added to the install line.
+- 2026-11-09 — I.1 scope kept text-only; Claude provider wiring into `ale extract` queued as I.2 (after I.1).
 - 2026-11-09 — I.1 (Codex) committed locally at fb49b4b: 1070 passed, 3 failed — legacy tests asserting pre-I.1 behaviour; Router authorised updating exactly those (notes.md). Push blocked: Codex GitHub integration has no write access (HTTP 403).
 - 2026-11-09 — **CI back and green on Windows/macOS/Linux** (3.11–3.13): runs #58 (23c50dc) and #59 (6006440), 9/9 jobs each.
 - 2026-11-09 — A.3 + Q.2 merged (8fc97b5): contracts 1.3.0 (inner connector); P60 hard 24 → 17–18 (NO_FACADE 15 → 10), P25 7 → 6, P8 0; annealer early-stop bug fixed (converged counter started at 0). G804 (NO_FACADE ≤ 6) missed — Worker analysis: realiser's exact-area depths waste frontage; G805 is wall-clock dependent (passed alone, 7 > 6 in a loaded full run; xfailed under coverage). Both routed to Q.3 (specified, dispatched). Spec slip: G801 literal footprint miscounted (same as N01).
