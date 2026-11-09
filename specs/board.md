@@ -29,7 +29,7 @@ Maintained by the Router only. Directive: `specs/DIRECTIVE.md` (v2.2, supersedes
 | 1.1 | Corpus ingestion & classification | **DONE** | — | RD + eval | Real corpus: 439 files → 1734 units (DWG 17 NEEDS_TOOL, PDF_VECTOR 879, PDF_SCANNED 436, RASTER 402), 0 failed, idempotent. |
 | 1.2 | CAD reader (DXF; DWG via converter) | **DONE** (library) | — | RD + eval | Layers (whole-word), units, walls, rooms, labels, openings, multi-plan, DWG→DXF via ODA/accoreconsole. Follow-up 1.2c: wire `ale layers` / `ale extract --kind dxf\|dwg` to the corpus DB. Real DWGs need ODA on the user's workstation. |
 | 1.2c | CAD → corpus CLI (`ale layers`, `ale extract` dxf/dwg) | **DONE** | — | RD + eval | Empty layer map → in-memory proposal + warning; NEEDS_TOOL DWGs retried. |
-| P.1 | Claude VLM provider | **IN-PROGRESS** | — | RD + eval | User decision U-8: VLM = Claude (claude-opus-5-5, effort low, structured output, no sampling params, cached). |
+| P.1 | Claude VLM provider | **DONE** | 3c9db4e | RD + eval + eval_report | User decision U-8: VLM = Claude (claude-opus-5-5, effort low, structured output, no sampling params, cached). |
 | I.1 | Integration: PDF/raster extract, labels, scale, `ale review` | **IN-PROGRESS (Codex)** | — | RD + eval | Assigned to an external Codex agent; PR to be reviewed by the Router. |
 | 1.3 | Vector-PDF reader (library) | **DONE** | — | RD + eval | Plan-likeness on merged walls; HABS PDFs correctly identified as scanned (→ raster path). |
 | 1.4 | Raster reader (classical CV v1, library) | **DONE** | — | RD + eval | Synthetic: wall IoU 1.00 / 0.94 noisy. Real web images: no crash, but fills/double-line walls under-segmented and doors over-counted → learned model (CubiCasa) is the v2 path. |
@@ -79,6 +79,7 @@ with ground truth. The Router will issue an annotation template before Phase 1.
 
 - 2026-11-06 — v2.0 workspace initialised (tickets 1.1, 1.2 specified).
 - 2026-11-09 — User: yes to seed-rulebook draft and Claude as VLM. Seed draft written and validated; P.1 specified and dispatched. CI: raster extra added to the install line.
+- 2026-11-09 — P.1 merged (Claude provider: structured output, effort low, server-side refusal fallback, no sampling params; 26 mocked tests, 100 % coverage; suite 1088 passed). CI now installs the `vlm` extra. Note for I.1: call `prepare_image(png)` before `label_plan` so bbox conversion and cache key use the image actually sent.
 - 2026-11-09 — CI back (repo public): macOS 3/3 green; Linux/Windows failed only on timing — Windows `time.monotonic` resolution (~16 ms) made 1e-12 budget tests never expire, and D12 (10k random lines) took 21–24 s under coverage vs a 20 s limit. Fix: `guards` default clock → `time.perf_counter`; D12 test limit 60 s (eval amended).
 - 2026-11-09 06:30 — Scheduled check: no Worker stopped by the usage limit; Q.1/1.3/1.4/2.2 already merged; Q.2 running (A.3 merged into its branch); I.1 with Codex.
 - 2026-11-09 — Repository made public by the user (Actions minutes free → CI unblocked). I.1 specified and assigned to the user's Codex agent (works on its own branch, opens a PR; Router reviews before merge).

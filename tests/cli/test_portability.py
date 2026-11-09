@@ -138,7 +138,7 @@ def test_P05_ci_matrix() -> None:
     assert "matrix.os" in job["runs-on"]
     runs = [step.get("run", "") for step in job["steps"]]
     expected = [
-        'pip install -e ".[dev,excel,cad,pdf,raster]"',
+        'pip install -e ".[dev,excel,cad,pdf,raster,vlm]"',
         "ruff check .",
         "ruff format --check .",
         "mypy",
