@@ -30,7 +30,7 @@ Maintained by the Router only. Directive: `specs/DIRECTIVE.md` (v2.2, supersedes
 | 1.2 | CAD reader (DXF; DWG via converter) | **DONE** (library) | — | RD + eval | Layers (whole-word), units, walls, rooms, labels, openings, multi-plan, DWG→DXF via ODA/accoreconsole. Follow-up 1.2c: wire `ale layers` / `ale extract --kind dxf\|dwg` to the corpus DB. Real DWGs need ODA on the user's workstation. |
 | 1.2c | CAD → corpus CLI (`ale layers`, `ale extract` dxf/dwg) | **DONE** | — | RD + eval | Empty layer map → in-memory proposal + warning; NEEDS_TOOL DWGs retried. |
 | I.2 | Claude labelling in `ale extract` | **DONE** | I.1 | RD + eval | Render plan image per kind (bbox model), prepare_image, make_provider; opt-in; mocked tests. |
-| P.2 | Import « programme physique » (Annexe format) | **IN-PROGRESS** | — | RD + eval | `ale program import`; AREP-MS mapping as default rules; synthetic fixtures only. |
+| P.2 | Import « programme physique » (Annexe format) | **DONE** | e730d6a | RD + eval | `ale program import`; AREP-MS mapping as default rules; synthetic fixtures only. |
 | Q.4 | Max depth from façade (7.20 m) | READY (after Q.3) | Q.3 | RD + eval | Contracts 1.4.0 `facade.max_depth_m`; `FACADE_DEPTH` hard; depth beats aspect for big rooms. |
 | X.1 | `ale extract --force` + exact raster extent | READY (Codex) | I.2 | RD + eval | I.2 follow-ups; independent of P.2/Q.3/Q.4 files. |
 | P.1 | Claude VLM provider | **DONE** | 3c9db4e | RD + eval + eval_report | User decision U-8: VLM = Claude (claude-opus-5-5, effort low, structured output, no sampling params, cached). |
@@ -83,6 +83,7 @@ with ground truth. The Router will issue an annotation template before Phase 1.
 
 - 2026-11-06 — v2.0 workspace initialised (tickets 1.1, 1.2 specified).
 - 2026-11-09 — User: yes to seed-rulebook draft and Claude as VLM. Seed draft written and validated; P.1 specified and dispatched. CI: raster extra added to the install line.
+- 2026-11-09 — **P.2 merged**: `ale program import --annexe` reproduces the hand conversion of the real Annexe 3 exactly (2 buildings, totals OK). Cosmetic follow-up: building names keep the title remainder (« DES SERVICES DU SIEGE… »).
 - 2026-11-09 — AREP-MS track opened: P.2 (Annexe import, dispatched) and Q.4 (façade depth ≤ 7.20 m, after Q.3). Decision (Router, per project rules): for rooms too big for depth ≤ 7.20 m at aspect ≤ 2, depth is hard and aspect becomes soft.
 - 2026-11-09 — **I.2 merged**: `ale extract` sends still-untyped rooms to Claude with a rendered plan image when `[vlm] provider` is set (missing key → French warning, text-only); `--no-vlm`. Follow-ups: raster extent should be (−0.5, −0.5, W−0.5, H−0.5); consider `ale extract --force`. AREP-MS Annexe 3 converted (outside repo); gaps in `specs/design/arep_ms_gaps.md`.
 - 2026-11-09 — **I.1 merged** (PR #1, Codex, 3cdb3c0): `ale extract` for PDF/raster + scale/labels/flags for all plans, DB v2 `review_flags`, `ale review` HTML; independent review 1142 passed. No CLI stubs remain. I.2 now ready.
