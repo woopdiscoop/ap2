@@ -10,6 +10,13 @@ entries win) and returns what changed.
 CAD, vector/scanned PDF and raster units share scale, text labelling and review flags.
 A failing unit never aborts the run.
 
+VLM labelling (Ticket I.2): when ``[vlm] provider`` is set (and ``no_vlm`` is false), the
+provider is built once per run; rooms still untyped after the text stage are sent to it
+with a PNG of the plan (:func:`ale.labels.render.plan_image`, downscaled by
+:func:`~ale.labels.providers.prepare_image`). A missing API key disables the VLM for the
+run (one French warning); a provider error becomes a warning of that plan, which stays
+text-labelled. Without a provider nothing is rendered and no network call is made.
+
 Sources are read from the input folders recorded in ``corpus.sqlite``; nothing is ever
 written there (DWG conversion works on a temporary copy, output goes to ``cache/dxf``).
 """
@@ -44,12 +51,16 @@ from ale.contracts.serialization import canonical_json
 from ale.corpus.db import CorpusDbError, add_event, connect, migrate, utc_now
 from ale.join import resolve_scale, review_flags
 from ale.labels import VlmCache, label_plan
+from ale.labels.provider import VlmProvider
+from ale.labels.providers import MissingApiKeyError, make_provider, prepare_image
+from ale.labels.render import plan_image
 from ale.pdfread import read_pdf_page
 from ale.raster import rasterize_pdf_page, read_raster
 from ale.workspace import CORPUS_FILENAME, LAYER_MAP_FILENAME, Workspace, WorkspaceError
 
 __all__ = [
     "KIND_FILTERS",
+    "MISSING_KEY_WARNING",
     "NO_PLAN_REASON",
     "ExtractReport",
     "LayerRow",
@@ -63,6 +74,8 @@ __all__ = [
 log = logging.getLogger(__name__)
 
 NO_PLAN_REASON = "no plan found"
+#: Warning (French, shown once per run) when the VLM provider has no API key.
+MISSING_KEY_WARNING = "clé API absente : la VLM est désactivée"
 #: ``--kind`` value → unit kinds (``units.kind``) it selects.
 KIND_FILTERS: dict[str, tuple[str, ...]] = {
     "dwg": (SourceKind.DWG.value,),
@@ -286,6 +299,17 @@ class ExtractReport:
     proposed_layers: int | None = None
     #: (name, reason) of the units that failed or still need a tool.
     problems: list[tuple[str, str]] = field(default_factory=list)
+    #: A VLM provider was built for this run.
+    vlm_enabled: bool = False
+    #: Plans sent to the VLM provider (at least one call), answered from the cache, and
+    #: whose provider call failed.
+    vlm_plans: int = 0
+    vlm_cache_hits: int = 0
+    vlm_errors: int = 0
+    #: Provider calls made (retries on invalid JSON included).
+    vlm_calls: int = 0
+    #: Why the configured VLM is disabled for this run (French), or None.
+    vlm_warning: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -300,6 +324,12 @@ class ExtractReport:
             "files_written": self.files_written,
             "proposed_layers": self.proposed_layers,
             "problems": [list(p) for p in self.problems],
+            "vlm_enabled": self.vlm_enabled,
+            "vlm_plans": self.vlm_plans,
+            "vlm_cache_hits": self.vlm_cache_hits,
+            "vlm_errors": self.vlm_errors,
+            "vlm_calls": self.vlm_calls,
+            "vlm_warning": self.vlm_warning,
         }
 
 
@@ -395,6 +425,118 @@ def _exclude(
     report.problems.append((name, reason))
 
 
+# ---------------------------------------------------------------------- VLM labelling
+
+
+class _CountingProvider:
+    """Wraps the configured provider to count calls and failed calls."""
+
+    def __init__(self, inner: VlmProvider) -> None:
+        self.inner = inner
+        self.model_id = str(getattr(inner, "model_id", ""))
+        self.calls = 0
+        self.errors = 0
+
+    def label_image(self, image_png: bytes, prompt: str, *, temperature: float) -> str:
+        self.calls += 1
+        try:
+            return self.inner.label_image(image_png, prompt, temperature=temperature)
+        except Exception:
+            self.errors += 1
+            raise
+
+
+class _CountingCache(VlmCache):
+    """The workspace VLM cache, counting hits."""
+
+    def __init__(self, directory: Path) -> None:
+        super().__init__(directory)
+        self.hits = 0
+
+    def get(self, key: str) -> str | None:
+        raw = super().get(key)
+        if raw is not None:
+            self.hits += 1
+        return raw
+
+
+@dataclass
+class _Vlm:
+    """The provider and cache of one ``run_extract`` call."""
+
+    provider: _CountingProvider
+    cache: _CountingCache
+
+
+def _make_vlm(ws: Workspace, no_vlm: bool, report: ExtractReport) -> _Vlm | None:
+    """Build the configured provider once per run; None when the VLM is off or unusable."""
+    if no_vlm:
+        return None
+    try:
+        provider = make_provider(ws.config)
+    except MissingApiKeyError:
+        report.vlm_warning = MISSING_KEY_WARNING
+    except Exception as exc:  # unknown provider name, missing extra: run text-only
+        report.vlm_warning = f"VLM indisponible ({exc}) : la VLM est désactivée"
+    else:
+        if provider is None:
+            return None
+        report.vlm_enabled = True
+        return _Vlm(_CountingProvider(provider), _CountingCache(ws.path("cache", "vlm")))
+    log.warning("%s", report.vlm_warning, extra={"event": "corpus.extract.vlm_disabled"})
+    return None
+
+
+def _label(
+    ws: Workspace,
+    plan: PlanGeometry,
+    vlm: _Vlm | None,
+    report: ExtractReport,
+    *,
+    source: Path,
+    bitmap: Any | None,
+) -> PlanGeometry:
+    """Text labelling, then the VLM for the rooms still untyped (when a provider is set)."""
+    labelled = label_plan(
+        plan, image=None, provider=None, cache=VlmCache.for_workspace(ws), config=ws.config
+    )
+    result = labelled.plan
+    warnings = [*result.warnings, *labelled.warnings]
+    if vlm is not None and any(r.type is None for r in result.rooms):
+        try:
+            png, extent = plan_image(result, config=ws.config, source=source, bitmap=bitmap)
+            image = prepare_image(png).png
+        except Exception as exc:
+            warnings.append(f"VLM skipped: plan image not rendered ({type(exc).__name__}: {exc})")
+        else:
+            calls, errors, hits = vlm.provider.calls, vlm.provider.errors, vlm.cache.hits
+            second = label_plan(
+                result,
+                image=image,
+                provider=vlm.provider,
+                cache=vlm.cache,
+                config=ws.config,
+                extent=extent,
+            )
+            result = second.plan
+            warnings.extend(second.warnings)
+            report.vlm_calls += vlm.provider.calls - calls
+            if vlm.provider.calls > calls:
+                report.vlm_plans += 1
+            elif vlm.cache.hits > hits:
+                report.vlm_cache_hits += 1
+            if vlm.provider.errors > errors:
+                report.vlm_errors += 1
+                log.warning(
+                    "plan %s/%d/%d: VLM provider error, rooms left text-labelled",
+                    plan.source_sha256[:12],
+                    plan.page,
+                    plan.plan_index,
+                    extra={"event": "corpus.extract.vlm_error", "sha256": plan.source_sha256},
+                )
+    return result.model_copy(update={"warnings": tuple(dict.fromkeys(warnings))})
+
+
 def _extract_unit(
     ws: Workspace,
     conn: sqlite3.Connection,
@@ -402,6 +544,7 @@ def _extract_unit(
     layer_map: LayerMap,
     report: ExtractReport,
     environ: Mapping[str, str] | None,
+    vlm: _Vlm | None = None,
 ) -> None:
     source, name = _source_path(conn, unit.sha256)
     if source is None:
@@ -409,6 +552,7 @@ def _extract_unit(
     meta = _page_meta(unit)
     plans: tuple[PlanGeometry, ...]
     warnings: tuple[str, ...]
+    bitmap: Any | None = None  # the scanned page the raster reader traced
     if unit.kind in _CAD_KINDS:
         dxf, status, message = _dxf_for(ws, unit, source, environ)
         if dxf is None:
@@ -444,6 +588,7 @@ def _extract_unit(
             image = rasterize_pdf_page(
                 source, unit.page, dpi=meta.get("dpi", ws.config.extract.raster_dpi)
             )
+            bitmap = image
             raster = read_raster(
                 image,
                 source_sha256=unit.sha256,
@@ -465,16 +610,7 @@ def _extract_unit(
     processed = []
     for plan in plans:
         scaled = resolve_scale(plan, meta=meta, config=ws.config)
-        labelled = label_plan(
-            scaled, image=None, provider=None, cache=VlmCache.for_workspace(ws), config=ws.config
-        )
-        processed.append(
-            labelled.plan.model_copy(
-                update={
-                    "warnings": tuple(dict.fromkeys((*labelled.plan.warnings, *labelled.warnings)))
-                }
-            )
-        )
+        processed.append(_label(ws, scaled, vlm, report, source=source, bitmap=bitmap))
     conn.execute("DELETE FROM review_flags WHERE sha256 = ? AND page = ?", (unit.sha256, unit.page))
 
     written = 0
@@ -555,18 +691,21 @@ def run_extract(
     only_new: bool = False,
     kind: str | None = None,
     environ: Mapping[str, str] | None = None,
+    no_vlm: bool = False,
 ) -> ExtractReport:
     """Extract the selected units (``kind``: a key of :data:`KIND_FILTERS` or None).
 
     Selection: status NEW (``only_new``) or NEW, FAILED and DWG units in NEEDS_TOOL
     (default, retry). An empty ``layer_map.yaml`` is replaced, for this run only, by a
-    proposal over the selected units' layers. Raises
+    proposal over the selected units' layers. ``no_vlm`` skips the configured VLM
+    provider (text labelling only). Raises
     :class:`WorkspaceError` only when the corpus or ``layer_map.yaml`` cannot be used.
     """
     if kind is not None and kind not in KIND_FILTERS:
         raise ValueError(f"unknown kind {kind!r}")
     report = ExtractReport()
     layer_map = _layer_map(ws)
+    vlm = _make_vlm(ws, no_vlm, report)
     with closing(_open_corpus(ws)) as conn:
         units = _select(conn, only_new, kind)
         report.selected = len(units)
@@ -580,7 +719,7 @@ def run_extract(
             )
         for unit in units:
             try:
-                _extract_unit(ws, conn, unit, layer_map, report, environ)
+                _extract_unit(ws, conn, unit, layer_map, report, environ, vlm)
             except Exception as exc:  # one unit must never abort the run
                 name = _source_path(conn, unit.sha256)[1]
                 _fail(conn, unit, name, f"{type(exc).__name__}: {exc}", report)
