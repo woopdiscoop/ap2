@@ -22,10 +22,10 @@ Maintained by the Router only. Directive: `specs/DIRECTIVE.md` (v2.2, supersedes
 | A.1 | Contract amendment: CorridorPlan + footprint decomposition | **DONE** | — | RD + eval | Contracts 1.0.0 → 1.1.0; adds `corridor_plan.py`, `footprint.py`; regenerates lock. |
 | A.2 | Contract amendment: bands | **DONE** | — | RD + eval | Contracts 1.2.0 (CorridorPlan /2). |
 | Q.1 | Realisation never emits rule-breaking rooms + depth-aware seeding | **DONE** | — | RD + eval | 0 area/aspect/min-width breaks; hard after SA (15 s): P8 0, P25 6, P60 ≈ 19. |
-| A.3 | Contract: inner connector | **ACCEPTED (held)** | — | RD + eval | Contracts 1.3.0, backward compatible; merged together with Q.2. |
+| A.3 | Contract: inner connector | **DONE** | 8fc97b5 | RD + eval | Contracts 1.3.0, backward compatible; merged together with Q.2. |
 | Q.2a | Façade capacity in feasibility | **DONE** | — | RD + eval | usable façade: site_rect 43.2 m, site_L 90.0 m; P60 demand 117.9 m → W_FACADE_TIGHT. |
-| Q.2 | Façade-aware layouts (+ A.3 merge) | **IN-PROGRESS** | — (Q.1, A.3 done) | RD + eval | Inner connector in geometry/seeding/moves; façade-pull move; fixes A.3 mypy errors. |
-| Q.3 | Cache into geometry + reliability | BLOCKED | Q.2 | — | + restore strict P25 gate in 3.4 O03 (weakened in Q.1 to 'start ≤ 8'); find the flaky full-suite test (1 failure in 1 of 2 full runs); P8 ≤ 1 for all seeds; seed/anneal budget split in generate. |
+| Q.2 | Façade-aware layouts (+ A.3 merge) | **DONE (partial)** | 8fc97b5 | RD + eval | Inner connector in geometry/seeding/moves; façade-pull move; fixes A.3 mypy errors. |
+| Q.3 | Façade-aware depths + deterministic gates | **IN-PROGRESS** | — (Q.2 done) | RD + eval | P60 NO_FACADE ≤ 6 via façade-aware depth key; iteration-bound quality gates (O03 strict restored, G805 coverage xfail removed); seed/anneal budget split; fastreal coverage; P8 ≤ 1 for seeds 1–5. |
 | 1.1 | Corpus ingestion & classification | **DONE** | — | RD + eval | Real corpus: 439 files → 1734 units (DWG 17 NEEDS_TOOL, PDF_VECTOR 879, PDF_SCANNED 436, RASTER 402), 0 failed, idempotent. |
 | 1.2 | CAD reader (DXF; DWG via converter) | **DONE** (library) | — | RD + eval | Layers (whole-word), units, walls, rooms, labels, openings, multi-plan, DWG→DXF via ODA/accoreconsole. Follow-up 1.2c: wire `ale layers` / `ale extract --kind dxf\|dwg` to the corpus DB. Real DWGs need ODA on the user's workstation. |
 | 1.2c | CAD → corpus CLI (`ale layers`, `ale extract` dxf/dwg) | **DONE** | — | RD + eval | Empty layer map → in-memory proposal + warning; NEEDS_TOOL DWGs retried. |
@@ -79,6 +79,7 @@ with ground truth. The Router will issue an annotation template before Phase 1.
 
 - 2026-11-06 — v2.0 workspace initialised (tickets 1.1, 1.2 specified).
 - 2026-11-09 — User: yes to seed-rulebook draft and Claude as VLM. Seed draft written and validated; P.1 specified and dispatched. CI: raster extra added to the install line.
+- 2026-11-09 — A.3 + Q.2 merged (8fc97b5): contracts 1.3.0 (inner connector); P60 hard 24 → 17–18 (NO_FACADE 15 → 10), P25 7 → 6, P8 0; annealer early-stop bug fixed (converged counter started at 0). G804 (NO_FACADE ≤ 6) missed — Worker analysis: realiser's exact-area depths waste frontage; G805 is wall-clock dependent (passed alone, 7 > 6 in a loaded full run; xfailed under coverage). Both routed to Q.3 (specified, dispatched). Spec slip: G801 literal footprint miscounted (same as N01).
 - 2026-11-09 — P.1 merged (Claude provider: structured output, effort low, server-side refusal fallback, no sampling params; 26 mocked tests, 100 % coverage; suite 1088 passed). CI now installs the `vlm` extra. Note for I.1: call `prepare_image(png)` before `label_plan` so bbox conversion and cache key use the image actually sent.
 - 2026-11-09 — CI back (repo public): macOS 3/3 green; Linux/Windows failed only on timing — Windows `time.monotonic` resolution (~16 ms) made 1e-12 budget tests never expire, and D12 (10k random lines) took 21–24 s under coverage vs a 20 s limit. Fix: `guards` default clock → `time.perf_counter`; D12 test limit 60 s (eval amended).
 - 2026-11-09 06:30 — Scheduled check: no Worker stopped by the usage limit; Q.1/1.3/1.4/2.2 already merged; Q.2 running (A.3 merged into its branch); I.1 with Codex.
