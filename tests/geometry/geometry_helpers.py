@@ -159,3 +159,19 @@ def random_plan(prepared: PreparedInput, rng: random.Random) -> CorridorPlan:
         target.append(fb(left, right) if left or right else rb(ids[i - 1]))
     bands = [band(blocks[2 * k], blocks[2 * k + 1]) for k in range(n)]
     return CorridorPlan(pieces=(bands_piece(bands, rng.choice(["start", "end"])),))
+
+
+def p25_compliant_plan() -> CorridorPlan:
+    """A 2-band plan of program_25 on site_rect whose realisation has compliant rooms
+    (Ticket Q.1): B02 (60 m², wmin 48) with the hall and meeting rooms in a deep block,
+    offices at depth ~40, the small rooms at ~28."""
+    offices = [f"B01#{i:02d}" for i in range(1, 11)]
+    b0 = band(
+        a=[rb(x) for x in ("B02", "H01", "M01#1", "M01#2")],
+        b=[rb(x) for x in ("V01", *offices[:6])],
+    )
+    b1 = band(
+        a=[rb(x) for x in (*offices[6:], "S01#1", "S02")],
+        b=[rb(x) for x in ("H02", "S01#2", "K01", "T02", "T01#1", "T01#2", "T03", "V02")],
+    )
+    return CorridorPlan(pieces=(bands_piece([b0, b1], "start"),))

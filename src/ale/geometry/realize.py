@@ -24,7 +24,7 @@ from ale.contracts.config import AleConfig
 from ale.contracts.corridor_plan import BandPlan, CorridorPlan, FingerBay, RoomBay
 from ale.contracts.footprint import FootprintPieces, Piece, decompose_footprint
 from ale.contracts.models import Layout, LayoutMetrics, PlacedRoom, RoomSpec, Rulebook
-from ale.geometry.blocks import BlockOut, Consts, Item, Solver
+from ale.geometry.blocks import BlockOut, Consts, Item, RoomReq, Solver
 from ale.geometry.evaluate import evaluate
 from ale.geometry.junction import (
     across_origin,
@@ -38,7 +38,7 @@ from ale.geometry.junction import (
 from ale.guards import bounded
 from ale.program.models import PreparedInput
 
-__all__ = ["Failure", "Realization", "realize"]
+__all__ = ["Failure", "Realization", "realize", "shared_solver"]
 
 _CONFIG = ConfigDict(extra="forbid", frozen=True)
 _DEPTH_BUDGET_S = 5.0
@@ -144,6 +144,22 @@ class _PieceOut:
         return [po for bo in self.bands for po in bo.link.pieces]
 
 
+_SOLVERS: dict[tuple[Consts, tuple[tuple[str, RoomReq], ...]], Solver] = {}
+_MAX_SOLVERS = 8
+
+
+def shared_solver(consts: Consts, reqs: dict[str, RoomReq]) -> Solver:
+    """A :class:`Solver` reused across calls with the same constants and rooms (its memos
+    are pure functions of them, so results are unchanged; Q.1 seeding speed)."""
+    key = (consts, tuple(sorted(reqs.items())))
+    hit = _SOLVERS.get(key)
+    if hit is None:
+        if len(_SOLVERS) >= _MAX_SOLVERS:
+            _SOLVERS.clear()
+        hit = _SOLVERS[key] = Solver(consts, reqs)
+    return hit
+
+
 class _Realizer:
     def __init__(
         self, prepared: PreparedInput, plan: CorridorPlan, fp: FootprintPieces, consts: Consts
@@ -153,7 +169,7 @@ class _Realizer:
         self.k = consts
         self.specs: dict[str, RoomSpec] = dict(prepared.instances)
         reqs = {iid: consts.req(spec) for iid, spec in self.specs.items()}
-        self.solver = Solver(consts, reqs)
+        self.solver = shared_solver(consts, reqs)
         self.timed_out = False
         self._blocks: dict[tuple[int, int, str, int], BlockOut] = {}
         self._fixed: dict[tuple[int, int], _PieceOut] = {}
@@ -224,7 +240,9 @@ class _Realizer:
         candidate is skipped by ``link``."""
         plan = self.plan.pieces[p].bands[k]
         best: _BandOut | None = None
+        best_da: int | None = None
         best_key: tuple[int, Fraction, int, int] | None = None
+        s = self.k.s
         with bounded(
             max_iter=depth + 1,
             time_budget_s=_DEPTH_BUDGET_S,
@@ -235,23 +253,28 @@ class _Realizer:
                 if not budget.tick():
                     self.timed_out = True
                     break
-                cand = self.band_at(p, k, depth, d_a)
                 if link is None:
-                    a, b = cand.a, cand.b
+                    d_b = depth - s - d_a
+                    a, b = self.block(p, k, "A", d_a), self.block(p, k, "B", d_b)
                     key = (
                         len(a.failures) + len(b.failures),
-                        a.area_dev + b.area_dev + a.strip_cells + b.strip_cells,
-                        abs(d_a - cand.b_depth),
+                        a.dev() + b.dev(),
+                        abs(d_a - d_b),
                         d_a,
                     )
-                else:
-                    got = link(v0 + d_a, cand.a, cand.b)
-                    if got is None:
-                        continue
-                    cand.link = got
-                    key = cand.key()
+                    if best_key is None or key < best_key:
+                        best_da, best_key = d_a, key
+                    continue
+                cand = self.band_at(p, k, depth, d_a)
+                got = link(v0 + d_a, cand.a, cand.b)
+                if got is None:
+                    continue
+                cand.link = got
+                key = cand.key()
                 if best_key is None or key < best_key:
                     best, best_key = cand, key
+        if best_da is not None:
+            return self.band_at(p, k, depth, best_da)
         return best
 
     def fixed_piece(self, p: int, d_a: int) -> _PieceOut:

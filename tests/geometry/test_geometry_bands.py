@@ -117,9 +117,11 @@ def test_N01_end_connector_and_literal_reading() -> None:
     assert rect_tuple(real.layout.circulation[0]) == (104, 0, 12, 104)
     assert {rect_tuple(p) for p in real.layout.rooms} == {(0, 12, 30, 40), (0, 64, 30, 40)}
     literal, prepared = _n01(60, 116)
-    assert literal.layout is not None
-    assert check_layout(literal.layout, prepared, CONFIG) == ()
-    assert rect_tuple(literal.layout.circulation[0]) == (0, 0, 60, 12)
+    # Q.1: P = 60 leaves 36 modules for two 1-room blocks; no split lets a 12 m² room bay
+    # comply (18 → aspect 3.7), so the literal reading no longer realises (it used to, with
+    # rule-breaking rooms).
+    assert literal.layout is None
+    assert {f.code for f in literal.failures} <= {"ROOM_INFEASIBLE", "BLOCK_TOO_SHALLOW"}
 
 
 # ----------------------------------------------------------------------------- N02-N04
@@ -337,7 +339,9 @@ J2_NARROW_SECONDARY = [(0, 0), (450, 0), (450, 100), (300, 100), (300, 160), (0,
 
 
 def test_j2_secondary_spine_off_primary_connector() -> None:
-    rooms = [room("p0", 12.0), room("p1", 12.0), room("s", 12.0)]
+    # Q.1: "s" fills a 148-deep block alone, so it must be large enough to comply there
+    # (a 12 m² room at depth 148 is now ROOM_INFEASIBLE).
+    rooms = [room("p0", 12.0), room("p1", 12.0), room("s", 120.0)]
     prepared = prepared_poly(J2_WIDE_SECONDARY, rooms)
     fp = decompose_footprint(prepared.footprint.polygon)
     assert fp.junction == "J2"
@@ -355,7 +359,8 @@ def test_j2_secondary_spine_off_primary_connector() -> None:
 
 
 def test_j2_primary_spine_off_secondary_connector() -> None:
-    rooms = [room("p", 12.0), room("s0", 12.0), room("s1", 12.0)]
+    # Q.1: "p" fills a 148-deep block alone (see above).
+    rooms = [room("p", 120.0), room("s0", 12.0), room("s1", 12.0)]
     prepared = prepared_poly(J2_NARROW_SECONDARY, rooms)
     fp = decompose_footprint(prepared.footprint.polygon)
     assert fp.junction == "J2"
@@ -388,7 +393,8 @@ def test_greedy_j1_multiband() -> None:
     if real.layout is not None:
         assert check_layout(real.layout, prepared, CONFIG) == ()
     else:
-        assert {f.code for f in real.failures} <= {"PLAN_OVERFLOW", "JUNCTION_MISALIGNED"}
+        allowed = {"PLAN_OVERFLOW", "JUNCTION_MISALIGNED", "ROOM_INFEASIBLE", "STACK_INFEASIBLE"}
+        assert {f.code for f in real.failures} <= allowed  # Q.1 codes added
 
 
 def test_cut_side_and_band_count() -> None:

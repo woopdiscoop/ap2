@@ -4,6 +4,10 @@ Everything here works in integer modules in a block-local frame: ``u`` along the
 (from the piece's min corner) and ``t`` = distance from the spine (``0`` at the spine,
 ``D`` at the block's outer edge). :mod:`ale.geometry.realize` maps ``t`` to the piece's
 ``v`` coordinate. Areas are module² cells; targets are exact ``Fraction`` cells.
+
+Ticket Q.1: every room placed here satisfies the area rule, ``aspect <= amax`` and its
+``wmin``. A room bay or stack that cannot is a block failure (``ROOM_INFEASIBLE`` /
+``STACK_INFEASIBLE``) instead of the former rule-breaking fallbacks.
 """
 
 from __future__ import annotations
@@ -116,6 +120,13 @@ class RoomReq:
     lo: int
     hi: int
     wmin: int
+    _hash: int = field(init=False, repr=False, compare=False, default=0)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "_hash", hash((self.target, self.lo, self.hi, self.wmin)))
+
+    def __hash__(self) -> int:  # cached: requirements key every solver memo
+        return self._hash
 
     def ceil_div(self, side: int) -> int:
         """``ceil(target / side)`` in integer arithmetic."""
@@ -154,6 +165,13 @@ class BlockOut:
     strip_cells: int = 0  # stack-end strips
     end_cells: int = 0  # end strip
     junction_u: int | None = None
+    _dev: Fraction | None = field(default=None, repr=False, compare=False)
+
+    def dev(self) -> Fraction:
+        """``area_dev + strip_cells`` (depth-search term), computed once the block is final."""
+        if self._dev is None:
+            self._dev = self.area_dev + self.strip_cells
+        return self._dev
 
 
 class Solver:
@@ -162,43 +180,58 @@ class Solver:
     def __init__(self, consts: Consts, reqs: Mapping[str, RoomReq]) -> None:
         self.k = consts
         self.reqs = reqs
-        self._bay_cache: dict[tuple[RoomReq, int], int] = {}
+        self._bay_cache: dict[tuple[RoomReq, int], int | None] = {}
         self._stack_cache: dict[tuple[tuple[RoomReq, ...], int], StackSol | None] = {}
 
     # ------------------------------------------------------------------ 5.2 room bay
-    def room_bay_width(self, req: RoomReq, depth: int) -> int:
+    def room_bay_width(self, req: RoomReq, depth: int) -> int | None:
+        """Width of a room bay at ``depth`` satisfying the area rule, ``aspect <= amax`` and
+        ``wmin`` (RD 3.3 §5.2), or ``None`` when no width does (Q.1: ``ROOM_INFEASIBLE``)."""
         key = (req, depth)
-        hit = self._bay_cache.get(key)
-        if hit is None:
-            hit = self._room_bay_width(req, depth)
-            self._bay_cache[key] = hit
-        return hit
+        if key not in self._bay_cache:
+            self._bay_cache[key] = self._room_bay_width(req, depth)
+        return self._bay_cache[key]
 
-    def _room_bay_width(self, req: RoomReq, depth: int) -> int:
-        amax = self.k.amax
-        w_up = max(req.wmin, math.ceil(req.target / depth))
-        for w in guarded_range(w_up, req.hi // depth + 1, label="room-bay-width"):
-            if aspect_ok(w, depth, amax):
-                return w
+    def _room_bay_width(self, req: RoomReq, depth: int) -> int | None:
+        if depth < req.wmin:
+            return None
+        an, ad = self.k.amax.numerator, self.k.amax.denominator
+        # aspect_ok(w, D) <=> ceil(D / amax) <= w <= floor(D · amax) (amax >= 1): the 3.3
+        # up / down scans reduce to the first / last width of that range in their window.
+        a_lo, a_hi = _ceil_div(depth * ad, an), (depth * an) // ad
+        w_up = max(req.wmin, req.ceil_div(depth))
+        w = max(w_up, a_lo)
+        if w <= min(req.hi // depth, a_hi):
+            return w
         w_lo = max(req.wmin, _ceil_div(req.lo, depth))
-        for w in guarded_range(w_up - 1, w_lo - 1, step=-1, label="room-bay-width-down"):
-            if aspect_ok(w, depth, amax):  # w < ceil(T / D) here, so w·D < T
-                return w
-        return w_up
+        w = min(w_up - 1, a_hi)  # w < ceil(T / D) here, so lo <= w·D < T
+        if w >= max(w_lo, a_lo):
+            return w
+        return None
 
     # ------------------------------------------------------------------ 5.3 stack
     def stack(self, reqs: tuple[RoomReq, ...], depth: int) -> StackSol | None:
-        """Solved stack, or ``None`` when ``depth < k·c`` (rooms cannot reach the finger)."""
+        """Solved stack whose every room satisfies the area rule, ``aspect <= amax`` and its
+        ``wmin``, or ``None`` when no stack width in ``[wmin_stack, 2·D]`` allows it
+        (Q.1: ``STACK_INFEASIBLE``)."""
         key = (reqs, depth)
         if key not in self._stack_cache:
             self._stack_cache[key] = self._stack(reqs, depth)
         return self._stack_cache[key]
 
     def _stack(self, reqs: tuple[RoomReq, ...], depth: int) -> StackSol | None:
-        c = self.k.c
+        if depth <= 0:
+            return None
+        wmin_s = max(r.wmin for r in reqs)
+        exact = self._stack_exact(reqs, depth, wmin_s)
+        if exact is not None:
+            return exact
+        return self._stack_under(reqs, depth, wmin_s)
+
+    def _stack_exact(self, reqs: tuple[RoomReq, ...], depth: int, wmin_s: int) -> StackSol | None:
+        """RD 3.3 §5.3: every room reaches its target (``w·h_i >= T_i``)."""
         an, ad = self.k.amax.numerator, self.k.amax.denominator
         k = len(reqs)
-        wmin_s = max(r.wmin for r in reqs)
         total = sum(r.target for r in reqs)
         # The first criterion Σ(w·h_i - T_i) + w·R_rest equals w·D - ΣT_i (heights plus
         # rest fill the depth), strictly increasing in w: the first accepted w is optimal.
@@ -210,7 +243,8 @@ class Solver:
                 break  # every accepted h_i >= need: impossible for this and wider w
             heights: list[int] = []
             for r in reqs:
-                h = max(c, r.ceil_div(w))
+                # h >= wmin_i: w >= wmin_stack >= wmin_i already, so min(w, h) >= wmin_i.
+                h = max(r.wmin, r.ceil_div(w))
                 if h < need:  # too flat: raise while w·(h+1) <= hi
                     h = max(h, min(need, r.hi // w))
                 if h < need or h * ad > an * w or w * h > r.hi:
@@ -226,21 +260,47 @@ class Solver:
                     heights[i] += add
                     rest -= add
                 return StackSol(w=w, heights=tuple(heights), rest=rest)
-        return self._fallback_stack(reqs, depth, wmin_s)
+        return None
 
-    def _fallback_stack(
-        self, reqs: tuple[RoomReq, ...], depth: int, wmin_s: int
-    ) -> StackSol | None:
-        """No candidate: width ``wmin_stack``, heights ≥ c proportional to the targets."""
-        c = self.k.c
-        n = len(reqs)
-        spare = depth - n * c
-        if spare < 0:
-            return None
-        total = sum(r.target for r in reqs)
-        heights = [c + math.floor(spare * r.target / total) for r in reqs]
-        heights[-1] += depth - sum(heights)
-        return StackSol(w=wmin_s, heights=tuple(heights), rest=0)
+    def _stack_under(self, reqs: tuple[RoomReq, ...], depth: int, wmin_s: int) -> StackSol | None:
+        """No width lets every room reach its target: allow ``lo_i <= w·h_i < T_i``.
+
+        For each width, heights start at their compliant minimum and are raised from the
+        outermost room inward, first towards ``ceil(T_i / w)``, then up to their compliant
+        maximum; the rest is the stack-end strip. Keeps the width minimising
+        ``(Σ |w·h_i - T_i| + w·R_rest, w)``.
+        """
+        an, ad = self.k.amax.numerator, self.k.amax.denominator
+        k = len(reqs)
+        best: StackSol | None = None
+        best_key: tuple[Fraction, int] | None = None
+        start = max(wmin_s, _ceil_div(sum(r.lo for r in reqs), depth))
+        for w in guarded_range(start, 2 * depth + 1, label="stack-width-under"):
+            need = -((-w * ad) // an)
+            if k * need > depth:
+                break  # need grows with w
+            cap = (w * an) // ad
+            lows = [max(r.wmin, need, _ceil_div(r.lo, w)) for r in reqs]
+            highs = [min(r.hi // w, cap) for r in reqs]
+            if sum(lows) > depth or any(lo > hi for lo, hi in zip(lows, highs, strict=True)):
+                continue
+            prefs = [
+                min(max(r.ceil_div(w), lo), hi) for r, lo, hi in zip(reqs, lows, highs, strict=True)
+            ]
+            heights = list(lows)
+            rest = depth - sum(heights)
+            for limits in (prefs, highs):
+                for i in range(k - 1, -1, -1):
+                    add = min(rest, limits[i] - heights[i])
+                    heights[i] += add
+                    rest -= add
+            dev = sum(
+                (abs(w * h - r.target) for r, h in zip(reqs, heights, strict=True)), Fraction(0)
+            )
+            key = (dev + w * rest, w)
+            if best_key is None or key < best_key:
+                best, best_key = StackSol(w=w, heights=tuple(heights), rest=rest), key
+        return best
 
     # ------------------------------------------------------------------ 5.4 block
     def block(
@@ -264,7 +324,15 @@ class Solver:
         for b, bay in enumerate(bays):
             if isinstance(bay, RoomBay):
                 req = self.reqs[bay.room]
-                w = self.room_bay_width(req, depth)
+                found = self.room_bay_width(req, depth)
+                if found is None:
+                    out.failures.append(
+                        (
+                            "ROOM_INFEASIBLE",
+                            f"{bay.room} in {where}: no compliant width at depth {depth}",
+                        )
+                    )
+                w = max(req.wmin, req.ceil_div(depth)) if found is None else found
                 self._room(out, bay.room, req, u, 0, w, depth)
                 u += w
                 continue
@@ -304,9 +372,8 @@ class Solver:
         if sol is None:
             out.failures.append(
                 (
-                    "STACK_TOO_SHALLOW",
-                    f"{where}: {len(rooms)} room(s) need depth >= {len(rooms) * self.k.c}, "
-                    f"got {depth}",
+                    "STACK_INFEASIBLE",
+                    f"{where}: no compliant stack width for {', '.join(rooms)} at depth {depth}",
                 )
             )
             return max(r.wmin for r in reqs)

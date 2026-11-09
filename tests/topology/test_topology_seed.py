@@ -9,7 +9,7 @@ import textwrap
 from pathlib import Path
 
 import pytest
-from random_plans import random_plan
+from random_plans import permuted_plan, random_plan
 
 from ale.config import AleConfig
 from ale.contracts.models import Rulebook
@@ -123,12 +123,16 @@ def test_T09_required_adjacency(prep_25: PreparedInput, rulebook: Rulebook) -> N
     seeded = seed_plan(prep_25, rulebook, CONFIG, seed=1)
     assert seeded.realization.layout is not None
     ours = seeded.realization.layout.metrics.cost_breakdown["required_adjacency"]
+    # Q.1: random plans almost never realise once every room must comply (geometry R02),
+    # so the 50 random valid plans also include the seeded plan with its rooms shuffled
+    # within size classes (always realisable); random plans that realise still count.
     rng = random.Random(20261108)
     costs: list[float] = []
     tries = 0
     while len(costs) < 50 and tries < 3000:
         tries += 1
-        real = realize(prep_25, random_plan(prep_25, rng), rulebook, CONFIG)
+        cand = random_plan(prep_25, rng) if tries % 2 else permuted_plan(seeded.plan, prep_25, rng)
+        real = realize(prep_25, cand, rulebook, CONFIG)
         if real.layout is not None:
             costs.append(real.layout.metrics.cost_breakdown["required_adjacency"])
     assert len(costs) == 50

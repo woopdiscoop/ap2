@@ -42,3 +42,41 @@ def random_plan(prepared: PreparedInput, rng: random.Random, max_bands: int = 3)
     blocks = [BlockPlan(bays=tuple(bays[edges[j] : edges[j + 1]])) for j in range(n_blocks)]
     bands = tuple(BandPlan(block_a=blocks[2 * j], block_b=blocks[2 * j + 1]) for j in range(n))
     return CorridorPlan(pieces=(PiecePlan(bands=bands, connector="none" if n == 1 else "start"),))
+
+
+def permuted_plan(plan: CorridorPlan, prepared: PreparedInput, rng: random.Random) -> CorridorPlan:
+    """``plan`` with its rooms shuffled within classes of identical size rules (target area,
+    minimum width): every room keeps a compliant shape, so the plan stays realisable
+    (Ticket Q.1: random plans almost never realise once rooms must comply)."""
+    classes: dict[tuple[float, float | None], list[str]] = {}
+    for iid, spec in prepared.instances:
+        classes.setdefault((spec.target_area_m2, spec.min_width_m), []).append(iid)
+    mapping: dict[str, str] = {}
+    for ids in classes.values():
+        shuffled = list(ids)
+        rng.shuffle(shuffled)
+        mapping.update(zip(ids, shuffled, strict=True))
+
+    def bay(b: Bay) -> Bay:
+        if isinstance(b, RoomBay):
+            return RoomBay(room=mapping[b.room])
+        return FingerBay(
+            left=tuple(mapping[r] for r in b.left),
+            right=tuple(mapping[r] for r in b.right),
+            junction=b.junction,
+        )
+
+    pieces = tuple(
+        PiecePlan(
+            bands=tuple(
+                BandPlan(
+                    block_a=BlockPlan(bays=tuple(bay(b) for b in band.block_a.bays)),
+                    block_b=BlockPlan(bays=tuple(bay(b) for b in band.block_b.bays)),
+                )
+                for band in piece.bands
+            ),
+            connector=piece.connector,
+        )
+        for piece in plan.pieces
+    )
+    return CorridorPlan(pieces=pieces)

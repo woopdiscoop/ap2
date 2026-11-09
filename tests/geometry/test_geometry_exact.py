@@ -93,15 +93,15 @@ def test_E05_room_bay_rules() -> None:
     big, small = room("a", 12.0), room("b", 6.0)
     solver = Solver(k, {"a": k.req(big), "b": k.req(small)})
     assert solver.room_bay_width(k.req(big), 40) == 30
-    assert solver.room_bay_width(k.req(small), 40) == 15
+    # Q.1 (Q102): a 6 m² room cannot be compliant at depth 40 (w = 15 → aspect 2.67;
+    # w <= 18 by the area rule; w = 14 is under the area rule) → no width.
+    assert solver.room_bay_width(k.req(small), 40) is None
     prepared = prepared_rect(60, 52, [room("r1", 6.0)])
     real = realize(prepared, one_piece(b=[rb("r1")]), RULEBOOK, CONFIG)
-    layout = real.layout
-    assert layout is not None
-    assert rect_tuple(layout.rooms[0]) == (0, 12, 15, 40)
-    codes = [(v.code, v.instance_ids) for v in layout.metrics.violations]
-    assert ("ASPECT", ("r1",)) in codes
-    assert check_layout(layout, prepared, CONFIG) == ()
+    assert real.layout is None
+    assert [(f.code, f.detail) for f in real.failures] == [
+        ("ROOM_INFEASIBLE", "r1 in piece 0 band 0 block B: no compliant width at depth 40")
+    ]
 
 
 def test_E06_plan_invalid() -> None:

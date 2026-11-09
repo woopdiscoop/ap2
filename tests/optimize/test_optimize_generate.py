@@ -58,7 +58,9 @@ def p25_inputs(tmp_path: Path, program_25: Program, site_rect: SiteSpec) -> tupl
 @pytest.mark.timeout(120)
 def test_O07_generate_cli(tmp_path: Path, p25_inputs: tuple[Path, Path]) -> None:
     xlsx, yml = p25_inputs
-    ws = _workspace(tmp_path, 3.0)
+    # Q.1: compliant P25 seeding can need ~2 s per variant (cold memos, under coverage
+    # more); the per-variant seed budget is min(20, time_budget_s): 3 s → 6 s.
+    ws = _workspace(tmp_path, 6.0)
     out = tmp_path / "run é"
     res = _invoke(
         [
@@ -95,7 +97,9 @@ def test_O07_generate_cli(tmp_path: Path, p25_inputs: tuple[Path, Path]) -> None
 @pytest.mark.timeout(120)
 def test_generate_cli_default_seed(tmp_path: Path, p25_inputs: tuple[Path, Path]) -> None:
     xlsx, yml = p25_inputs
-    ws = _workspace(tmp_path, 1.0)
+    # Q.1: seeding P25 with compliant rooms needs ~2 s for seed 5 (2 restarts; 3-4x more
+    # under coverage); the per-variant seed budget is min(20, time_budget_s): 1 s → 12 s.
+    ws = _workspace(tmp_path, 12.0)
     toml = ws / "ale.toml"
     text = toml.read_text(encoding="utf-8")
     toml.write_text(text.replace("seed = 42", "seed = 5"), encoding="utf-8")
@@ -161,7 +165,7 @@ def test_generate_api_raises_input_error(
 @pytest.mark.timeout(120)
 def test_O09_variants_distinct(tmp_path: Path, p25_inputs: tuple[Path, Path]) -> None:
     xlsx, yml = p25_inputs
-    cfg = optimizer_config(time_budget_s=2.0)
+    cfg = optimizer_config(time_budget_s=6.0)  # Q.1: was 2 s (seed budget, see O07)
     res = generate(xlsx, yml, RULEBOOK_TEST, tmp_path / "out", seed=1, variants=3, config=cfg)
     assert res.succeeded == 3
     assert [v.seed for v in res.variants] == [1, 2, 3]

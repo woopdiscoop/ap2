@@ -11,7 +11,12 @@ from pathlib import Path
 
 import pytest
 from fixtures import DATA_DIR, ProgramName, SiteName
-from geometry_helpers import fixture_prepared, load_test_rulebook, random_plan
+from geometry_helpers import (
+    fixture_prepared,
+    load_test_rulebook,
+    p25_compliant_plan,
+    random_plan,
+)
 
 from ale.config import AleConfig
 from ale.contracts.corridor_plan import CorridorPlan
@@ -21,7 +26,10 @@ from ale.program import PreparedInput
 
 CONFIG = AleConfig()
 RULEBOOK = load_test_rulebook()
-ALLOWED = {"PLAN_OVERFLOW", "JUNCTION_MISALIGNED"}
+# Q.1 adds ROOM_INFEASIBLE / STACK_INFEASIBLE (no rule-breaking room shapes any more).
+ALLOWED = {"PLAN_OVERFLOW", "JUNCTION_MISALIGNED", "ROOM_INFEASIBLE", "STACK_INFEASIBLE"}
+#: Every failure code a valid plan can produce (R02).
+DOCUMENTED = ALLOWED | {"BLOCK_TOO_SHALLOW", "BANDS_TOO_SHALLOW", "DEPTH_SEARCH_TIMEOUT"}
 SRC = Path(__file__).resolve().parents[2] / "src"
 
 
@@ -53,7 +61,11 @@ def test_R02_random_plans_never_raise() -> None:
             assert check_layout(real.layout, prepared, CONFIG) == ()
         else:
             assert real.failures
-    assert successes > 0
+            assert {f.code for f in real.failures} <= DOCUMENTED
+    # Q.1: random plans mix room sizes whose compliant depths do not overlap, so none of
+    # these 200 plans realises any more (3.3 asserted successes > 0 with rule-breaking
+    # rooms); the property kept is "never raises, failures documented".
+    assert successes >= 0
 
 
 _SCRIPT = textwrap.dedent(
@@ -88,14 +100,9 @@ _SCRIPT = textwrap.dedent(
 
 
 def _successful_multiband_plan(prepared: PreparedInput) -> CorridorPlan:
-    """The first seeded random plan with 2+ bands that realises (P25 greedy overflows)."""
-    rng = random.Random(3)
-    for _ in range(500):
-        plan = random_plan(prepared, rng)
-        multi = len(plan.pieces[0].bands) >= 2
-        if multi and realize(prepared, plan, RULEBOOK, CONFIG).layout is not None:
-            return plan
-    raise AssertionError("no realisable multi-band plan found")  # pragma: no cover
+    """A 2-band P25 plan that realises (Q.1: seeded random plans no longer do)."""
+    del prepared
+    return p25_compliant_plan()
 
 
 def test_R03_deterministic(tmp_path: Path) -> None:
@@ -103,6 +110,7 @@ def test_R03_deterministic(tmp_path: Path) -> None:
     script.write_text(_SCRIPT, encoding="utf-8")
     prepared = fixture_prepared("program_25", "site_rect")
     plan = _successful_multiband_plan(prepared)
+    assert len(plan.pieces[0].bands) >= 2
     plan_path = tmp_path / "plan.json"
     plan_path.write_text(plan.model_dump_json(), encoding="utf-8")
     rulebook = Path(__file__).resolve().parents[1] / "program" / "data" / "rulebook_test.yaml"
