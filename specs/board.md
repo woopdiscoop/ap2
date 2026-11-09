@@ -25,13 +25,13 @@ Maintained by the Router only. Directive: `specs/DIRECTIVE.md` (v2.2, supersedes
 | A.3 | Contract: inner connector | **DONE** | 8fc97b5 | RD + eval | Contracts 1.3.0, backward compatible; merged together with Q.2. |
 | Q.2a | Façade capacity in feasibility | **DONE** | — | RD + eval | usable façade: site_rect 43.2 m, site_L 90.0 m; P60 demand 117.9 m → W_FACADE_TIGHT. |
 | Q.2 | Façade-aware layouts (+ A.3 merge) | **DONE (partial)** | 8fc97b5 | RD + eval | Inner connector in geometry/seeding/moves; façade-pull move; fixes A.3 mypy errors. |
-| Q.3 | Façade-aware depths + deterministic gates | **IN-PROGRESS** | — (Q.2 done) | RD + eval | P60 NO_FACADE ≤ 6 via façade-aware depth key; iteration-bound quality gates (O03 strict restored, G805 coverage xfail removed); seed/anneal budget split; fastreal coverage; P8 ≤ 1 for seeds 1–5. |
+| Q.3 | Façade-aware depths + deterministic gates | **DONE** | 30169cf | RD + eval | P60 NO_FACADE ≤ 6 via façade-aware depth key; iteration-bound quality gates (O03 strict restored, G805 coverage xfail removed); seed/anneal budget split; fastreal coverage; P8 ≤ 1 for seeds 1–5. |
 | 1.1 | Corpus ingestion & classification | **DONE** | — | RD + eval | Real corpus: 439 files → 1734 units (DWG 17 NEEDS_TOOL, PDF_VECTOR 879, PDF_SCANNED 436, RASTER 402), 0 failed, idempotent. |
 | 1.2 | CAD reader (DXF; DWG via converter) | **DONE** (library) | — | RD + eval | Layers (whole-word), units, walls, rooms, labels, openings, multi-plan, DWG→DXF via ODA/accoreconsole. Follow-up 1.2c: wire `ale layers` / `ale extract --kind dxf\|dwg` to the corpus DB. Real DWGs need ODA on the user's workstation. |
 | 1.2c | CAD → corpus CLI (`ale layers`, `ale extract` dxf/dwg) | **DONE** | — | RD + eval | Empty layer map → in-memory proposal + warning; NEEDS_TOOL DWGs retried. |
 | I.2 | Claude labelling in `ale extract` | **DONE** | I.1 | RD + eval | Render plan image per kind (bbox model), prepare_image, make_provider; opt-in; mocked tests. |
 | P.2 | Import « programme physique » (Annexe format) | **DONE** | e730d6a | RD + eval | `ale program import`; AREP-MS mapping as default rules; synthetic fixtures only. |
-| Q.4 | Max depth from façade (7.20 m) | READY (after Q.3) | Q.3 | RD + eval | Contracts 1.4.0 `facade.max_depth_m`; `FACADE_DEPTH` hard; depth beats aspect for big rooms. |
+| Q.4 | Max depth from façade (7.20 m) | **IN-PROGRESS** | Q.3 | RD + eval | Contracts 1.4.0 `facade.max_depth_m`; `FACADE_DEPTH` hard; depth beats aspect for big rooms. |
 | X.1 | `ale extract --force` + exact raster extent | READY (Codex) | I.2 | RD + eval | I.2 follow-ups; independent of P.2/Q.3/Q.4 files. |
 | P.1 | Claude VLM provider | **DONE** | 3c9db4e | RD + eval + eval_report | User decision U-8: VLM = Claude (claude-opus-5-5, effort low, structured output, no sampling params, cached). |
 | I.1 | Integration: PDF/raster extract, labels, scale, `ale review` | **DONE** | — | RD + eval | Assigned to an external Codex agent; PR to be reviewed by the Router. |
@@ -83,6 +83,7 @@ with ground truth. The Router will issue an annotation template before Phase 1.
 
 - 2026-11-06 — v2.0 workspace initialised (tickets 1.1, 1.2 specified).
 - 2026-11-09 — User: yes to seed-rulebook draft and Claude as VLM. Seed draft written and validated; P.1 specified and dispatched. CI: raster extra added to the install line.
+- 2026-11-09 — **Q.3 merged** (30169cf): P60 hard 18 → 9 (NO_FACADE 6), P25 → 5, P8 0 for seeds 1–5; quality gates iteration-bound (same result on any machine / under coverage); O03 strict restored; seed deadline fixed (T05); generate budget split 25/75. Router review: 2 integrated full runs, 1203 passed each. Caveat: P60 NO_FACADE ≤ 6 is budget-sensitive (7–10 at other iteration counts). 3.3 RD §5.7 amended. Q.4 dispatched.
 - 2026-11-09 — **P.2 merged**: `ale program import --annexe` reproduces the hand conversion of the real Annexe 3 exactly (2 buildings, totals OK). Cosmetic follow-up: building names keep the title remainder (« DES SERVICES DU SIEGE… »).
 - 2026-11-09 — AREP-MS track opened: P.2 (Annexe import, dispatched) and Q.4 (façade depth ≤ 7.20 m, after Q.3). Decision (Router, per project rules): for rooms too big for depth ≤ 7.20 m at aspect ≤ 2, depth is hard and aspect becomes soft.
 - 2026-11-09 — **I.2 merged**: `ale extract` sends still-untyped rooms to Claude with a rendered plan image when `[vlm] provider` is set (missing key → French warning, text-only); `--no-vlm`. Follow-ups: raster extent should be (−0.5, −0.5, W−0.5, H−0.5); consider `ale extract --force`. AREP-MS Annexe 3 converted (outside repo); gaps in `specs/design/arep_ms_gaps.md`.

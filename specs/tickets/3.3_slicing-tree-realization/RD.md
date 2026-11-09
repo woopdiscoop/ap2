@@ -103,6 +103,23 @@ Rooms → `PlacedRoom(instance_id, spec_id, rect, target_area_m2)`. Circulation 
 fingers and strips in `u` order. Both tuples sorted by `instance_id` (contract rule).
 Plan problems (`plan.check_against(...)` non-empty) → failure `PLAN_INVALID` (no geometry).
 
+### 5.7 Amendments (Ticket Q.3, 2026-11-09)
+**§5.1 (amended, Ticket Q.3).** For a band of depth `P_b` the search key over `D_A` is
+`(n_failures, n_no_facade, Σ |placed − target| + stack-end strip cells, |D_A − D_B|, D_A)`, where
+`n_no_facade` counts the `needs_facade` rooms predicted to end with façade `< f`:
+- a room bay has façade = its width when its block is exterior, otherwise none;
+- a stack room has façade = the stack width only when it is the outermost room of its stack, the
+  stack has no stack-end strip, and the block is exterior.
+
+A block is exterior when it is band 0 block A or the last band's block B and its outer long side
+lies on the footprint exterior along at least half of the band region. Linked pieces (L shapes)
+add their own failures and counts. The band-depth coordinate descent (3.3b §1.3) ranks
+arrangements by `(n_failures, n_no_facade, cost)`.
+
+**§5.2 (amended, Ticket Q.3).** In an exterior block, a room bay holding a `needs_facade` room
+takes the smallest width `w` with `lo ≤ w·D ≤ hi`, `aspect ≤ amax` and `w ≥ wmin`, raised to `f`
+when `f` also satisfies these. All other room bays keep the 3.3 width.
+
 ## 6. Evaluation (`evaluate`) — cost and violations
 
 "Share length" = length of the common boundary of two rectangles (integer modules).
