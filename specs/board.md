@@ -32,6 +32,7 @@ Maintained by the Router only. Directive: `specs/DIRECTIVE.md` (v2.2, supersedes
 | I.2 | Claude labelling in `ale extract` | **DONE** | I.1 | RD + eval | Render plan image per kind (bbox model), prepare_image, make_provider; opt-in; mocked tests. |
 | P.2 | Import « programme physique » (Annexe format) | **IN-PROGRESS** | — | RD + eval | `ale program import`; AREP-MS mapping as default rules; synthetic fixtures only. |
 | Q.4 | Max depth from façade (7.20 m) | READY (after Q.3) | Q.3 | RD + eval | Contracts 1.4.0 `facade.max_depth_m`; `FACADE_DEPTH` hard; depth beats aspect for big rooms. |
+| X.1 | `ale extract --force` + exact raster extent | READY (Codex) | I.2 | RD + eval | I.2 follow-ups; independent of P.2/Q.3/Q.4 files. |
 | P.1 | Claude VLM provider | **DONE** | 3c9db4e | RD + eval + eval_report | User decision U-8: VLM = Claude (claude-opus-5-5, effort low, structured output, no sampling params, cached). |
 | I.1 | Integration: PDF/raster extract, labels, scale, `ale review` | **DONE** | — | RD + eval | Assigned to an external Codex agent; PR to be reviewed by the Router. |
 | 1.3 | Vector-PDF reader (library) | **DONE** | — | RD + eval | Plan-likeness on merged walls; HABS PDFs correctly identified as scanned (→ raster path). |
