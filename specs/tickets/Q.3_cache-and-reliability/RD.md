@@ -25,8 +25,8 @@ Q.2 left three problems:
    width; a stack room has façade only if outermost and the stack is in an exterior block). Keep the rest of the key
    unchanged. In room-bay width selection (§5.2), when the bay is in an exterior block and holds a
    `needs_facade` room, prefer the **smallest** width satisfying the area and aspect rules. Document the new key
-   in the module docstring and in 3.3 RD §5.1 is *not* yours to edit: put the amendment text in the eval report;
-   the Router will apply it.
+   in the module docstring. 3.3 RD §5.1 is not yours to edit: put the amendment text in the eval report and the
+   Router will apply it.
 2. **Deterministic budgets.** `seed_plan(..., max_attempts: int | None = None)` and the existing
    `anneal` `max_iter`: when given, they bind before time (keep a generous time cap as a safety net). The
    quality tests (O03 strict as originally specified, including **P25 `final_hard < initial_hard`**; G804; G805)
