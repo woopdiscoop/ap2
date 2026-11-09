@@ -27,6 +27,8 @@ class ReportInputs:
     config: AleConfig
     min_support: int
     seed_version: str | None
+    #: UTC build date (YYYY-MM-DD), the only date of the outputs.
+    build_date: str
     #: (plan label, fidelity, weight, north or None), sorted.
     used: Sequence[tuple[str, Fidelity, float, float | None]]
     #: (plan label, reason), sorted.
@@ -50,6 +52,7 @@ def render_report(inp: ReportInputs) -> str:
     rb, bl, cfg = inp.rulebook, inp.blended, inp.config
     out: list[str] = [f"# Rapport de construction du rulebook `{rb.version}`", ""]
     out += ["## Résumé", ""]
+    out.append(f"- Date de construction (UTC) : {inp.build_date}")
     out.append(
         f"- Nature : **{rb.kind}**"
         + (f" (graine `{inp.seed_version}`)" if inp.seed_version else "")

@@ -12,9 +12,9 @@ Branch `ticket-2.2-rulebook-build` (from `claude/new-session-2hmd3s` @ 48f1f9f).
 | K4 | `::test_K4_quantiles` | pass — hand-computed weighted quantiles; RASTER room ignored; aspect p90 3.0 → 2.0 with note |
 | K5 | `::test_K5_core_offset` | pass — exact dx/dy, fidelity-weighted mean, plan without core not used |
 | K6 | `::test_K6_orientation` | pass — office S = 1.0; < 3 north plans → seed kept; 3 plans → blended |
-| K7 | `::test_K7_blend` | pass — 0.8 / 0.4 / n = 10 / k = 10 → 0.6; quantile order preserved (200 random triples) |
-| K8 | `::test_K8_output_valid` | pass — YAML round trip, kind, `mined-YYYY-MM-DD-<8 hex>`, source_mix |
-| K9 | `::test_K9_deterministic` | pass — shuffled topologies and geometries → identical YAML and report bytes |
+| K7 | `::test_K7_blend` | pass — 0.8 / 0.4 / n = 10 / k = 10 → 0.6; with α = 1 the prior is 0.5, not the seed; quantile order preserved (200 random triples) |
+| K8 | `::test_K8_output_valid` | pass — YAML round trip, kind, `mined-<12 hex>` (no `date`), source_mix |
+| K9 | `::test_K9_deterministic` | pass — shuffled inputs → identical YAML and report bytes; another `today` → identical YAML, report differs only on its date line |
 | K10 | `::test_K10_cli` | pass — DXF workspace, `--seed-rulebook`, 3 files written, exit 0, no-scale plan skipped and reported |
 | K11 | `tests/rulebook/test_rulebook_gates.py::test_K11_gates` | pass — ruff, ruff format --check, mypy strict, lock --check |
 
@@ -22,7 +22,7 @@ Extra unit tests: `tests/rulebook/test_rulebook_units.py` (16 tests).
 
 ## Gates
 
-- Whole suite: 980 passed, 7 skipped, 2 xfailed (one failure in a first run — `test_P02_no_absolute_paths`
+- Whole suite (after the review rework, merged with `claude/new-session-2hmd3s`): 1051 passed, 9 skipped, 2 xfailed. First submission: 980 passed, 7 skipped, 2 xfailed (one failure in a first run — `test_P02_no_absolute_paths`
   flagged the plan label format `sha/p0/0`; the label is now `sha p0 n0`, rerun green).
 - `ruff check src/ale tests`, `ruff format --check`: clean. `mypy` (strict, `src/ale`): clean.
 - `python -m ale.contracts.lock --check`: OK (no contract touched).
@@ -70,3 +70,12 @@ Extra unit tests: `tests/rulebook/test_rulebook_units.py` (16 tests).
 13. **CLI.** An unreadable/invalid seed file → usage error (exit 2, `--seed-rulebook`). Outputs are written
     atomically (temp file + replace); `rulebook.sqlite` is rebuilt each run with the used plans only (skipped plans
     are listed in the report).
+
+## Review rework (2026-11-09, amended RD §3/§4)
+
+- Adjacency smoothing now always uses the neutral prior: `p = (hits + α·0.5) / (support + α)`; the seed enters only
+  through the §4 blend (item 8 above: the seed is no longer counted twice).
+- `version = "mined-<first 12 hex of SHA-256(inputs + seed)>"` (the hash also covers the rulebook / shape settings
+  and `min_support`, which change the output). `Rulebook.date` is left empty; the build date (UTC) is printed only in
+  `report.md` (“Date de construction (UTC)”). Item 11 above is superseded.
+- The `north_angle_deg` meta column gap (item 1) stays for the integration ticket; the K10 workaround is kept.

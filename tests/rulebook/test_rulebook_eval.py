@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime as dt
 import random
 import re
 import shutil
@@ -224,6 +225,10 @@ def test_K7_blend() -> None:
     entry = rb.adjacency.pairs[0]
     assert entry.p == pytest.approx(0.6)
     assert entry.n_support == 10
+    # alpha = 1: the Laplace prior is the neutral 0.5, never the seed (amended RD 3):
+    # mined p = (4 + 0.5) / (10 + 1), then blended once with the seed (w = 10 / 20).
+    rb1 = _build(pairs, seed=seed, cfg=config(laplace_alpha=1.0, blend_k=10.0)).rulebook
+    assert rb1.adjacency.pairs[0].p == pytest.approx(0.8 + 0.5 * (4.5 / 11.0 - 0.8))
     # Quantile order preserved after blending, whatever the inputs.
     rng = random.Random(7)
     for _ in range(200):
@@ -252,7 +257,9 @@ def test_K8_output_valid() -> None:
     pairs.append(office_meeting(8, contact=False, kind=SourceKind.RASTER))
     mined = _build(pairs).rulebook
     assert mined.kind == "mined"
-    assert re.fullmatch(r"mined-2026-11-08-[0-9a-f]{8}", mined.version)
+    assert re.fullmatch(r"mined-[0-9a-f]{12}", mined.version)
+    assert mined.date is None  # the build date is in report.md only
+    assert "Date de construction (UTC) : 2026-11-08" in _build(pairs).report_md
     assert mined.n_plans == 7
     assert mined.source_mix == {Fidelity.CAD: 5, Fidelity.PDF_VECTOR: 1, Fidelity.RASTER: 1}
     assert load_yaml(Rulebook, dump_yaml(mined)) == mined
@@ -280,6 +287,17 @@ def test_K9_deterministic() -> None:
         res = build_rulebook(t2, g2, seed, config(), min_support=2, today=TODAY)
         assert dump_yaml(res.rulebook).encode() == dump_yaml(ref.rulebook).encode()
         assert res.report_md.encode() == ref.report_md.encode()
+    # Another build day: identical YAML; the report differs only by its date line.
+    later = build_rulebook(topos, geoms, seed, config(), min_support=2, today=dt.date(2027, 1, 2))
+    assert dump_yaml(later.rulebook).encode() == dump_yaml(ref.rulebook).encode()
+    diff = [
+        (a, b)
+        for a, b in zip(ref.report_md.splitlines(), later.report_md.splitlines(), strict=True)
+        if a != b
+    ]
+    assert diff == [
+        ("- Date de construction (UTC) : 2026-11-08", "- Date de construction (UTC) : 2027-01-02")
+    ]
 
 
 # ---------------------------------------------------------------------- K10

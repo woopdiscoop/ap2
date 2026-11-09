@@ -5,8 +5,9 @@
 recorded with its provenance (``seed`` / ``mined`` / ``blended``) for the report.
 
 Literal readings (see ``eval_report.md``): an adjacency pair counts as "present in the seed"
-only when the seed lists it explicitly (unlisted pairs fall back to ``default_p``, which
-already enters the Laplace prior ``p0``); blended quantiles carry the mined ``n``; a mined
+only when the seed lists it explicitly (unlisted pairs fall back to ``default_p``); the
+Laplace prior is always the neutral 0.5 (the seed acts only through the blend); blended
+quantiles carry the mined ``n``; a mined
 aspect is clipped to ``shape.aspect_max`` before blending (all three quantiles, so that the
 order is kept); a mined-only type with fewer than 3 north-known plans gets a neutral
 orientation (0.0 everywhere).
@@ -31,6 +32,7 @@ from ale.rulebook.stats import (
 
 __all__ = [
     "MIN_ORIENTATION_PLANS",
+    "NEUTRAL_P",
     "Blended",
     "CoreRow",
     "PairRow",
@@ -45,6 +47,8 @@ __all__ = [
 
 #: Types seen in fewer north-known plans keep the seed orientation.
 MIN_ORIENTATION_PLANS = 3
+#: Neutral Laplace prior of an adjacency probability (amended RD 3: never the seed).
+NEUTRAL_P = 0.5
 _SIG = 9
 
 Source = Literal["seed", "mined", "blended"]
@@ -70,7 +74,7 @@ def blend_quantiles(seed: Quantiles, mined: Quantiles, n: float, k: float) -> Qu
     return Quantiles(p10=p10, p50=p50, p90=p90, n=mined.n)
 
 
-def laplace_p(stat: PairStat, alpha: float, p0: float) -> float:
+def laplace_p(stat: PairStat, alpha: float, p0: float = NEUTRAL_P) -> float:
     """``(hits + alpha p0) / (support + alpha)``."""
     return (stat.hits + alpha * p0) / (stat.support + alpha)
 
@@ -152,8 +156,7 @@ def _adjacency(
                     f"Paire {a} / {b} omise : support {n_support} < min_support {min_support}."
                 )
             continue
-        p0 = seed.adjacency.p(a, b) if seed is not None else 0.5
-        p_mined = laplace_p(st, rb.laplace_alpha, p0)
+        p_mined = laplace_p(st, rb.laplace_alpha)
         prior = seed_pairs.get((a, b))
         if prior is not None:
             p = sig(blend_value(prior.p, p_mined, st.support, rb.blend_k))

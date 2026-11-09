@@ -7,9 +7,10 @@ reported), builds, and writes ``rulebook/rulebook.yaml``, ``rulebook/report.md``
 ``rulebook/rulebook.sqlite`` (tables ``plans``, ``rooms``, ``contacts``: the inputs, for
 audit).
 
-``version = "mined-<UTC date>-<8 hex>"`` where the hex digits start the SHA-256 of the
-inputs (plans sorted by key, seed, rulebook / shape settings, ``min_support``): identical
-inputs on the same day give byte-identical outputs.
+``version = "mined-<12 hex>"`` where the hex digits start the SHA-256 of the inputs (plans
+sorted by key, seed, rulebook / shape settings, ``min_support``); there is no date in the
+rulebook, so identical inputs give a byte-identical ``rulebook.yaml`` on any day. The build
+date (UTC) appears only in ``report.md``.
 """
 
 from __future__ import annotations
@@ -124,8 +125,8 @@ def build_rulebook(
     Topologies and geometries are matched by ``(source_sha256, page, plan_index)``
     (order is irrelevant); ``north`` maps ``(source_sha256, page)`` to the north angle in
     degrees; ``skipped`` lists plans rejected upstream ``(label, reason)`` for the report;
-    ``min_support`` defaults to ``config.rulebook.min_support``; ``today`` (UTC) defaults
-    to the current UTC date.
+    ``min_support`` defaults to ``config.rulebook.min_support``; ``today`` (UTC, shown in the
+    report only) defaults to the current UTC date.
     """
     support_min = config.rulebook.min_support if min_support is None else min_support
     north = north or {}
@@ -165,9 +166,8 @@ def build_rulebook(
     digest = _inputs_hash(plans, seed, config, support_min)
     mix = Counter(p.topology.fidelity for p in plans)
     rulebook = Rulebook(
-        version=f"mined-{day.isoformat()}-{digest[:8]}",
+        version=f"mined-{digest[:12]}",
         kind="blended" if seed is not None else "mined",
-        date=day.isoformat(),
         n_plans=len(plans),
         source_mix={f: mix[f] for f in Fidelity if mix[f]},
         types=blended.types,
@@ -181,6 +181,7 @@ def build_rulebook(
             config=config,
             min_support=support_min,
             seed_version=None if seed is None else seed.version,
+            build_date=day.isoformat(),
             used=[(_label(p.key), p.topology.fidelity, p.weight, p.north_angle_deg) for p in plans],
             skipped=sorted(skip),
         )
