@@ -1,4 +1,4 @@
-"""``ale rulebook build`` (stub, Ticket 2.2)."""
+"""``ale rulebook build`` (Ticket 2.2): mine the extracted corpus into ``rulebook/``."""
 
 from __future__ import annotations
 
@@ -9,10 +9,10 @@ import typer
 
 from ale.cli.commands._common import (
     WorkspaceOption,
-    not_implemented,
     open_workspace_or_exit,
     require_workspace,
 )
+from ale.paths import display
 
 app = typer.Typer(
     name="rulebook",
@@ -37,5 +37,19 @@ def build(
     ] = None,
 ) -> None:
     """Build the rulebook from the extracted corpus."""
-    open_workspace_or_exit(ctx, require_workspace(workspace))
-    not_implemented("rulebook build", "2.2")
+    ws = open_workspace_or_exit(ctx, require_workspace(workspace))
+    from ale.rulebook import SeedError, load_seed, run_build
+
+    seed = None
+    if seed_rulebook is not None:
+        try:
+            seed = load_seed(seed_rulebook)
+        except SeedError as exc:
+            raise typer.BadParameter(str(exc), param_hint="'--seed-rulebook'") from exc
+    run = run_build(ws, seed=seed, min_support=min_support)
+    rb = run.result.rulebook
+    typer.echo(f"rulebook {rb.kind} {rb.version} : {run.used} plan(s) utilisé(s)")
+    for label, reason in run.skipped:
+        typer.echo(f"  ignoré : {label} ({reason})")
+    for path in run.files:
+        typer.echo(f"  écrit : {display(path)}")
