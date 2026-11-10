@@ -33,6 +33,14 @@ Maintained by the Router only. Directive: `specs/DIRECTIVE.md` (v2.2, supersedes
 | P.2 | Import « programme physique » (Annexe format) | **DONE** | e730d6a | RD + eval | `ale program import`; AREP-MS mapping as default rules; synthetic fixtures only. |
 | Q.4 | Max depth from façade (7.20 m) | **IN-PROGRESS** | Q.3 | RD + eval | Contracts 1.4.0 `facade.max_depth_m`; `FACADE_DEPTH` hard; depth beats aspect for big rooms. |
 | X.1 | `ale extract --force` + exact raster extent | READY (Codex) | I.2 | RD + eval | I.2 follow-ups; independent of P.2/Q.3/Q.4 files. |
+| R.1 | Multi-start annealing (stable quality) | READY (after Q.4) | Q.4 | roadmap | See `specs/design/research_roadmap.md`. |
+| R.2 | Non-dominated variant set + diversity score | QUEUED | R.1 | roadmap | |
+| R.3 | Space-syntax measures in the report | QUEUED | — | roadmap | |
+| R.4 | Plain-language explanation per variant | QUEUED | R.3 | roadmap | |
+| R.5 | Adjacencies from the functional programme (Claude, reviewed) | QUEUED | user: functional programme | roadmap | |
+| R.6 | Visual critique of a variant (Claude, advisory) | QUEUED | — | roadmap | |
+| R.7 | VLM geometry reader for raster plans | QUEUED | X.1 | roadmap | |
+| M.1–3 | Multi-storey: stacking → blocking → shared cores (v2) | PROPOSED | user approval (scope) | roadmap | |
 | P.1 | Claude VLM provider | **DONE** | 3c9db4e | RD + eval + eval_report | User decision U-8: VLM = Claude (claude-opus-5-5, effort low, structured output, no sampling params, cached). |
 | I.1 | Integration: PDF/raster extract, labels, scale, `ale review` | **DONE** | — | RD + eval | Assigned to an external Codex agent; PR to be reviewed by the Router. |
 | 1.3 | Vector-PDF reader (library) | **DONE** | — | RD + eval | Plan-likeness on merged walls; HABS PDFs correctly identified as scanned (→ raster path). |
@@ -83,6 +91,7 @@ with ground truth. The Router will issue an annotation template before Phase 1.
 
 - 2026-11-06 — v2.0 workspace initialised (tickets 1.1, 1.2 specified).
 - 2026-11-09 — User: yes to seed-rulebook draft and Claude as VLM. Seed draft written and validated; P.1 specified and dispatched. CI: raster extra added to the install line.
+- 2026-11-10 — Literature check of the user's research database (`specs/design/literature_review_2026-11.md`) → research roadmap R.1–R.7 + M (v2) (`research_roadmap.md`). Q.4 interrupted by the weekly limit, WIP saved (90f5a00), resumed with a new worker.
 - 2026-11-09 — **Q.3 merged** (30169cf): P60 hard 18 → 9 (NO_FACADE 6), P25 → 5, P8 0 for seeds 1–5; quality gates iteration-bound (same result on any machine / under coverage); O03 strict restored; seed deadline fixed (T05); generate budget split 25/75. Router review: 2 integrated full runs, 1203 passed each. Caveat: P60 NO_FACADE ≤ 6 is budget-sensitive (7–10 at other iteration counts). 3.3 RD §5.7 amended. Q.4 dispatched.
 - 2026-11-09 — **P.2 merged**: `ale program import --annexe` reproduces the hand conversion of the real Annexe 3 exactly (2 buildings, totals OK). Cosmetic follow-up: building names keep the title remainder (« DES SERVICES DU SIEGE… »).
 - 2026-11-09 — AREP-MS track opened: P.2 (Annexe import, dispatched) and Q.4 (façade depth ≤ 7.20 m, after Q.3). Decision (Router, per project rules): for rooms too big for depth ≤ 7.20 m at aspect ≤ 2, depth is hard and aspect becomes soft.
