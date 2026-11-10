@@ -22,7 +22,7 @@ EXPECTED_DEFAULTS: dict[str, dict[str, Any]] = {
     "area": {"tol_down_pct": 3.0, "tol_up_pct": 3.0, "tol_up_abs_m2": 1.2},
     "shape": {"aspect_max": 2.0},
     "circulation": {"ratio": 0.18, "min_door_edge_m": 1.2, "min_width_m": 1.2},
-    "facade": {"min_facade_len_m": 2.4},
+    "facade": {"min_facade_len_m": 2.4, "max_depth_m": None},  # max_depth_m: contracts 1.4.0
     "site": {"max_fill": 0.95},
     "determinism": {"seed": 42},
     "tools": {"oda_file_converter": "", "accoreconsole": "", "timeout_s": 300.0},
@@ -166,7 +166,7 @@ def test_C04_frozen() -> None:
             with pytest.raises(ValidationError):
                 setattr(model, name, getattr(model, name))
             count += 1
-    assert count == 44 + 16  # 44 keys + 14 tables + 2 nested tables
+    assert count == 45 + 16  # 45 keys (facade.max_depth_m: 1.4.0) + 14 tables + 2 nested
 
 
 def test_C05_schema_no_drift() -> None:

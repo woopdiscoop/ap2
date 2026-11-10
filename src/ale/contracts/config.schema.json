@@ -107,6 +107,20 @@
     "FacadeConfig": {
       "additionalProperties": false,
       "properties": {
+        "max_depth_m": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Maximum depth from the facade of a needs_facade room, metres (contracts 1.4.0); unset = rule off. A room with exterior contact on two opposite sides may be twice as deep. Violations are reported as FACADE_DEPTH (hard).",
+          "title": "Max Depth M"
+        },
         "min_facade_len_m": {
           "default": 2.4,
           "description": "Minimum facade length, metres.",

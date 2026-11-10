@@ -60,6 +60,15 @@ class CirculationConfig(_Section):
 
 class FacadeConfig(_Section):
     min_facade_len_m: float = Field(2.4, gt=0.0, description="Minimum facade length, metres.")
+    max_depth_m: float | None = Field(
+        None,
+        gt=0.0,
+        description=(
+            "Maximum depth from the facade of a needs_facade room, metres (contracts 1.4.0); "
+            "unset = rule off. A room with exterior contact on two opposite sides may be twice "
+            "as deep. Violations are reported as FACADE_DEPTH (hard)."
+        ),
+    )
 
 
 class SiteConfig(_Section):

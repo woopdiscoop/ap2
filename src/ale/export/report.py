@@ -3,6 +3,11 @@
 Shared helpers: French number formatting (``,`` decimal separator, 2 decimals), the
 module → metre coordinate frame (exact via ``Decimal``, ≤ 4 decimals) and per-room
 descriptions (label name, type, zone, areas, facade contact).
+
+Ticket Q.4: with ``facade.max_depth_m`` set, the summary states the depth limit, and the rooms
+whose aspect above ``shape.aspect_max`` is imposed by that limit (``ASPECT_DEPTH``, soft) are
+listed in a section "Proportion > amax imposée par la règle de profondeur" (only when there is
+one).
 """
 
 from __future__ import annotations
@@ -15,7 +20,7 @@ from fractions import Fraction
 from ale.contracts.config import AleConfig
 from ale.contracts.enums import MacroZone
 from ale.contracts.geometry import ModulePolygon, ModuleRect, Point2
-from ale.contracts.models import Layout, PlacedRoom, RoomSpec
+from ale.contracts.models import Layout, PlacedRoom, RoomSpec, Violation
 from ale.contracts.taxonomy import load_taxonomy
 from ale.contracts.units import cells_to_m2, to_decimal
 from ale.contracts.version import CONTRACTS_VERSION
@@ -53,6 +58,8 @@ _TIMES = "\u00d7"  # multiplication sign of "L x l"
 _CENT = Decimal("0.01")
 _TENTH = Decimal("0.1")
 _TEN_THOUSANDTH = Decimal("0.0001")
+_DEPTH_ASPECT_CODE = "ASPECT_DEPTH"
+"""Q.4: soft aspect violation imposed by the depth rule (``ale.geometry.evaluate``)."""
 
 
 # --------------------------------------------------------------------------- numbers
@@ -226,6 +233,39 @@ def _row(cells: list[str]) -> str:
     return "| " + " | ".join(_cell(c) for c in cells) + " |"
 
 
+def _depth_aspect_section(
+    infos: tuple[RoomInfo, ...], violations: tuple[Violation, ...], config: AleConfig
+) -> list[str]:
+    """Q.4: rooms whose aspect above ``aspect_max`` is imposed by the depth rule."""
+    ids = sorted(
+        {iid for v in violations if v.code == _DEPTH_ASPECT_CODE for iid in v.instance_ids}
+    )
+    if not ids:
+        return []
+    amax = f"{config.shape.aspect_max:g}".replace(".", ",")
+    by_id = {i.instance_id: i for i in infos}
+    lines = [
+        "",
+        f"## Proportion > {amax} imposée par la règle de profondeur",
+        "",
+        f"Ces pièces ne peuvent respecter à la fois la profondeur maximale depuis la façade "
+        f"et la proportion ≤ {amax} : la profondeur prime, la proportion est signalée "
+        "mais n'est pas comptée comme contrainte dure.",
+        "",
+    ]
+    for iid in ids:
+        info = by_id.get(iid)
+        if info is None:
+            lines.append(f"- `{iid}`")
+            continue
+        aspect = to_decimal(info.long_m) / to_decimal(info.short_m)
+        lines.append(
+            f"- `{iid}` {info.name} : {fr_num(info.long_m)} {_TIMES} {fr_num(info.short_m)} m, "
+            f"proportion {fr_num(aspect)}"
+        )
+    return lines
+
+
 def render_report(
     layout: Layout,
     prepared: PreparedInput,
@@ -262,6 +302,13 @@ def render_report(
         f"budget {fr_pct1(budget_pct)} %)",
         f"- Dépassement total : {fr_num(m.total_overshoot_m2)} m²",
         f"- Coût total : {fr_num(m.total_cost)}",
+    ]
+    if config.facade.max_depth_m is not None:
+        lines.append(
+            f"- Profondeur max. depuis la façade : {fr_num(config.facade.max_depth_m)} m "
+            "(double pour une pièce traversante)"
+        )
+    lines += [
         "",
         "## Surfaces",
         "",
@@ -323,6 +370,8 @@ def render_report(
             entries = by_code[code]
             lines += [f"### {code} ({len(entries)})", "", *entries, ""]
         lines.pop()
+
+    lines += _depth_aspect_section(infos, m.violations, config)
 
     lines += ["", "## Coût", ""]
     lines.append(_row(["Terme", "Valeur", "Poids", "Valeur pondérée"]))

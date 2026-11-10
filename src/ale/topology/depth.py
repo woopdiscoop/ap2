@@ -19,6 +19,11 @@ intervals. This module chooses target block depths first and fills the blocks se
    (stacks checked exactly); a last exact pass moves rooms out of blocks that still overflow.
 
 All loops are bounded by the number of rooms, blocks and candidates.
+
+Ticket Q.4 (façade depth rule, ``Consts.dmax`` set): a ``needs_facade`` room that would be a
+room bay of an outer block deeper than ``dmax`` (a predicted ``FACADE_DEPTH``) is charged the
+same penalty as one in an inner block, so it is preferred in an exterior block whose depth
+fits (:func:`_depth_penalty`). With the rule off nothing changes.
 """
 
 from __future__ import annotations
@@ -194,6 +199,31 @@ def _form(
     return bays, width, bad
 
 
+def _depth_penalty(
+    ctx: Ctx,
+    depths: Mapping[Slot, int],
+    slots: Sequence[Slot],
+    penalty: Mapping[tuple[str, Slot], float],
+) -> Mapping[tuple[str, Slot], float]:
+    """Q.4: ``penalty`` plus the façade penalty for every ``needs_facade`` room that would be
+    a room bay of an outer block (no penalty yet) deeper than ``dmax``; ``penalty`` itself
+    when the rule is off."""
+    dmax = ctx.k.dmax
+    if dmax is None:
+        return penalty
+    out = dict(penalty)
+    for r, req in ctx.reqs.items():
+        if not req.facade:
+            continue
+        for sl in slots:
+            if depths[sl] <= dmax or (r, sl) in penalty:
+                continue
+            o = _option(ctx, r, depths[sl])
+            if o is not None and not o[1]:
+                out[(r, sl)] = _FACADE_PENALTY_M
+    return out
+
+
 def _pack(
     ctx: Ctx,
     depths: Mapping[Slot, int],
@@ -206,6 +236,7 @@ def _pack(
 ) -> _Packing:
     """Pack the rooms at ``depths`` (module docstring, step 4). With ``exact`` the blocks
     are formed and the key holds the exact overflow; without, the estimated one (fast)."""
+    penalty = _depth_penalty(ctx, depths, slots, penalty)
     rooms = sorted(ppos, key=lambda r: (ppos[r], ctx.order[r]))
     opts: dict[str, dict[Slot, tuple[float, bool]]] = {}
     for r in rooms:
@@ -459,6 +490,7 @@ def _exact_bays(
 ) -> tuple[dict[Slot, list[Bay]], tuple[int, int]]:
     """Move rooms out of blocks whose exact width overflows (bounded, greedy); also return
     ``(bays that cannot comply, exact overflow)`` of the result."""
+    penalty = _depth_penalty(ctx, depths, slots, penalty)
     members = {sl: list(rs) for sl, rs in pack.members.items()}
     formed: dict[Slot, list[Bay]] = {}
     width: dict[Slot, int] = {}

@@ -32,9 +32,13 @@ KEY_LINE = re.compile(r"^\s*[A-Za-z_][A-Za-z0-9_]*\s*=")
 
 
 def leaf_count(model: BaseModel) -> int:
+    """Keys with a value; optional keys unset by default (``None``, e.g. contracts 1.4.0
+    ``facade.max_depth_m``) cannot be written in TOML and are not in the template."""
     total = 0
     for name in type(model).model_fields:
         value = getattr(model, name)
+        if value is None:
+            continue
         total += leaf_count(value) if isinstance(value, BaseModel) else 1
     return total
 

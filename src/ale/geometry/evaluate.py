@@ -2,6 +2,14 @@
 
 ``cost_breakdown`` keys are the ``[optimizer.weights]`` names; ``total_cost`` is the sum of
 weight x term. Areas are computed exactly (``Fraction``) and rounded once to ``float``.
+
+Ticket Q.4 (contracts 1.4.0, ``facade.max_depth_m``; rule off when unset): a ``needs_facade``
+room with façade (exterior contact ``>= f``) whose **depth** — its extent perpendicular to its
+longest exterior contact — exceeds ``dmax = floor(max_depth_m / module)`` (``2 · dmax`` with
+exterior contact on the opposite side too: a through room) gets a ``FACADE_DEPTH`` violation
+(hard, see :data:`FACADE_CODES`). A *deep* room (``needs_facade`` and ``T > amax · dmax²``)
+cannot satisfy both depth and aspect: depth wins, and its aspect above ``amax`` is reported as
+``ASPECT_DEPTH`` (soft, not counted in ``n_hard``) instead of ``ASPECT``.
 """
 
 from __future__ import annotations
@@ -11,6 +19,7 @@ from fractions import Fraction
 
 from ale.contracts.config import AleConfig
 from ale.contracts.corridor_plan import CorridorPlan
+from ale.contracts.geometry import ModulePolygon, ModuleRect
 from ale.contracts.models import Layout, LayoutMetrics, PlacedRoom, RoomSpec, Rulebook, Violation
 from ale.contracts.orientation import bearing_bin, compass_bearing_deg
 from ale.contracts.taxonomy import load_taxonomy
@@ -19,7 +28,19 @@ from ale.geometry.blocks import Consts, aspect_ok
 from ale.geometry.checks import exterior_contacts, share_length
 from ale.program.models import PreparedInput
 
-__all__ = ["WEIGHT_NAMES", "core_target", "evaluate"]
+__all__ = [
+    "FACADE_CODES",
+    "SOFT_ASPECT_CODE",
+    "WEIGHT_NAMES",
+    "core_target",
+    "evaluate",
+    "facade_depth",
+]
+
+FACADE_CODES: frozenset[str] = frozenset({"NO_FACADE", "FACADE_DEPTH"})
+"""Hard façade violations (Q.4): the seeder's and annealer's façade pulls treat them alike."""
+SOFT_ASPECT_CODE = "ASPECT_DEPTH"
+"""Q.4: aspect above ``amax`` of a room whose depth limit forces it (soft)."""
 
 WEIGHT_NAMES: tuple[str, ...] = (
     "required_adjacency",
@@ -59,6 +80,25 @@ def core_target(layout: Layout, prepared: PreparedInput, rulebook: Rulebook) -> 
         min(xs) + width / 2 + off.dx_norm * width,
         min(ys) + height / 2 + off.dy_norm * height,
     )
+
+
+def facade_depth(rect: ModuleRect, poly: ModulePolygon) -> tuple[int, bool] | None:
+    """Q.4: ``(depth, through)`` of a rectangle from the footprint exterior — its extent
+    perpendicular to its longest exterior contact (ties: the smaller depth), and whether it
+    also has exterior contact on the opposite side. ``None`` without exterior contact."""
+    contacts = exterior_contacts(rect, poly)
+    if not contacts:
+        return None
+    normals = {normal for _, normal in contacts}
+    best: tuple[int, int, bool] | None = None
+    for length, normal in contacts:
+        depth = rect.w if normal[0] != 0 else rect.h
+        through = (-normal[0], -normal[1]) in normals
+        key = (-length, depth, through)
+        if best is None or key < best:
+            best = key
+    assert best is not None
+    return best[1], best[2]
 
 
 def _orientation_weight(
@@ -161,7 +201,8 @@ class _Eval:
             elif cells > req.hi:
                 self.flag("AREA_OVER", (iid,), f"{iid}: {cells} cells > {req.hi}")
             if not aspect_ok(r.w, r.h, k.amax):
-                self.flag("ASPECT", (iid,), f"{iid}: aspect {p.aspect_ratio():.3f} > {k.amax}")
+                code = SOFT_ASPECT_CODE if req.deep else "ASPECT"
+                self.flag(code, (iid,), f"{iid}: aspect {p.aspect_ratio():.3f} > {k.amax}")
             if min(r.w, r.h) < req.wmin:
                 self.flag("MIN_WIDTH", (iid,), f"{iid}: width {min(r.w, r.h)} < {req.wmin}")
             access = max((share_length(r, q.rect) for q in circ), default=0)
@@ -173,6 +214,19 @@ class _Eval:
                 facade = sum(n for n, _ in exterior_contacts(r, self.layout.footprint))
                 if facade < k.f:
                     self.flag("NO_FACADE", (iid,), f"{iid}: facade {facade} < {k.f}")
+                elif k.dmax is not None:
+                    self.depth_rule(iid, r, k.dmax)
+
+    def depth_rule(self, iid: str, rect: ModuleRect, dmax: int) -> None:
+        """Q.4: ``FACADE_DEPTH`` when the room is deeper than its limit (``2 · dmax``
+        for a through room)."""
+        got = facade_depth(rect, self.layout.footprint)
+        assert got is not None  # called only for rooms with façade >= f
+        depth, through = got
+        limit = 2 * dmax if through else dmax
+        if depth > limit:
+            kind = "through room " if through else ""
+            self.flag("FACADE_DEPTH", (iid,), f"{iid}: {kind}depth {depth} > {limit} modules")
 
     # -------------------------------------------------------------- site terms
     def facade_orientation(self) -> float:

@@ -50,6 +50,7 @@ from ale.contracts.geometry import ModuleRect
 from ale.contracts.models import Rulebook
 from ale.geometry import Realization, realize
 from ale.geometry.checks import exterior_contacts
+from ale.geometry.evaluate import FACADE_CODES
 from ale.geometry.junction import across_origin, along_origin, cut_side, frame, to_abs
 from ale.guards import Budget, bounded
 from ale.program.models import PreparedInput
@@ -102,6 +103,7 @@ HARD_CODES: frozenset[str] = frozenset(
         "ASPECT",
         "MIN_WIDTH",
         "NO_FACADE",
+        "FACADE_DEPTH",
         "REQUIRED_ADJ",
         "AVOID_ADJ",
         "NO_CIRCULATION_ACCESS",
@@ -725,14 +727,15 @@ def _rank(real: Realization) -> tuple[int, float]:
 
 
 def _facade_candidates(search: _Search, draft: Draft, real: Realization) -> list[Draft]:
-    """Drafts that may give a ``NO_FACADE`` room a façade: first, its bay moved to an end of
-    its block whose bay has a façade contact (an end wall); then swaps with rooms without
-    ``needs_facade`` that have a façade contact (similar sizes first)."""
+    """Drafts that may give a ``NO_FACADE`` (Q.4: or ``FACADE_DEPTH``) room a façade: first,
+    its bay moved to an end of its block whose bay has a façade contact (an end wall); then
+    swaps with rooms without ``needs_facade`` that have a façade contact (similar sizes
+    first)."""
     layout = real.layout
     assert layout is not None
     ctx = search.ctx
     lacking = sorted(
-        r for v in layout.metrics.violations if v.code == "NO_FACADE" for r in v.instance_ids
+        r for v in layout.metrics.violations if v.code in FACADE_CODES for r in v.instance_ids
     )
     facade = {iid: spec.needs_facade for iid, spec in ctx.prepared.instances}
     contact = {
