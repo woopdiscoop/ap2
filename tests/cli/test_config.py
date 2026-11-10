@@ -22,7 +22,8 @@ EXPECTED_DEFAULTS: dict[str, dict[str, Any]] = {
     "area": {"tol_down_pct": 3.0, "tol_up_pct": 3.0, "tol_up_abs_m2": 1.2},
     "shape": {"aspect_max": 2.0},
     "circulation": {"ratio": 0.18, "min_door_edge_m": 1.2, "min_width_m": 1.2},
-    "facade": {"min_facade_len_m": 2.4, "max_depth_m": None},  # max_depth_m: contracts 1.4.0
+    # max_depth_m, max_depth_hard: contracts 1.4.0
+    "facade": {"min_facade_len_m": 2.4, "max_depth_m": None, "max_depth_hard": False},
     "site": {"max_fill": 0.95},
     "determinism": {"seed": 42},
     "tools": {"oda_file_converter": "", "accoreconsole": "", "timeout_s": 300.0},
@@ -56,6 +57,7 @@ EXPECTED_DEFAULTS: dict[str, dict[str, Any]] = {
             "facade_orientation": 1.0,
             "core_distance": 1.0,
             "circulation_length": 1.0,
+            "facade_depth": 1.0,  # contracts 1.4.0
         },
     },
     "logging": {"level": "INFO"},
@@ -166,7 +168,7 @@ def test_C04_frozen() -> None:
             with pytest.raises(ValidationError):
                 setattr(model, name, getattr(model, name))
             count += 1
-    assert count == 45 + 16  # 45 keys (facade.max_depth_m: 1.4.0) + 14 tables + 2 nested
+    assert count == 47 + 16  # 47 keys (3 of the 1.4.0 depth rule) + 14 tables + 2 nested
 
 
 def test_C05_schema_no_drift() -> None:

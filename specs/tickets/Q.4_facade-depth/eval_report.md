@@ -109,6 +109,19 @@ did not keep it. Reaching ≤ 1 needs either a frontage-packing search (subset s
 widths with zone runs) or the grammar change that lets the end strip sit before the last
 finger bay; both are beyond this ticket.
 
+**Final D05 plan (seed 3, anneal seed 6, 1 500 iterations)**, re-measured when the ticket was
+finished:
+- block A: `P03 | [P12, P10#3 | P11, P10#5] | P02 | P07 | P06 | [S01×3 | S03, S02]`;
+- block B: `[P10#2, P10#6 | P10#4, P10#1] | [– | P05] | P04 | P09 | P01 | P08 | [– | S04]`.
+
+The three `NO_FACADE` rooms are the inner rooms of three of the four 16 m² stacks: block B's
+first finger bay sits against the west end wall, so one of its two inner rooms is lit; block
+A's finger bay sits behind `P03` (which gives `P12 → P03` and `P11 → P02`), so both of its
+inner rooms are dark. Moving that bay to the west end would light one more room
+(`NO_FACADE = 2`) but breaks `P12 → P03` (`REQUIRED_ADJ + 1`): the same hard count, which is
+why the optimiser keeps the plan. No single-move or polish-size change reaches ≤ 1, so no
+further optimiser change was made and the test keeps its target.
+
 ## 4. Gates
 - ruff check: clean. ruff format --check: clean. mypy strict on `src`: 0 errors.
   `lock --check`: OK. `export_schemas --check`: OK.

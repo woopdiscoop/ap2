@@ -50,7 +50,7 @@ from ale.contracts.geometry import ModuleRect
 from ale.contracts.models import Rulebook
 from ale.geometry import Realization, realize
 from ale.geometry.checks import exterior_contacts
-from ale.geometry.evaluate import FACADE_CODES
+from ale.geometry.evaluate import FACADE_CODES, hard_codes_of
 from ale.geometry.junction import across_origin, along_origin, cut_side, frame, to_abs
 from ale.guards import Budget, bounded
 from ale.program.models import PreparedInput
@@ -717,7 +717,8 @@ def _improve_adjacency(
 def _hard(real: Realization) -> int:
     """Hard violations of a valid realisation (the annealer's ``n_hard``, RD 3.4 §3)."""
     assert real.layout is not None
-    return sum(1 for v in real.layout.metrics.violations if v.code in HARD_CODES)
+    hard = hard_codes_of(real.layout.metrics, HARD_CODES)
+    return sum(1 for v in real.layout.metrics.violations if v.code in hard)
 
 
 def _rank(real: Realization) -> tuple[int, float]:

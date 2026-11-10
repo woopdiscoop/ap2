@@ -31,13 +31,19 @@ EXPECTED_TREE = {
 KEY_LINE = re.compile(r"^\s*[A-Za-z_][A-Za-z0-9_]*\s*=")
 
 
+#: Keys of the contracts 1.4.0 depth rule (Q.4). They only act with ``facade.max_depth_m``
+#: set, which the template cannot hold (``None``), so the template does not list them.
+DEPTH_RULE_KEYS = {"max_depth_hard", "facade_depth"}
+
+
 def leaf_count(model: BaseModel) -> int:
     """Keys with a value; optional keys unset by default (``None``, e.g. contracts 1.4.0
-    ``facade.max_depth_m``) cannot be written in TOML and are not in the template."""
+    ``facade.max_depth_m``) cannot be written in TOML and are not in the template, nor are
+    the keys that depend on it (:data:`DEPTH_RULE_KEYS`)."""
     total = 0
     for name in type(model).model_fields:
         value = getattr(model, name)
-        if value is None:
+        if value is None or name in DEPTH_RULE_KEYS:
             continue
         total += leaf_count(value) if isinstance(value, BaseModel) else 1
     return total

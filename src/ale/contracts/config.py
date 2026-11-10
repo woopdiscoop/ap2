@@ -66,7 +66,15 @@ class FacadeConfig(_Section):
         description=(
             "Maximum depth from the facade of a needs_facade room, metres (contracts 1.4.0); "
             "unset = rule off. A room with exterior contact on two opposite sides may be twice "
-            "as deep. Violations are reported as FACADE_DEPTH (hard)."
+            "as deep. Violations are reported as FACADE_DEPTH (soft unless max_depth_hard)."
+        ),
+    )
+    max_depth_hard: bool = Field(
+        False,
+        description=(
+            "Whether max_depth_m is an absolute limit (contracts 1.4.0). False: FACADE_DEPTH is "
+            "a soft finding and excess depth is a cost term (optimizer.weights.facade_depth). "
+            "True: FACADE_DEPTH is hard and depth wins over the aspect limit."
         ),
     )
 
@@ -133,6 +141,14 @@ class OptimizerWeightsConfig(_Section):
     facade_orientation: float = Field(1.0, ge=0.0)
     core_distance: float = Field(1.0, ge=0.0)
     circulation_length: float = Field(1.0, ge=0.0)
+    facade_depth: float = Field(
+        1.0,
+        ge=0.0,
+        description=(
+            "Weight of the excess facade depth term (contracts 1.4.0; used only with "
+            "facade.max_depth_m set and max_depth_hard false)."
+        ),
+    )
 
 
 class OptimizerConfig(_Section):

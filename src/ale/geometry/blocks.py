@@ -100,6 +100,9 @@ class Consts:
     tol: AreaTolerance
     dmax: int | None = None
     """Q.4: maximum façade depth in modules (``None``: rule off)."""
+    depth_hard: bool = False
+    """Q.4: ``facade.max_depth_hard`` — the depth limit is absolute (``FACADE_DEPTH`` hard,
+    depth beats aspect). ``False``: the limit is soft (a cost term, aspect stays hard)."""
 
     @classmethod
     def from_config(cls, config: AleConfig) -> Consts:
@@ -123,6 +126,7 @@ class Consts:
                 up_abs_m2=config.area.tol_up_abs_m2,
             ),
             dmax=dmax,
+            depth_hard=dmax is not None and config.facade.max_depth_hard,
         )
 
     @property
@@ -151,8 +155,11 @@ class Consts:
         )
 
     def deep(self, facade: bool, target: Fraction) -> bool:
-        """Q.4: a ``needs_facade`` room with ``T > amax · dmax²`` (depth beats aspect)."""
-        return facade and self.dmax is not None and target > self.amax * self.dmax * self.dmax
+        """Q.4: a ``needs_facade`` room with ``T > amax · dmax²`` under a hard depth limit
+        (depth beats aspect); never with the soft rule."""
+        if not (facade and self.depth_hard) or self.dmax is None:
+            return False
+        return target > self.amax * self.dmax * self.dmax
 
 
 @dataclass(frozen=True)
@@ -309,6 +316,15 @@ class Solver:
         if lo > hi:
             return None
         return max(lo, self.k.f) if self.k.f <= hi else lo
+
+    def _too_deep(self, out: BlockOut, excess: int, width: int) -> None:
+        """Q.4: a predicted ``FACADE_DEPTH`` of ``excess`` modules over ``width``: one more in
+        the façade key position under a hard limit; with the soft rule, the cells beyond the
+        limit added to the area deviation (the cost position of the depth-search key)."""
+        if self.k.depth_hard:
+            out.no_facade += 1
+        else:
+            out.area_dev += excess * width
 
     def deep_width(self, req: RoomReq, depth: int, narrow: bool) -> int | None:
         """Q.4: width of a deep room's bay at ``depth`` ignoring the aspect limit: the
@@ -492,7 +508,7 @@ class Solver:
                 if req.facade and not (exterior and w >= self.k.f):
                     out.no_facade += 1
                 elif req.facade and self.k.dmax is not None and depth > self.k.dmax:
-                    out.no_facade += 1  # Q.4: predicted FACADE_DEPTH
+                    self._too_deep(out, depth - self.k.dmax, w)
                 self._room(out, bay.room, req, u, 0, w, depth)
                 u += w
                 continue
@@ -541,8 +557,9 @@ class Solver:
         lit = exterior and sol is not None and sol.rest == 0 and sol.w >= self.k.f
         out.no_facade += sum(r.facade for r in reqs[:-1]) + (reqs[-1].facade and not lit)
         dmax = self.k.dmax
-        if lit and dmax is not None and reqs[-1].facade and sol is not None:
-            out.no_facade += sol.heights[-1] > dmax  # Q.4: predicted FACADE_DEPTH
+        deep = lit and dmax is not None and reqs[-1].facade and sol is not None
+        if deep and sol is not None and dmax is not None and sol.heights[-1] > dmax:
+            self._too_deep(out, sol.heights[-1] - dmax, sol.w)
         if sol is None:
             out.failures.append(
                 (

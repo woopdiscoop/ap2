@@ -128,12 +128,14 @@ def _arep_rooms() -> list[RoomSpec]:
     ]
 
 
-def arep_config() -> AleConfig:
+def arep_config(max_depth_m: float | None = 7.2, hard: bool = True) -> AleConfig:
+    """The AREP configuration; D05 runs with the hard limit (``max_depth_hard``), D08 with
+    the soft rule (the default) and with the rule off."""
     return AleConfig.model_validate(
         {
             "grid": {"module_mm": 600},
             "area": {"tol_down_pct": 0, "tol_up_pct": 10, "tol_up_abs_m2": 0},
-            "facade": {"max_depth_m": 7.2},
+            "facade": {"max_depth_m": max_depth_m, "max_depth_hard": hard},
         }
     )
 

@@ -34,13 +34,14 @@ from ale.program.models import PreparedInput
 RULEBOOK = load_test_rulebook()
 
 
-def arep_config(max_depth_m: float | None = 7.2) -> AleConfig:
-    """Module 600 mm, area 0 / +10 % / 0 m², façade depth ``max_depth_m``."""
+def arep_config(max_depth_m: float | None = 7.2, hard: bool = True) -> AleConfig:
+    """Module 600 mm, area 0 / +10 % / 0 m², façade depth ``max_depth_m`` (a hard limit
+    unless ``hard`` is false: the scope change made the soft rule the default)."""
     return AleConfig.model_validate(
         {
             "grid": {"module_mm": 600},
             "area": {"tol_down_pct": 0, "tol_up_pct": 10, "tol_up_abs_m2": 0},
-            "facade": {"max_depth_m": max_depth_m},
+            "facade": {"max_depth_m": max_depth_m, "max_depth_hard": hard},
         }
     )
 

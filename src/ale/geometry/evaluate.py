@@ -29,16 +29,21 @@ from ale.geometry.checks import exterior_contacts, share_length
 from ale.program.models import PreparedInput
 
 __all__ = [
+    "DEPTH_COST",
     "FACADE_CODES",
     "SOFT_ASPECT_CODE",
     "WEIGHT_NAMES",
     "core_target",
     "evaluate",
     "facade_depth",
+    "hard_codes_of",
 ]
 
 FACADE_CODES: frozenset[str] = frozenset({"NO_FACADE", "FACADE_DEPTH"})
-"""Hard façade violations (Q.4): the seeder's and annealer's façade pulls treat them alike."""
+"""Façade violations (Q.4): the seeder's and annealer's façade pulls treat them alike."""
+DEPTH_COST = "facade_depth"
+"""Q.4: cost term (and ``[optimizer.weights]`` name) of the soft depth rule. It is in
+``cost_breakdown`` exactly when the rule is on and soft (``max_depth_hard`` false)."""
 SOFT_ASPECT_CODE = "ASPECT_DEPTH"
 """Q.4: aspect above ``amax`` of a room whose depth limit forces it (soft)."""
 
@@ -80,6 +85,12 @@ def core_target(layout: Layout, prepared: PreparedInput, rulebook: Rulebook) -> 
         min(xs) + width / 2 + off.dx_norm * width,
         min(ys) + height / 2 + off.dy_norm * height,
     )
+
+
+def hard_codes_of(metrics: LayoutMetrics, base: frozenset[str]) -> frozenset[str]:
+    """Q.4: ``base`` without ``FACADE_DEPTH`` when ``metrics`` come from the soft depth rule
+    (:data:`DEPTH_COST` in the cost breakdown), else ``base``."""
+    return base - {"FACADE_DEPTH"} if DEPTH_COST in metrics.cost_breakdown else base
 
 
 def facade_depth(rect: ModuleRect, poly: ModulePolygon) -> tuple[int, bool] | None:
@@ -126,6 +137,8 @@ class _Eval:
             (p, specs[p.instance_id]) for p in layout.rooms if p.instance_id in specs
         ]
         self.violations: list[Violation] = []
+        self.depth_excess = Fraction(0)
+        """Q.4: Σ (depth - limit) / limit over the rooms beyond their depth limit."""
 
     def flag(self, code: str, ids: tuple[str, ...], detail: str) -> None:
         self.violations.append(Violation(code=code, instance_ids=ids, detail=detail))
@@ -225,6 +238,7 @@ class _Eval:
         depth, through = got
         limit = 2 * dmax if through else dmax
         if depth > limit:
+            self.depth_excess += Fraction(depth - limit, limit)
             kind = "through room " if through else ""
             self.flag("FACADE_DEPTH", (iid,), f"{iid}: {kind}depth {depth} > {limit} modules")
 
@@ -294,6 +308,10 @@ def evaluate(
             ev.flag("ZONE_SPLIT", (), f"room {exc.args[0]} is not in the program")
     weights = config.optimizer.weights
     total = sum(getattr(weights, name) * terms[name] for name in WEIGHT_NAMES)
+    if ev.k.dmax is not None and not ev.k.depth_hard:
+        # Q.4 soft depth rule: Σ max(0, depth - limit) / limit over the rooms, per room.
+        terms[DEPTH_COST] = ev.per_room(float(ev.depth_excess))
+        total += weights.facade_depth * terms[DEPTH_COST]
     violations = sorted(ev.violations, key=lambda v: (v.code, v.instance_ids, v.detail))
     return LayoutMetrics(
         total_cost=total,

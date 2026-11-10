@@ -50,5 +50,17 @@ def test_D01_contract() -> None:
     assert prop["default"] is None
     assert {"type": "null"} in prop["anyOf"]
     assert "FACADE_DEPTH" in prop["description"]
+    # Scope change: the limit is soft unless ``max_depth_hard``; its cost weight.
+    assert FacadeConfig().max_depth_hard is False and old.facade.max_depth_hard is False
+    assert on.facade.max_depth_hard is False
+    hard = AleConfig.model_validate({"facade": {"max_depth_m": 7.2, "max_depth_hard": True}})
+    assert hard.facade.max_depth_hard is True
+    assert schema["$defs"]["FacadeConfig"]["properties"]["max_depth_hard"]["default"] is False
+    assert AleConfig().optimizer.weights.facade_depth == 1.0
+    assert old.optimizer.weights == AleConfig().optimizer.weights
+    with pytest.raises(ValidationError):
+        AleConfig.model_validate({"optimizer": {"weights": {"facade_depth": -1.0}}})
+    weights = schema["$defs"]["OptimizerWeightsConfig"]["properties"]
+    assert weights["facade_depth"]["default"] == 1.0
     assert export_schemas.main(["--check"]) == 0
     assert lock.main(["--check"]) == 0

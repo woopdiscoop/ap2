@@ -7,7 +7,8 @@ descriptions (label name, type, zone, areas, facade contact).
 Ticket Q.4: with ``facade.max_depth_m`` set, the summary states the depth limit, and the rooms
 whose aspect above ``shape.aspect_max`` is imposed by that limit (``ASPECT_DEPTH``, soft) are
 listed in a section "Proportion > amax imposée par la règle de profondeur" (only when there is
-one).
+one). With the soft rule (``facade.max_depth_hard`` false, the default) the ``FACADE_DEPTH``
+findings are listed in a section "Profondeur depuis la façade dépassée (non bloquant)".
 """
 
 from __future__ import annotations
@@ -58,6 +59,7 @@ _TIMES = "\u00d7"  # multiplication sign of "L x l"
 _CENT = Decimal("0.01")
 _TENTH = Decimal("0.1")
 _TEN_THOUSANDTH = Decimal("0.0001")
+_DEPTH_CODE = "FACADE_DEPTH"
 _DEPTH_ASPECT_CODE = "ASPECT_DEPTH"
 """Q.4: soft aspect violation imposed by the depth rule (``ale.geometry.evaluate``)."""
 
@@ -266,6 +268,28 @@ def _depth_aspect_section(
     return lines
 
 
+def _soft_depth_section(violations: tuple[Violation, ...], config: AleConfig) -> list[str]:
+    """Q.4: ``FACADE_DEPTH`` findings of the soft depth rule (``max_depth_hard`` false)."""
+    if config.facade.max_depth_m is None or config.facade.max_depth_hard:
+        return []
+    found = [v for v in violations if v.code == _DEPTH_CODE]
+    if not found:
+        return []
+    lines = [
+        "",
+        "## Profondeur depuis la façade dépassée (non bloquant)",
+        "",
+        f"La profondeur de {fr_num(config.facade.max_depth_m)} m est indicative : ces pièces "
+        "la dépassent, ce qui pèse sur le coût (terme `facade_depth`) mais n'est pas compté "
+        "comme contrainte dure.",
+        "",
+    ]
+    for v in found:
+        ids = ", ".join(f"`{iid}`" for iid in v.instance_ids)
+        lines.append(f"- {ids} : {v.detail}")
+    return lines
+
+
 def render_report(
     layout: Layout,
     prepared: PreparedInput,
@@ -304,9 +328,10 @@ def render_report(
         f"- Coût total : {fr_num(m.total_cost)}",
     ]
     if config.facade.max_depth_m is not None:
+        note = "" if config.facade.max_depth_hard else " ; indicative, dépassement non bloquant"
         lines.append(
             f"- Profondeur max. depuis la façade : {fr_num(config.facade.max_depth_m)} m "
-            "(double pour une pièce traversante)"
+            f"(double pour une pièce traversante{note})"
         )
     lines += [
         "",
@@ -372,6 +397,7 @@ def render_report(
         lines.pop()
 
     lines += _depth_aspect_section(infos, m.violations, config)
+    lines += _soft_depth_section(m.violations, config)
 
     lines += ["", "## Coût", ""]
     lines.append(_row(["Terme", "Valeur", "Poids", "Valeur pondérée"]))
