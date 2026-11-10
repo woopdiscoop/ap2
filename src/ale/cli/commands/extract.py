@@ -67,16 +67,25 @@ def extract(
     kind: Annotated[
         SourceKind | None, typer.Option("--kind", help="Only this kind of source.")
     ] = None,
+    force: Annotated[
+        bool, typer.Option("--force", help="Re-extract every status, including excluded units.")
+    ] = False,
     no_vlm: Annotated[
         bool,
         typer.Option("--no-vlm", help="Label rooms from drawing text only (no VLM call)."),
     ] = False,
 ) -> None:
     """Extract geometry and labels from ingested sources."""
+    if force and only_new:
+        raise typer.BadParameter("--force et --only-new sont incompatibles.")
     ws = open_workspace_or_exit(ctx, require_workspace(workspace))
     try:
         report = run_extract(
-            ws, only_new=only_new, kind=None if kind is None else kind.value, no_vlm=no_vlm
+            ws,
+            only_new=only_new,
+            kind=None if kind is None else kind.value,
+            no_vlm=no_vlm,
+            force=force,
         )
     except WorkspaceError as exc:
         for line in exc.lines:

@@ -99,7 +99,7 @@ def test_V202_raster_extent(tmp_path: Path) -> None:
     png, extent = plan_image(plan, config=CONFIG, bitmap=image)
 
     h, w = image.shape
-    assert extent == (0.0, 0.0, float(w), float(h))
+    assert extent == (-0.5, -0.5, w - 0.5, h - 0.5)
     assert np.array_equal(_decode(png), image)  # the bitmap the reader traced
     # R1 (right-top) and R3 (right-bottom) share their x range: rows must not be flipped.
     for room_id in ("R1", "R3"):

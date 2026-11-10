@@ -8,7 +8,9 @@ maps back to the plan with :func:`ale.labels.bbox.normalized_to_native`.
 Per source kind:
 
 * ``RASTER`` / ``PDF_SCANNED``: the bitmap the raster reader traced (``bitmap``, or
-  reloaded from ``source``), ``extent = (0, 0, W, H)``, plan frame ``Y_DOWN``.
+  reloaded from ``source``), ``extent = (-0.5, -0.5, W - 0.5, H - 0.5)``,
+  plan frame ``Y_DOWN``. The reader puts pixel centres on integer native coordinates;
+  these are the exact outer pixel edges, not the first/last pixel centres.
 * ``PDF_VECTOR``: the page rendered with PyMuPDF at ``dpi`` (default
   ``config.extract.raster_dpi``), ``extent`` = the page box in points.
 * ``DXF`` / ``DWG``: drawn with Pillow from the plan geometry (walls black 2 px, doors red,
@@ -65,7 +67,7 @@ class RenderError(ValueError):
 
 
 def bitmap_image(bitmap: Any) -> tuple[bytes, Extent]:
-    """PNG of a ``uint8``/``uint16`` array (grey, BGR or BGRA) and ``(0, 0, W, H)``."""
+    """PNG of a ``uint8``/``uint16`` array (grey, BGR or BGRA) and its outer pixel-edge extent."""
     import cv2
     import numpy as np
 
@@ -76,7 +78,7 @@ def bitmap_image(bitmap: Any) -> tuple[bytes, Extent]:
     if not ok:  # pragma: no cover - cv2 encodes any 8/16-bit grey or colour array
         raise RenderError("cannot encode the bitmap as PNG")
     height, width = int(arr.shape[0]), int(arr.shape[1])
-    return bytes(data.tobytes()), (0.0, 0.0, float(width), float(height))
+    return bytes(data.tobytes()), (-0.5, -0.5, width - 0.5, height - 0.5)
 
 
 def _load_bitmap(source: Path, kind: SourceKind, page: int, dpi: int) -> Any:
