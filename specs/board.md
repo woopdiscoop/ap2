@@ -40,7 +40,7 @@ Maintained by the Router only. Directive: `specs/DIRECTIVE.md` (v2.2, supersedes
 | R.5 | Adjacencies from the functional programme (Claude, reviewed) | QUEUED | user: functional programme | roadmap | |
 | R.6 | Visual critique of a variant (Claude, advisory) | **IN-PROGRESS** | — | RD + eval | |
 | R.8 | Depth/shape rules learned from built plans | QUEUED | Q.4 | roadmap | User decision U-9. |
-| R.7 | VLM geometry reader for raster plans | READY | X.1 done | roadmap | |
+| R.7 | VLM geometry reader for raster plans | **IN-PROGRESS** | X.1 done | roadmap | |
 | M.1–3 | Multi-storey: stacking → blocking → shared cores (v2) | PROPOSED | user approval (scope) | roadmap | |
 | P.1 | Claude VLM provider | **DONE** | 3c9db4e | RD + eval + eval_report | User decision U-8: VLM = Claude (claude-opus-5-5, effort low, structured output, no sampling params, cached). |
 | I.1 | Integration: PDF/raster extract, labels, scale, `ale review` | **DONE** | — | RD + eval | Assigned to an external Codex agent; PR to be reviewed by the Router. |
