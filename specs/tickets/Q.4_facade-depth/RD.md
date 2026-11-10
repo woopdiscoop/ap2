@@ -28,3 +28,11 @@ depth > limit, with no tolerance. In modules the limit is `floor(max_depth_m · 
 ## 5. Out of scope
 Splitting open spaces into several rooms (the programme defines rooms; we never add spaces). Two-façade "through"
 blocks are allowed only where the grammar already produces them (1-block bands at the piece boundary).
+
+## 6. Scope change (user, 2026-11-10)
+The 7.20 m depth is not absolute: rooms may be deeper, and the limit is to be tuned from the corpus of built plans
+(ticket R.8). New `FacadeConfig.max_depth_hard: bool = False`. Default behaviour of the rule = **soft**: `FACADE_DEPTH`
+reported but not hard, cost term `facade_depth` (weight in `[optimizer.weights]`, default 1.0) =
+Σ max(0, depth − limit)/limit over `needs_facade` rooms ÷ number of rooms; ASPECT stays hard. With
+`max_depth_hard = true` the rule behaves as §2–§4 (hard depth, soft aspect for deep rooms). D03–D05 run in hard mode;
+new D08 checks the soft mode.

@@ -35,10 +35,11 @@ Maintained by the Router only. Directive: `specs/DIRECTIVE.md` (v2.2, supersedes
 | X.1 | `ale extract --force` + exact raster extent | READY (Codex) | I.2 | RD + eval | I.2 follow-ups; independent of P.2/Q.3/Q.4 files. |
 | R.1 | Multi-start annealing (stable quality) | READY (after Q.4) | Q.4 | roadmap | See `specs/design/research_roadmap.md`. |
 | R.2 | Non-dominated variant set + diversity score | QUEUED | R.1 | roadmap | |
-| R.3 | Space-syntax measures in the report | QUEUED | — | roadmap | |
+| R.3 | Space-syntax measures in the report | **IN-PROGRESS** | — | RD + eval | |
 | R.4 | Plain-language explanation per variant | QUEUED | R.3 | roadmap | |
 | R.5 | Adjacencies from the functional programme (Claude, reviewed) | QUEUED | user: functional programme | roadmap | |
-| R.6 | Visual critique of a variant (Claude, advisory) | QUEUED | — | roadmap | |
+| R.6 | Visual critique of a variant (Claude, advisory) | **IN-PROGRESS** | — | RD + eval | |
+| R.8 | Depth/shape rules learned from built plans | QUEUED | Q.4 | roadmap | User decision U-9. |
 | R.7 | VLM geometry reader for raster plans | QUEUED | X.1 | roadmap | |
 | M.1–3 | Multi-storey: stacking → blocking → shared cores (v2) | PROPOSED | user approval (scope) | roadmap | |
 | P.1 | Claude VLM provider | **DONE** | 3c9db4e | RD + eval + eval_report | User decision U-8: VLM = Claude (claude-opus-5-5, effort low, structured output, no sampling params, cached). |
@@ -64,6 +65,7 @@ with ground truth. The Router will issue an annotation template before Phase 1.
 | U-5 | **More room types.** | Taxonomy v1.1: 25 → 75 types (retail, food service, education, health, sport, culture, services, outdoor), from Uniclass 2015 SL + French ERP types. Seed template: 23 core types active, 49 optional types listed commented-out. |
 | U-6 | **Corridor grammar** for circulation (instead of a free slicing tree + penalty). | Every room touches a corridor by construction; circulation always connected. Spine per footprint piece, blocks of room bays / finger bays; L shapes via J1 (corner finger) / J2 (collinear spines). Replaces directive §3.B.1 free tree and 3.4 moves M1–M3 with grammar moves G1–G6. Design: `specs/design/corridor_grammar.md`. Contract amendment A.1. |
 | U-7 | **Bands**: several parallel corridors per piece, joined by a connector corridor. | Deep plates (P60's 30 m piece) become feasible. Contract amendment A.2 (CorridorPlan /2, contracts 1.2.0), then 3.3 rework. Design note §8. |
+| U-9 | **Façade depth 7.20 m is not absolute**: rooms may be deeper; limits are tuned from the corpus of built plans. | Q.4 → soft rule by default (`max_depth_hard = false`); R.8 learns per-type depth from the corpus. |
 | U-8 | **VLM provider = Claude** (Anthropic API); Router to draft seed rulebook values for architect review. | O-3 resolved. Ticket P.1. Seed draft in 0.3. |
 | U-3 | **Corridor minimum width 1.2 m.** | `circulation.min_width_m` default 1.8 → 1.2 m (12 modules). |
 
