@@ -55,8 +55,14 @@ With `--courtyard` (19 x 19 cells): ranks 06 (open), 02 (open), 04 (enclosed), 0
 
 ## Gates
 
-See the final report of the worker for the numbers (ruff, format, mypy strict, coverage, whole
-suite).
+- ruff check: clean. ruff format --check: 273 files already formatted. mypy strict on `src`: no issues (133 files).
+- `python -m ale.contracts.lock --check`: OK.
+- Whole suite once under `--cov=src/ale`: 1408 passed, 13 skipped, 3 xfailed (pre-existing), 1 failed
+  (`test_P08_cli_registration_only`, which diffs `src/ale/cli/__init__.py` while the registration was
+  still uncommitted; it passes on the committed tree). Total coverage 98 %.
+- Coverage of `ale.form`: `grow.py` 98 %, `metrics.py` 100 %, `outline.py` 99 %, `__init__.py` 100 %
+  (path form `src/ale/form/`), `cli/commands/form.py` 97 %.
+- The whole suite takes 77 min under coverage in this environment (not caused by G.3: `tests/form` runs in about 20 s).
 
 ## Spec issues
 
