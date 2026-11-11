@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import re
 import zipfile
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
@@ -130,7 +131,12 @@ def write_programme_xlsx(program: Program, path: Path) -> Path:
             zi = zipfile.ZipInfo(info.filename, date_time=_FIXED_ZIP_TIME)
             zi.compress_type = zipfile.ZIP_DEFLATED
             zi.external_attr = 0o600 << 16
-            zout.writestr(zi, zin.read(info.filename))
+            data = zin.read(info.filename)
+            if info.filename == "docProps/core.xml":  # openpyxl stamps the save time
+                data = re.sub(
+                    rb"(<dcterms:modified[^>]*>)[^<]*", rb"\g<1>2026-01-01T00:00:00Z", data
+                )
+            zout.writestr(zi, data)
     path.write_bytes(out.getvalue())
     return path
 

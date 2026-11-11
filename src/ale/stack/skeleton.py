@@ -243,6 +243,8 @@ def _place(
         length = 1 + _demand(needs, d)
         for axis in ("x", "y"):
             sx, sy = (length, d) if axis == "x" else (d, length)
+            if sx * sy > len(valid):
+                continue
             for order, rect in _candidates(core, sx, sy):
                 if not all(c in valid for c in rect_cells(rect)):
                     continue

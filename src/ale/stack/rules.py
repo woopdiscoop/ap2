@@ -44,7 +44,8 @@ class StackRules:
 
 def _parse_groups(data: dict[str, Any], errors: list[str]) -> dict[str, tuple[str, ...]]:
     groups: dict[str, tuple[str, ...]] = {}
-    raw = data.get("groups") or {}
+    raw = data.get("groups", {})
+    raw = {} if raw is None else raw
     if not isinstance(raw, dict):
         errors.append("Règles d'empilement : « groups » doit être un dictionnaire.")
         return groups
@@ -60,7 +61,8 @@ def _parse_groups(data: dict[str, Any], errors: list[str]) -> dict[str, tuple[st
 
 def _parse_pins(data: dict[str, Any], errors: list[str]) -> dict[str, str | int]:
     pins: dict[str, str | int] = {}
-    raw = data.get("pins") or {}
+    raw = data.get("pins", {})
+    raw = {} if raw is None else raw
     if not isinstance(raw, dict):
         errors.append("Règles d'empilement : « pins » doit être un dictionnaire.")
         return pins
@@ -88,7 +90,8 @@ def parse_rules(data: Any) -> StackRules:
     groups = _parse_groups(data, errors)
     pins = _parse_pins(data, errors)
     together: list[tuple[str, str]] = []
-    raw_together = data.get("together") or []
+    raw_together = data.get("together", [])
+    raw_together = [] if raw_together is None else raw_together
     if not isinstance(raw_together, list):
         errors.append("Règles d'empilement : « together » doit être une liste de paires.")
         raw_together = []

@@ -3,15 +3,18 @@
 A *unit* is one room instance. Units are grouped (default: the letters before the digits of the
 room id); wet rooms are left out (they form the wet stack, :mod:`ale.stack.skeleton`). The
 objective is a tuple ``(hard_count, hard_m2, soft)`` minimised lexicographically; the method is a
-deterministic greedy placement followed by best-improvement local search.
+deterministic greedy placement followed by best-improvement local search (moves: a group to
+another floor, two groups swapped, one unit moved, two units swapped), restarted from each
+"everything on one floor" start and from a few seeded perturbations.
 """
 
 from __future__ import annotations
 
+import random
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
-from itertools import product
+from itertools import combinations, product
 from typing import NamedTuple
 
 from ale.contracts.models import RoomSpec
@@ -38,6 +41,10 @@ W_CONTIGUITY = 2000.0
 W_TOGETHER = 300.0
 W_IMBALANCE = 400.0
 _MAX_ITER = 10_000
+_SWAP_LIMIT = 60
+_SMALL = 12
+_KICKS_SMALL = 150
+_KICKS_LARGE = 4
 _EPS = 1e-9
 
 
@@ -351,6 +358,12 @@ def _moves(p: Problem, assign: list[int]) -> list[list[int]]:
                     cand = list(assign)
                     cand[i] = f
                     out.append(cand)
+        if len(free) <= _SWAP_LIMIT:
+            for a, b in combinations(free, 2):
+                if assign[a] != assign[b]:
+                    cand = list(assign)
+                    cand[a], cand[b] = cand[b], cand[a]
+                    out.append(cand)
     return out
 
 
@@ -373,8 +386,22 @@ def solve(p: Problem) -> Stacking:
     """Greedy placement then local search until no move improves (deterministic)."""
     if not p.units:
         return Stacking(p, (), Score(0, 0.0, 0.0))
-    assign = _search(p, _greedy(p))
-    return Stacking(p, tuple(assign), evaluate(p, assign))
+    starts = [_greedy(p)]
+    for f in range(p.n_floors):  # deterministic restarts: every free unit on one floor
+        starts.append(
+            [f if p.fixed_level(i) is None else p.fixed_level(i) or 0 for i in range(len(p.units))]
+        )
+    best = min((evaluate(p, a), a) for a in (_search(p, s) for s in starts))
+    free = _free(p)
+    if free and not p.keep_whole:
+        rng = random.Random(0)  # fixed seed: deterministic perturbations
+        for _ in range(_KICKS_SMALL if len(free) <= _SMALL else _KICKS_LARGE):
+            cand = list(best[1])
+            for i in rng.sample(free, min(len(free), rng.randint(2, 3))):
+                cand[i] = rng.randrange(p.n_floors)
+            sol = _search(p, cand)
+            best = min(best, (evaluate(p, sol), sol))
+    return Stacking(p, tuple(best[1]), best[0])
 
 
 def brute_force(p: Problem) -> Score:
