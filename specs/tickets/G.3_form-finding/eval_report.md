@@ -11,28 +11,31 @@ south edge, two cores (stair 3.0 x 3.6 m, lift 3.0 x 3.0 m), programme of 30 roo
 | ID | Test | Result |
 |---|---|---|
 | G301 | `test_g301_one_mass` | pass: 6 candidates, one connected building (independent flood fill), outside connected to the streets (independent check + `outside_cells_connected`), no room cell closer to an edge than its setback (shapely distance) |
-| G302 | `test_g302_areas` | pass: every room reaches its cell count in all 6 candidates, shortfall count in the metrics equals the recount, core cells untouched (55 core cells) |
+| G302 | `test_g302_areas` | pass: the shortfall reported in the metrics equals the recount; 4 of 6 candidates have every room at its count, 2 have one room short by at most 7 % of its cells (enclosed by other rooms); core cells untouched (55 core cells) |
 | G303 | `test_g303_anchors` | pass: the hall holds the front-line cell nearest the entrance, circulation touches both cores |
 | G304 | `test_g304_courtyard` | pass: 19 x 19 courtyard in the 6 candidates, 4 open (U) and 2 enclosed (hole of the outline); the state is checked against the polygon holes |
 | G305 | `test_g305_outline`, `test_g305_notches_are_removed` | pass for the 12 outlines (6 plain + 6 courtyard): one polygon, orthogonal, closed, on the 0.60 m grid, area equal to the simplified cells and within 1 % of the built cells (largest deviation 0.18 %), no notch narrower than 2 cells, vertices before/after reported |
 | G306 | `test_g306_yaml` | pass: `form_kk.yaml` loads as `SiteSpec` (mode footprint), cores equal, entrance snapped to the outline, `access_edge` valid |
 | G307 | `test_g307_deterministic` | pass: two fresh processes and the in-process run give byte-identical files (13 files); 6 distinct outlines for K = 6 |
 | G308 | `test_g308_ranking` | pass: `forms.md` order equals the sort by the RD section 5 key, recomputed independently from `form_kk.yaml` and the cell grid (short rooms, facade rooms without facade, rooms off circulation, vertices, compactness, footprint, coverage, facade length) |
+| G310 | `test_g310_contiguity` | pass: every room and the circulation zone is one 4-connected region in the 12 candidates (0 fragmented rooms); a room that cannot reach its count is reported short, never scattered |
 | G309 | `test_g309_gates` + gates below | pass: lock check OK; a P25-size case (25 rooms, plot 40 x 30 m) runs in well under 10 s per candidate (about 0.5 s); ruff, format, mypy and coverage below |
 
 ## K = 6 candidates on the test case (ranking order, no courtyard)
 
 | Rank | Candidate | Short rooms | Facade rooms without facade | Rooms off circulation | Vertices | Compactness | Footprint m2 | Facade m | Coverage |
 |---|---|---|---|---|---|---|---|---|---|
-| 1 | 05 | 0 | 0 | 6 | 58 | 1.174 | 818.6 | 134.4 | 0.469 |
-| 2 | 06 | 0 | 0 | 8 | 70 | 1.384 | 818.3 | 157.8 | 0.469 |
-| 3 | 04 | 0 | 0 | 10 | 76 | 1.405 | 818.6 | 159.0 | 0.469 |
-| 4 | 01 | 0 | 0 | 13 | 52 | 1.248 | 818.3 | 142.8 | 0.469 |
-| 5 | 03 | 0 | 0 | 15 | 62 | 1.291 | 913.0 | 156.0 | 0.523 |
-| 6 | 02 | 0 | 1 | 7 | 74 | 1.446 | 819.4 | 165.6 | 0.469 |
+| 1 | 04 | 0 | 0 | 17 | 128 | 2.114 | 821.5 | 238.8 | 0.469 |
+| 2 | 03 | 0 | 2 | 13 | 88 | 1.619 | 879.5 | 190.2 | 0.503 |
+| 3 | 06 | 0 | 6 | 12 | 50 | 1.362 | 820.1 | 154.2 | 0.469 |
+| 4 | 01 | 0 | 8 | 16 | 64 | 1.256 | 821.5 | 144.0 | 0.469 |
+| 5 | 05 | 1 | 6 | 13 | 78 | 1.612 | 821.2 | 184.8 | 0.469 |
+| 6 | 02 | 1 | 8 | 5 | 56 | 1.312 | 816.8 | 150.0 | 0.468 |
 
-With `--courtyard` (19 x 19 cells): ranks 06 (open), 02 (open), 04 (enclosed), 03 (open),
-01 (enclosed), 05 (open); vertices 78 to 104, compactness 1.81 to 1.98.
+Fragmented rooms in the 12 candidates (6 plain, 6 courtyard): 0.
+
+With `--courtyard` (19 x 19 cells): ranks 03 (enclosed), 02 (open), 05 (open), 01 (enclosed),
+04 (open), 06 (enclosed); vertices 72 to 104, compactness 1.78 to 2.15.
 
 ## Method notes (decisions inside the spec)
 
@@ -47,8 +50,12 @@ With `--courtyard` (19 x 19 cells): ranks 06 (open), 02 (open), 04 (enclosed), 0
   touches the cell, a flood fill from each outside neighbour must reach a street cell or a
   courtyard cell. A local-only test would forbid rooms from joining (a room closing a ring of
   a pocket that is still anchored elsewhere), so the global check decides the ambiguous cases.
-- Stuck rooms reseed on the mass edge (up to 8 times); circulation may exceed its 16 % target
-  (up to 3 times) when a core is not yet touched (reported as `circ_extra`).
+- A room is always ONE 4-connected region. A stuck room first takes one circulation cell next to it
+  (circulation stays in one piece, keeps its cores, keeps at least 75 %, 50 % as last resort), then
+  one cell from a neighbour that still has a free way out (the neighbour stays in one piece and
+  regrows elsewhere), then is released and reseeded as one piece on the mass edge (up to 10 times,
+  only when the outside stays connected). Otherwise it is reported short. Circulation may exceed its
+  16 % target (up to 3 times) when a core is not yet touched (reported as `circ_extra`).
 - Outline: notches (outside cell with building on two opposite sides) are filled, or the wall
   on one side is cut, whichever changes less area (tie: fill); cores are never cut, the building
   must stay in one piece and every outside cell must still reach the margin or a courtyard.
@@ -57,12 +64,10 @@ With `--courtyard` (19 x 19 cells): ranks 06 (open), 02 (open), 04 (enclosed), 0
 
 - ruff check: clean. ruff format --check: 273 files already formatted. mypy strict on `src`: no issues (133 files).
 - `python -m ale.contracts.lock --check`: OK.
-- Whole suite once under `--cov=src/ale`: 1408 passed, 13 skipped, 3 xfailed (pre-existing), 1 failed
-  (`test_P08_cli_registration_only`, which diffs `src/ale/cli/__init__.py` while the registration was
-  still uncommitted; it passes on the committed tree). Total coverage 98 %.
-- Coverage of `ale.form`: `grow.py` 98 %, `metrics.py` 100 %, `outline.py` 99 %, `__init__.py` 100 %
-  (path form `src/ale/form/`), `cli/commands/form.py` 97 %.
-- The whole suite takes 77 min under coverage in this environment (not caused by G.3: `tests/form` runs in about 20 s).
+- Whole suite once under `--cov=src/ale` (on the committed tree): 1410 passed, 13 skipped, 3 xfailed
+  (pre-existing), 0 failed, 75 min. Total coverage 98 %.
+- Coverage of `ale.form` (path form `src/ale/form/`): `grow.py` 97 %, `metrics.py` 100 %, `outline.py` 99 %,
+  `__init__.py` 100 %; `cli/commands/form.py` 97 %.
 
 ## Spec issues
 
@@ -87,3 +92,7 @@ With `--courtyard` (19 x 19 cells): ranks 06 (open), 02 (open), 04 (enclosed), 0
 6. **Courtyard size** is 19 x 19 cells by default and is reduced to half the shorter side of the
    buildable zone when the zone is too small for it (minimum 3 cells); the RD does not say what
    to do then.
+7. **G310 added by the Router** (contiguity: every room and the circulation zone is one 4-connected
+   region). Consequence for G302: a room enclosed by others can end a few cells short, which is
+   reported (`short` in the metrics and `forms.md`); the circulation may give cells to stuck rooms
+   (not below 50 % of its target, tested), so `Rooms off circulation` is higher than before.
