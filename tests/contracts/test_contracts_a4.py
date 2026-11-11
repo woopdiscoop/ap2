@@ -64,7 +64,7 @@ def _digest(model: object) -> str:
 
 # ------------------------------------------------------------------------------ A401
 def test_A401_version_and_locks() -> None:
-    assert CONTRACTS_VERSION == "1.5.0"
+    assert CONTRACTS_VERSION == "1.6.0"
     assert lock.main(["--check"]) == 0
     assert export_schemas.main(["--check"]) == 0
     site = json.loads((export_schemas.SCHEMA_DIR / "SiteSpec.schema.json").read_text("utf-8"))

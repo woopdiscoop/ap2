@@ -89,7 +89,9 @@ def fp(pts: tuple[tuple[int, int], ...]) -> FootprintPieces:
 
 
 def test_K01_version() -> None:
-    assert CONTRACTS_VERSION == "1.5.0"  # superseded by A.3 (I01), Q.4 (D01), then A.4 (A401)
+    assert (
+        CONTRACTS_VERSION == "1.6.0"
+    )  # superseded by A.3 (I01), Q.4 (D01), A.4 (A401), then G.1 (N01)
 
 
 # SHA-256 of the contract files as frozen at 1.0.0 (CONTRACTS.lock before amendment A.1),
@@ -138,11 +140,15 @@ def test_K02_existing_unchanged() -> None:
     changed = sorted(rel for rel, digest in FROZEN_1_0_0.items() if current.get(rel) != digest)
     # Amendment Q.4 (contracts 1.4.0) adds ``FacadeConfig.max_depth_m`` (config model and its
     # schema); amendment A.4 (contracts 1.5.0) adds the site / room anchors (models.py and the
-    # Program, RoomSpec and SiteSpec schemas; checked in tests/contracts/test_contracts_a4).
+    # Program, RoomSpec and SiteSpec schemas; checked in tests/contracts/test_contracts_a4);
+    # amendment G.1 (contracts 1.6.0) adds ``ModulePolygon.holes`` (geometry.py and the Layout
+    # schema that embeds it).
     assert changed == [
         "config.py",
         "config.schema.json",
+        "geometry.py",
         "models.py",
+        "schemas/Layout.schema.json",
         "schemas/Program.schema.json",
         "schemas/RoomSpec.schema.json",
         "schemas/SiteSpec.schema.json",
@@ -205,8 +211,8 @@ def test_K03_roundtrip() -> None:
     ("build", "match"),
     [
         (lambda: plan(piece([room("R1"), finger(left=("R1",))])), "more than once: R1"),
-        (lambda: plan(piece([room("R1")]), piece([room("R2")]), piece([room("R3")])), "1 or 2"),
-        (lambda: plan(), "1 or 2"),
+        (lambda: plan(*(piece([room(f"R{k}")]) for k in range(13))), "1 to 12"),
+        (lambda: plan(), "1 to 12"),
         (lambda: plan(piece([finger()])), "at least one room"),
         (lambda: plan(piece([finger(junction=True)])), "2-piece"),
         (
@@ -222,7 +228,7 @@ def test_K03_roundtrip() -> None:
     ],
     ids=[
         "duplicate",
-        "three_pieces",
+        "thirteen_pieces",
         "zero_pieces",
         "empty_finger",
         "junction_1_piece",
@@ -357,7 +363,9 @@ BASE_REV = "3dcd970"  # spec commit of Ticket A.2, before the amendment
 
 
 def test_B01_version_schema() -> None:
-    assert CONTRACTS_VERSION == "1.5.0"  # superseded by A.3 (I01), Q.4 (D01), then A.4 (A401)
+    assert (
+        CONTRACTS_VERSION == "1.6.0"
+    )  # superseded by A.3 (I01), Q.4 (D01), A.4 (A401), then G.1 (N01)
     # ``pieces`` is required, so the default is read from the field (CorridorPlan() is invalid).
     assert CorridorPlan.model_fields["schema_version"].default == "ale.corridor_plan/2"
     assert plan(piece([room("R1")])).schema_version == "ale.corridor_plan/2"
@@ -372,6 +380,30 @@ A4_REPLACED_LINES = {
     "-        if v != 0:",
     '-            raise ValueError("floor must be 0 in v1")',
     '-    """Buildable site (metres, y-up)."""',
+}
+
+
+#: Lines of ``footprint.py`` / ``geometry.py`` that amendment G.1 (contracts 1.6.0) replaced
+#: (the N-piece decomposition and courtyard holes; the rectangle / L logic is unchanged).
+G1_REPLACED_LINES = {
+    "-from pydantic import BaseModel, ConfigDict",
+    '-__all__ = ["FootprintPieces", "Piece", "decompose_footprint"]',
+    '-UNSUPPORTED_MESSAGE = "v1 supports rectangular and L-shaped footprints only"',
+    "-    ``pieces``: primary first (one piece for a rectangle, two for an L). ``cut``: endpoints"
+    " of",
+    "-    the shared cut segment (lower/left endpoint first), ``None`` for a rectangle.",
+    '-    ``facing_block``: J1 only, the block of the primary (``"A"`` lower/left, ``"B"``',
+    "-    upper/right) that faces the cut.",
+    '-        junction="J1" if parallel else "J2",',
+    '-    """Decompose a rectangular or L-shaped module footprint into 1 or 2 pieces.',
+    "-    secondary spine perpendicular to the cut line. Raises ``ValueError`` for any other vertex"
+    " count.",
+    "-    if len(pts) == 4:",
+    "-    if len(pts) == 6:",
+    "-    raise ValueError(UNSUPPORTED_MESSAGE)",
+    '-        """Area in module² cells (exact shoelace)."""',
+    "-        return _signed_area2(self.exterior) // 2",
+    "-        return shapely.Polygon(g.exterior)",
 }
 
 
@@ -390,7 +422,10 @@ def test_B02_footprint_unchanged() -> None:
     )
     if proc.returncode != 0:  # pragma: no cover - not a git checkout / revision unknown
         pytest.skip(f"git diff unavailable: {proc.stderr.strip()}")
-    assert proc.stdout == ""
+    removed_fp = {
+        line for line in proc.stdout.splitlines() if line.startswith("-") and line[:3] != "---"
+    }
+    assert removed_fp <= G1_REPLACED_LINES
     models = subprocess.run(
         ["git", "diff", BASE_REV, "--", "src/ale/contracts/models.py"],
         cwd=REPO_ROOT,
@@ -722,7 +757,7 @@ def inner2(a0: list[Any], a1: list[Any]) -> PiecePlan:
 
 
 def test_I01_version_schema() -> None:
-    assert CONTRACTS_VERSION == "1.5.0"  # superseded by Q.4 (D01), then A.4 (A401)
+    assert CONTRACTS_VERSION == "1.6.0"  # superseded by Q.4 (D01), A.4 (A401), then G.1 (N01)
     assert export_schemas.main(["--check"]) == 0
     assert lock.main(["--check"]) == 0
     schema = json.loads(

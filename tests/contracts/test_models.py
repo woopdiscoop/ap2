@@ -34,7 +34,7 @@ from ale.contracts.enums import (
     SourceKind,
     fidelity_of,
 )
-from ale.contracts.footprint import decompose_footprint
+from ale.contracts.footprint import Junction, decompose_footprint
 from ale.contracts.geometry import (
     LineString,
     ModulePolygon,
@@ -167,6 +167,7 @@ def _instances(h: SimpleNamespace) -> list[BaseModel]:
         h.make_site(),
         Entrance(point=(0.0, 0.0), label="Principale", main=True),
         CoreSpec(id="C1", rect=(1.0, 1.0, 2.0, 2.0), kind="stair"),
+        Junction(parent=0, child=1, kind="J1", cut=((0, 0), (0, 1)), facing_block="A"),
         layout,
         layout.grid,
         layout.rooms[0],
