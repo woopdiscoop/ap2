@@ -150,12 +150,23 @@ def _n0(ctx: Ctx, p: int) -> int:
     return max(1, min(MAX_BANDS, round(Fraction(depth - ctx.k.s, 2 * d_t + ctx.k.s))))
 
 
+def _single_band(fp: FootprintPieces, p: int) -> bool:
+    """G.1: in a footprint of more than two pieces, a J1 child and every piece incident to a
+    J2 junction has exactly one band."""
+    if len(fp.pieces) <= 2:
+        return False
+    return any(
+        (j.kind == "J1" and j.child == p) or (j.kind == "J2" and p in (j.parent, j.child))
+        for j in fp.junctions
+    )
+
+
 def _allowed(ctx: Ctx) -> list[list[int]]:
     """Band-count candidates per piece: ``{n0-1, n0, n0+1} ∩ [1, 6]`` (J1 secondary: 1),
     dropping counts whose spines alone exceed the piece depth."""
     out: list[list[int]] = []
     for p, piece in enumerate(ctx.fp.pieces):
-        if ctx.fp.junction == "J1" and p == 1:
+        if (ctx.fp.junction == "J1" and p == 1) or _single_band(ctx.fp, p):
             out.append([1])
             continue
         n0 = _n0(ctx, p)
@@ -255,11 +266,28 @@ def _path_position(
     return 0.0 if best is None else best[1]
 
 
-def _junction_slot(ctx: Ctx, counts: Sequence[int]) -> Slot | None:
-    if ctx.fp.junction != "J1":
-        return None
-    facing = ctx.fp.facing_block or "A"
-    return (0, 0 if facing == "A" else counts[0] - 1, facing)
+def _junction_slots(ctx: Ctx, counts: Sequence[int]) -> list[tuple[Slot, int | None, int]]:
+    """``(block, child, child piece)`` of every junction finger to place: the L's single one
+    (``child`` ``None``, as before G.1) or one per J1 child of a tree of pieces."""
+    fp = ctx.fp
+    if len(fp.pieces) > 2:
+        return [
+            (
+                (
+                    j.parent,
+                    0 if j.facing_block == "A" else counts[j.parent] - 1,
+                    j.facing_block or "A",
+                ),
+                j.child,
+                j.child,
+            )
+            for j in fp.junctions
+            if j.kind == "J1"
+        ]
+    if fp.junction != "J1":
+        return []
+    facing = fp.facing_block or "A"
+    return [((0, 0 if facing == "A" else counts[0] - 1, facing), None, 1)]
 
 
 def assign(
@@ -276,8 +304,11 @@ def assign(
     depths0 = block_depths(ctx, draft)
     segs = _segments(ctx, draft, depths0)
     slots = [seg[0] for seg in segs]
-    jslot = _junction_slot(ctx, counts)
-    caps = {sl: usable_length(ctx, draft, sl[0]) - (ctx.k.s if sl == jslot else 0) for sl in slots}
+    jslots = _junction_slots(ctx, counts)
+    caps = {
+        sl: usable_length(ctx, draft, sl[0]) - ctx.k.s * sum(1 for j in jslots if j[0] == sl)
+        for sl in slots
+    }
     centers: dict[Slot, float] = {}
     offset = 0.0
     for sl, a, b in segs:
@@ -295,8 +326,8 @@ def assign(
     draft.depths, draft.blocks, draft.estimate = fill_blocks(
         ctx, bands, slots, caps, ppos, centers, fixed, facade, outer
     )
-    if jslot is not None:
-        _place_junction(ctx, draft, jslot, Fraction(max(1, draft.depths[jslot])))
+    for jslot, child, piece in sorted(jslots, key=lambda j: _junction_target(ctx, draft, j)):
+        _place_junction(ctx, draft, jslot, Fraction(max(1, draft.depths[jslot])), child, piece)
     return draft
 
 
@@ -350,20 +381,72 @@ def _resplit(ctx: Ctx, draft: Draft, slot: Slot, room: str, pos: Positions) -> D
     return None if out.blocks == draft.blocks else out
 
 
-def _place_junction(ctx: Ctx, draft: Draft, slot: Slot, depth: Fraction) -> None:
-    """Insert the J1 junction finger where the secondary spine falls mid-depth."""
-    primary, secondary = ctx.fp.pieces
+def _junction_window(
+    ctx: Ctx, draft: Draft, jslot: tuple[Slot, int | None, int]
+) -> tuple[int, int]:
+    """Block-local ``u`` range ``[lo, hi]`` where a finger to a child piece may start: inside
+    the cut and putting the child's spine inside the child."""
+    slot, child, piece = jslot
+    parent = ctx.fp.pieces[slot[0]]
+    secondary = ctx.fp.pieces[piece]
     s = ctx.k.s
-    u0 = s if draft.connectors[0] == "start" else 0
+    u0 = s if draft.connectors[slot[0]] == "start" else 0
+    base = along_origin(parent) + u0
+    lo_c = across_origin(secondary)
+    lo, hi = lo_c, lo_c + frame(secondary)[1] - s
+    if child is not None:
+        junction = ctx.fp.parent_junction(child)
+        assert junction is not None
+        (x0, y0), (x1, y1) = junction.cut
+        cut_lo, cut_hi = (x0, x1) if y0 == y1 else (y0, y1)
+        lo, hi = max(lo, cut_lo), min(hi, cut_hi - s)
+    return lo - base, hi - base
+
+
+def _junction_target(ctx: Ctx, draft: Draft, jslot: tuple[Slot, int | None, int]) -> int:
+    """Block-local ``u`` where the finger to a child piece should start: the child's spine
+    mid-depth, kept inside the window of a tree of pieces."""
+    slot, child, piece = jslot
+    parent = ctx.fp.pieces[slot[0]]
+    secondary = ctx.fp.pieces[piece]
+    s = ctx.k.s
+    u0 = s if draft.connectors[slot[0]] == "start" else 0
     sec_depth = frame(secondary)[1]
-    target = across_origin(secondary) + (sec_depth - s) // 2 - along_origin(primary) - u0
+    target = across_origin(secondary) + (sec_depth - s) // 2 - along_origin(parent) - u0
+    if child is not None:
+        lo, hi = _junction_window(ctx, draft, jslot)
+        target = max(lo, min(target, hi))
+    return target
+
+
+def _place_junction(
+    ctx: Ctx,
+    draft: Draft,
+    slot: Slot,
+    depth: Fraction,
+    child: int | None = None,
+    piece: int = 1,
+) -> None:
+    """Insert the J1 junction finger where the child's spine falls mid-depth (a tree of
+    pieces: at a bay boundary inside the finger window when there is one)."""
+    jslot = (slot, child, piece)
+    target = _junction_target(ctx, draft, jslot)
     bays = draft.blocks[slot]
-    best = (abs(target), 0)
+    cands = [(abs(target), 0)]
     cum = 0
     for i, bay in enumerate(bays):
         cum += ctx.bay_width(bay, depth)
-        best = min(best, (abs(target - cum), i + 1))
-    bays.insert(best[1], FingerBay(junction=True))
+        cands.append((abs(target - cum), i + 1))
+    if child is not None:
+        lo, hi = _junction_window(ctx, draft, jslot)
+        ends = [0]
+        cum = 0
+        for bay in bays:
+            cum += ctx.bay_width(bay, depth)
+            ends.append(cum)
+        inside = [c for c, end in zip(cands, ends, strict=True) if lo <= end <= hi]
+        cands = inside or cands
+    bays.insert(min(cands)[1], FingerBay(junction=True, junction_to=child))
 
 
 # ---------------------------------------------------------------------- search
@@ -640,10 +723,8 @@ def _swap(draft: Draft, a: str, b: str) -> Draft:
                 new.append(RoomBay(room=rename(bay.room)))
             else:
                 new.append(
-                    FingerBay(
-                        left=tuple(rename(r) for r in bay.left),
-                        right=tuple(rename(r) for r in bay.right),
-                        junction=bay.junction,
+                    bay.with_rooms(
+                        tuple(rename(r) for r in bay.left), tuple(rename(r) for r in bay.right)
                     )
                 )
         out.blocks[slot] = new

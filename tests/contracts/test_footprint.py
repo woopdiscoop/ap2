@@ -174,18 +174,14 @@ def test_F04_orientations_distinct() -> None:
 
 
 def test_F05_unsupported() -> None:
-    u_shape: Pts = (
-        (0, 0),
-        (300, 0),
-        (300, 300),
-        (200, 300),
-        (200, 100),
-        (100, 100),
-        (100, 300),
-        (0, 300),
-    )
-    with pytest.raises(ValueError, match="v1 supports rectangular and L-shaped footprints only"):
-        decompose(u_shape)
+    # A.1 rejected every footprint beyond an L; since G.1 only those needing > 12 pieces fail
+    # (a staircase of 14 steps needs 14 pieces).
+    n = 14
+    stair: list[tuple[int, int]] = [(0, 0), (n, 0)]
+    for k in range(n):
+        stair += [(n - k, k + 1), (n - k - 1, k + 1)]
+    with pytest.raises(ValueError, match="cannot be decomposed into at most 12 rectangles"):
+        decompose(tuple(stair))
 
 
 def test_F05_models_strict() -> None:

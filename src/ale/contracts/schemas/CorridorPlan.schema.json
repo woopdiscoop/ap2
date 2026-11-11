@@ -68,12 +68,24 @@
     },
     "FingerBay": {
       "additionalProperties": false,
-      "description": "A bay holding a corridor finger with a stack of rooms on each side.\n\n``left`` is the stack before the finger along the spine, ``right`` the stack after it;\nboth ordered from the spine outward. ``junction`` is ``True`` only for the L-shape J1\njunction finger. A non-junction finger has at least one room.",
+      "description": "A bay holding a corridor finger with a stack of rooms on each side.\n\n``left`` is the stack before the finger along the spine, ``right`` the stack after it;\nboth ordered from the spine outward. ``junction`` is ``True`` only for a J1 junction\nfinger (the corridor link to a child piece). ``junction_to`` (Ticket G.1, contracts 1.6.0):\nthe index of the child piece the junction finger leads to; ``None`` keeps the L-shape\nmeaning (the only child) and is the only accepted value in a plan of at most two pieces\nunless it is 1. A non-junction finger has at least one room and no ``junction_to``.",
       "properties": {
         "junction": {
           "default": false,
           "title": "Junction",
           "type": "boolean"
+        },
+        "junction_to": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Junction To"
         },
         "kind": {
           "const": "finger",
@@ -155,7 +167,7 @@
     }
   },
   "additionalProperties": false,
-  "description": "Corridor-grammar plan: one :class:`PiecePlan` per footprint piece (1 or 2).\n\n``pieces`` are in the same order as ``FootprintPieces.pieces``. Every instance id appears\nexactly once; at most one junction finger, only in ``pieces[0]`` (any band) of a 2-piece\nplan.",
+  "description": "Corridor-grammar plan: one :class:`PiecePlan` per footprint piece (1 to 12).\n\n``pieces`` are in the same order as ``FootprintPieces.pieces``. Every instance id appears\nexactly once. A 2-piece plan has at most one junction finger, in ``pieces[0]``; a plan of\nmore than two pieces has junction fingers that all name their child (``junction_to``),\neach child at most once.",
   "properties": {
     "pieces": {
       "items": {

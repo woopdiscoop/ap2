@@ -243,10 +243,8 @@ def _rename(bay: Bay, mapping: Mapping[str, str]) -> Bay:
         return RoomBay(room=mapping.get(bay.room, bay.room))
     if isinstance(bay, ConnectorBay):
         return bay
-    return FingerBay(
-        left=tuple(mapping.get(r, r) for r in bay.left),
-        right=tuple(mapping.get(r, r) for r in bay.right),
-        junction=bay.junction,
+    return bay.with_rooms(
+        tuple(mapping.get(r, r) for r in bay.left), tuple(mapping.get(r, r) for r in bay.right)
     )
 
 
@@ -287,7 +285,7 @@ def _remove_room(block: Block, b: int, room: str) -> None:
     if not left and not right and not bay.junction:
         del block[b]
     else:
-        block[b] = FingerBay(left=left, right=right, junction=bay.junction)
+        block[b] = bay.with_rooms(left, right)
 
 
 def _insert_positions(
@@ -354,9 +352,9 @@ def g2_move_room(plan: CorridorPlan, ctx: MoveContext, rng: random.Random) -> Co
         stack = list(bay.left if side == "left" else bay.right)
         stack.insert(rng.randint(0, len(stack)), room)
         if side == "left":
-            block[i] = FingerBay(left=tuple(stack), right=bay.right, junction=bay.junction)
+            block[i] = bay.with_rooms(tuple(stack), bay.right)
         else:
-            block[i] = FingerBay(left=bay.left, right=tuple(stack), junction=bay.junction)
+            block[i] = bay.with_rooms(bay.left, tuple(stack))
     return _finish(plan, pieces, ctx)
 
 
@@ -483,11 +481,11 @@ def g6_flip_finger(plan: CorridorPlan, ctx: MoveContext, rng: random.Random) -> 
     options += [s for s, st in (("left", bay.left), ("right", bay.right)) if len(st) >= 2]
     choice = rng.choice(options)
     if choice == "flip":
-        new = FingerBay(left=bay.right, right=bay.left, junction=bay.junction)
+        new = bay.with_rooms(bay.right, bay.left)
     elif choice == "left":
-        new = FingerBay(left=bay.left[::-1], right=bay.right, junction=bay.junction)
+        new = bay.with_rooms(bay.left[::-1], bay.right)
     else:
-        new = FingerBay(left=bay.left, right=bay.right[::-1], junction=bay.junction)
+        new = bay.with_rooms(bay.left, bay.right[::-1])
     blocks[k][b] = new
     return _finish(plan, pieces, ctx)
 

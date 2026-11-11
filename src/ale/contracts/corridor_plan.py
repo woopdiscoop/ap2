@@ -22,6 +22,14 @@ L-shaped footprints
 L shapes: see ``footprint.decompose_footprint``; J1 = corridor turns the corner through a
 junction finger in the primary's facing block; J2 = collinear spines.
 
+Tree of pieces (contracts 1.6.0)
+--------------------------------
+Footprints with more than two pieces (T, U, H, comb, Z, courtyard rings) form a tree of pieces
+(``FootprintPieces.junctions``). Every J1 child is reached through one junction finger
+(``FingerBay(junction=True, junction_to=<child>)``) in its parent's band adjacent to the cut,
+in the parent's facing block; a parent may host several. In a plan of more than two pieces a
+J1 child has exactly one band and so has every piece incident to a J2 junction.
+
 Bands
 -----
 Bands: a piece is divided across its spine axis into bands stacked from min v upward; each band is
@@ -52,9 +60,18 @@ from __future__ import annotations
 
 from collections import Counter
 from collections.abc import Iterable, Iterator, Mapping
-from typing import TYPE_CHECKING, Annotated, Literal
+from typing import TYPE_CHECKING, Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, StrictStr, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictBool,
+    StrictInt,
+    StrictStr,
+    model_serializer,
+    model_validator,
+)
 
 from ale.contracts.enums import MacroZone
 
@@ -73,6 +90,9 @@ __all__ = [
     "RoomBay",
     "RoomPosition",
 ]
+
+MAX_PIECES = 12
+"""Maximum number of pieces in a plan (equals ``footprint.MAX_PIECES``)."""
 
 _CONFIG = ConfigDict(extra="forbid", frozen=True)
 
@@ -95,8 +115,11 @@ class FingerBay(BaseModel):
     """A bay holding a corridor finger with a stack of rooms on each side.
 
     ``left`` is the stack before the finger along the spine, ``right`` the stack after it;
-    both ordered from the spine outward. ``junction`` is ``True`` only for the L-shape J1
-    junction finger. A non-junction finger has at least one room.
+    both ordered from the spine outward. ``junction`` is ``True`` only for a J1 junction
+    finger (the corridor link to a child piece). ``junction_to`` (Ticket G.1, contracts 1.6.0):
+    the index of the child piece the junction finger leads to; ``None`` keeps the L-shape
+    meaning (the only child) and is the only accepted value in a plan of at most two pieces
+    unless it is 1. A non-junction finger has at least one room and no ``junction_to``.
     """
 
     model_config = _CONFIG
@@ -105,12 +128,30 @@ class FingerBay(BaseModel):
     left: tuple[InstanceId, ...] = ()
     right: tuple[InstanceId, ...] = ()
     junction: StrictBool = False
+    junction_to: StrictInt | None = None
 
     @model_validator(mode="after")
     def _non_empty(self) -> FingerBay:
         if not self.junction and not self.left and not self.right:
             raise ValueError("a non-junction finger bay needs at least one room")
+        if self.junction_to is not None and not self.junction:
+            raise ValueError("junction_to is only allowed on a junction finger")
+        if self.junction_to is not None and self.junction_to < 1:
+            raise ValueError("junction_to is a child piece index (>= 1)")
         return self
+
+    def with_rooms(self, left: tuple[str, ...], right: tuple[str, ...]) -> FingerBay:
+        """This finger with other stacks, keeping ``junction`` and ``junction_to``."""
+        return FingerBay(
+            left=left, right=right, junction=self.junction, junction_to=self.junction_to
+        )
+
+    @model_serializer(mode="wrap")
+    def _drop_unset_target(self, handler: Any) -> Any:
+        out = handler(self)
+        if isinstance(out, dict) and out.get("junction_to") is None:
+            out.pop("junction_to", None)
+        return out
 
 
 class ConnectorBay(BaseModel):
@@ -222,11 +263,12 @@ BayPosition = tuple[int, int, BlockName, int]
 
 
 class CorridorPlan(BaseModel):
-    """Corridor-grammar plan: one :class:`PiecePlan` per footprint piece (1 or 2).
+    """Corridor-grammar plan: one :class:`PiecePlan` per footprint piece (1 to 12).
 
     ``pieces`` are in the same order as ``FootprintPieces.pieces``. Every instance id appears
-    exactly once; at most one junction finger, only in ``pieces[0]`` (any band) of a 2-piece
-    plan.
+    exactly once. A 2-piece plan has at most one junction finger, in ``pieces[0]``; a plan of
+    more than two pieces has junction fingers that all name their child (``junction_to``),
+    each child at most once.
     """
 
     model_config = _CONFIG
@@ -237,12 +279,15 @@ class CorridorPlan(BaseModel):
     @model_validator(mode="after")
     def _valid(self) -> CorridorPlan:
         n = len(self.pieces)
-        if n not in (1, 2):
-            raise ValueError(f"a corridor plan has 1 or 2 pieces, got {n}")
+        if not 1 <= n <= MAX_PIECES:
+            raise ValueError(f"a corridor plan has 1 to {MAX_PIECES} pieces, got {n}")
         dup = sorted(k for k, c in Counter(self.room_ids()).items() if c > 1)
         if dup:
             raise ValueError(f"instance ids appear more than once: {', '.join(dup)}")
         junctions = self._junctions()
+        if n > 2:
+            self._check_tree_junctions(junctions)
+            return self
         if len(junctions) > 1:
             raise ValueError(f"at most one junction finger allowed, got {len(junctions)}")
         if junctions:
@@ -250,7 +295,27 @@ class CorridorPlan(BaseModel):
                 raise ValueError("a junction finger is only allowed in a 2-piece plan")
             if junctions[0][0] != 0:
                 raise ValueError("a junction finger is only allowed in pieces[0]")
+            if self._junction_targets(junctions) not in ([None], [1]):
+                raise ValueError("junction_to of a 2-piece plan must be 1")
         return self
+
+    def _junction_targets(self, positions: list[BayPosition]) -> list[int | None]:
+        bays = {pos: bay for pos, bay in self._bays()}
+        return [bay.junction_to for pos in positions if isinstance(bay := bays[pos], FingerBay)]
+
+    def _check_tree_junctions(self, positions: list[BayPosition]) -> None:
+        n = len(self.pieces)
+        targets = self._junction_targets(positions)
+        for pos, to in zip(positions, targets, strict=True):
+            if to is None:
+                raise ValueError(
+                    "a junction finger in a plan of more than two pieces needs junction_to"
+                )
+            if not pos[0] < to < n:
+                raise ValueError(f"junction_to {to} must be a later piece than the host {pos[0]}")
+        dup = sorted(k for k, c in Counter(targets).items() if k is not None and c > 1)
+        if dup:
+            raise ValueError(f"more than one junction finger leads to piece {dup[0]}")
 
     def _bays(self) -> Iterator[tuple[BayPosition, AnyBay]]:
         """Every bay with its ``(piece, band, block, bay)`` position, in plan order."""
@@ -351,6 +416,8 @@ class CorridorPlan(BaseModel):
             out.append(
                 f"plan has {len(self.pieces)} piece(s), footprint has {len(footprint.pieces)}"
             )
+        if len(footprint.pieces) > 2:
+            return tuple(sorted(out + self._check_tree(footprint)))
         for p, piece in enumerate(self.pieces):
             j2_secondary = footprint.junction == "J2" and p == 1
             if len(piece.bands) >= 2 and piece.connector == "none" and not j2_secondary:
@@ -369,6 +436,50 @@ class CorridorPlan(BaseModel):
                 role = ("primary", "secondary")[p]
                 out.append(f"{role} connector must be on the cut side ({side})")
         return tuple(sorted(out))
+
+    def _check_tree(self, footprint: FootprintPieces) -> list[str]:
+        """Tree rules (more than two pieces): connector for 2+ bands; one band for every J1
+        child and every piece incident to a J2 junction; one junction finger per J1 child, in
+        the parent's band adjacent to the cut and its block facing the cut; no other
+        junction fingers."""
+        out: list[str] = []
+        if len(self.pieces) != len(footprint.pieces):
+            return out
+        one_band: set[int] = set()
+        for j in footprint.junctions:
+            if j.kind == "J1":
+                one_band.add(j.child)
+            else:
+                one_band |= {j.parent, j.child}
+        for p, piece in enumerate(self.pieces):
+            if len(piece.bands) >= 2 and piece.connector == "none":
+                out.append(f"piece {p} has 2+ bands but no connector")
+            if p in one_band and len(piece.bands) != 1:
+                out.append(f"piece {p} must have exactly one band (junction rules)")
+        where: dict[int, BayPosition] = {}
+        for pos, bay in self._bays():
+            if isinstance(bay, FingerBay) and bay.junction and bay.junction_to is not None:
+                where[bay.junction_to] = pos
+        j1_children = {j.child for j in footprint.junctions if j.kind == "J1"}
+        for child in sorted(set(where) - j1_children):
+            out.append(f"junction finger to piece {child}, which is not a J1 child")
+        for j in footprint.junctions:
+            if j.kind != "J1":
+                continue
+            host = where.get(j.child)
+            if host is None:
+                out.append(f"J1 child {j.child} needs a junction finger")
+                continue
+            if host[0] != j.parent:
+                out.append(f"junction finger to piece {j.child} must be in piece {j.parent}")
+                continue
+            band = 0 if j.facing_block == "A" else len(self.pieces[j.parent].bands) - 1
+            if (host[1], host[2]) != (band, j.facing_block):
+                out.append(
+                    f"junction finger to piece {j.child} must be in band {band} block"
+                    f" {j.facing_block}"
+                )
+        return out
 
     def _check_j1(self, junction: BayPosition | None, footprint: FootprintPieces) -> list[str]:
         """J1 rules: one-band secondary; junction finger in the band/block facing the cut."""

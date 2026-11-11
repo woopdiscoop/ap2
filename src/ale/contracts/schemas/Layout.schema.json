@@ -63,7 +63,7 @@
     },
     "ModulePolygon": {
       "additionalProperties": false,
-      "description": "Rectilinear polygon in modules.\n\nEvery edge is axis-parallel; vertices are counter-clockwise; the polygon is simple;\n\u2265 4 vertices; no two consecutive edges are collinear. Stored open (first vertex not\nrepeated).",
+      "description": "Rectilinear polygon in modules.\n\nEvery edge is axis-parallel; vertices are counter-clockwise; the polygon is simple;\n\u2265 4 vertices; no two consecutive edges are collinear. Stored open (first vertex not\nrepeated).\n\nTicket G.1 (contracts 1.6.0): ``holes`` are optional courtyards, rectilinear clockwise\nrings strictly inside the exterior (no touching); empty by default and then left out of\nthe serialised form, so hole-free polygons serialise exactly as before.",
       "properties": {
         "exterior": {
           "items": {
@@ -80,6 +80,27 @@
             "type": "array"
           },
           "title": "Exterior",
+          "type": "array"
+        },
+        "holes": {
+          "default": [],
+          "items": {
+            "items": {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "integer"
+                }
+              ],
+              "type": "array"
+            },
+            "type": "array"
+          },
+          "title": "Holes",
           "type": "array"
         }
       },

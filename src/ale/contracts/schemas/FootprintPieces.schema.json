@@ -1,5 +1,85 @@
 {
   "$defs": {
+    "Junction": {
+      "additionalProperties": false,
+      "description": "A tree edge between two pieces (Ticket G.1).\n\n``kind``: ``\"J1\"`` (cut parallel to the parent's spine axis: a junction finger in the\nparent's block ``facing_block`` leads to the child) or ``\"J2\"`` (cut perpendicular to the\nparent's spine: collinear spines). ``cut``: endpoints of the shared segment, lower/left\nfirst.",
+      "properties": {
+        "child": {
+          "title": "Child",
+          "type": "integer"
+        },
+        "cut": {
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "integer"
+                }
+              ],
+              "type": "array"
+            },
+            {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "integer"
+                }
+              ],
+              "type": "array"
+            }
+          ],
+          "title": "Cut",
+          "type": "array"
+        },
+        "facing_block": {
+          "anyOf": [
+            {
+              "enum": [
+                "A",
+                "B"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Facing Block"
+        },
+        "kind": {
+          "enum": [
+            "J1",
+            "J2"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "parent": {
+          "title": "Parent",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "parent",
+        "child",
+        "kind",
+        "cut",
+        "facing_block"
+      ],
+      "title": "Junction",
+      "type": "object"
+    },
     "ModuleRect": {
       "additionalProperties": false,
       "description": "Axis-aligned rectangle in modules covering ``[x, x+w] x [y, y+h]`` (w, h \u2265 1).\n\nAccepts positional arguments ``ModuleRect(x, y, w, h)`` as well as keywords.",
@@ -57,7 +137,7 @@
     }
   },
   "additionalProperties": false,
-  "description": "Result of :func:`decompose_footprint`.\n\n``pieces``: primary first (one piece for a rectangle, two for an L). ``cut``: endpoints of\nthe shared cut segment (lower/left endpoint first), ``None`` for a rectangle.\n``facing_block``: J1 only, the block of the primary (``\"A\"`` lower/left, ``\"B\"``\nupper/right) that faces the cut.",
+  "description": "Result of :func:`decompose_footprint`.\n\n``pieces``: root (primary) first, then in tree pre-order (a parent precedes its\nchildren). ``junction`` / ``cut`` / ``facing_block``: the legacy fields of the\none-junction case (rectangle: ``NONE``; one or two pieces: the single junction; more\nthan two pieces: ``NONE`` / ``None``, use ``junctions``). ``cut``: endpoints of the\nshared cut segment (lower/left endpoint first). ``facing_block``: J1 only, the block of\nthe primary (``\"A\"`` lower/left, ``\"B\"`` upper/right) that faces the cut. ``junctions``:\none per tree edge; ``open_contacts``: ``(i, j)`` piece pairs (``i < j``) that touch\nwithout being a tree edge.",
   "properties": {
     "cut": {
       "anyOf": [
@@ -123,6 +203,32 @@
       ],
       "title": "Junction",
       "type": "string"
+    },
+    "junctions": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/Junction"
+      },
+      "title": "Junctions",
+      "type": "array"
+    },
+    "open_contacts": {
+      "default": [],
+      "items": {
+        "maxItems": 2,
+        "minItems": 2,
+        "prefixItems": [
+          {
+            "type": "integer"
+          },
+          {
+            "type": "integer"
+          }
+        ],
+        "type": "array"
+      },
+      "title": "Open Contacts",
+      "type": "array"
     },
     "pieces": {
       "items": {

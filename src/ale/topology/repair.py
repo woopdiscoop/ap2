@@ -61,6 +61,7 @@ _WHERE = re.compile(r"piece (\d+) band (\d+) block ([AB])")
 _OVER = re.compile(r"over by (\d+) modules")
 _ROOM_INFEASIBLE = re.compile(r"^(\S+) in piece (\d+) band (\d+) block ([AB]):")
 _STACK_ROOMS = re.compile(r"no compliant stack width for (.+) at depth -?\d+$")
+_JUNCTION_CHILD = re.compile(r"spine of piece (\d+)")
 _OTHER_FAILURE_WEIGHT = 1
 
 
@@ -345,7 +346,7 @@ def _remove(bays: list[Bay], room: str) -> None:
             elif not bay.junction and len(left) + len(right) == 1:
                 bays[i] = RoomBay(room=(*left, *right)[0])
             else:
-                bays[i] = FingerBay(left=left, right=right, junction=bay.junction)
+                bays[i] = bay.with_rooms(left, right)
             return
 
 
@@ -459,11 +460,13 @@ def _rebalance_stack(draft: Draft, slot: Slot) -> Draft | None:
     return out
 
 
-def _shift_junction(draft: Draft, step: int) -> Draft | None:
-    """Move the J1 junction finger ``step`` bays along its block."""
+def _shift_junction(draft: Draft, step: int, child: int | None = None) -> Draft | None:
+    """Move the J1 junction finger (to ``child`` when given) ``step`` bays along its block."""
     for slot, bays in draft.blocks.items():
         for i, bay in enumerate(bays):
             if isinstance(bay, FingerBay) and bay.junction:
+                if child is not None and bay.junction_to != child:
+                    continue
                 j = i + step
                 if not 0 <= j < len(bays):
                     return None
@@ -605,7 +608,15 @@ def repair_step(
     junction_failure = any(f.code == "JUNCTION_MISALIGNED" for f in real.failures)
     candidates: list[Callable[[], Draft | None]] = []
     if junction_failure:
-        candidates += [lambda: _shift_junction(draft, 1), lambda: _shift_junction(draft, -1)]
+        found = sorted(
+            {int(m.group(1)) for f in real.failures if (m := _JUNCTION_CHILD.search(f.detail))}
+        )
+        kids: list[int | None] = [*found] if found else [None]
+        for c in kids:
+            candidates += [
+                lambda c=c: _shift_junction(draft, 1, c),  # type: ignore[misc]
+                lambda c=c: _shift_junction(draft, -1, c),  # type: ignore[misc]
+            ]
     if repack is not None:
         candidates.append(lambda: repack(draft, real))
     for room in infeasible_rooms(real)[:3]:  # Q.1 moves (e) (f) (g)

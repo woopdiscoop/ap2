@@ -232,6 +232,8 @@ class BlockOut:
     """Index in ``items`` of the first item after the marker."""
     junction_post: bool = False
     """Whether the junction finger lies after the marker."""
+    fingers: dict[int | None, tuple[int, bool]] = field(default_factory=dict)
+    """G.1: ``junction_to`` → ``(finger u, after the marker)`` of every junction finger."""
     no_facade: int = 0
     """``needs_facade`` rooms predicted to end with façade ``< f`` (Q.3 depth key)."""
     _dev: Fraction | None = field(default=None, repr=False, compare=False)
@@ -251,6 +253,15 @@ class BlockOut:
         if self.junction_u is None or u_c is None or not self.junction_post:
             return self.junction_u
         return self.junction_u + self.shift(u_c)
+
+    def finger_at(self, child: int | None, u_c: int | None) -> int | None:
+        """Block-local ``u`` of the junction finger leading to ``child`` with the connector
+        at ``u_c`` (``None``: no such finger)."""
+        got = self.fingers.get(child)
+        if got is None:
+            return None
+        u, post = got
+        return u + self.shift(u_c) if post and u_c is not None else u
 
     def placed(self, u_c: int | None, length: int, s: int) -> list[Item]:
         """Items with the connector at ``u_c`` (Q.2): bays after the marker shifted to
@@ -518,6 +529,7 @@ class Solver:
             if bay.junction:
                 out.junction_u = finger_u
                 out.junction_post = out.marker is not None
+                out.fingers[bay.junction_to] = (finger_u, out.marker is not None)
             w_right = self._stack_items(
                 out, bay.right, finger_u + s, depth, f"{where} bay {b} right", exterior
             )
