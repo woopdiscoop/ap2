@@ -43,7 +43,7 @@ Maintained by the Router only. Directive: `specs/DIRECTIVE.md` (v2.2, supersedes
 | R.10 | `ale score`: score an existing scheme against a programme (first use: the manual AREP-MS sheet) | **DONE** | — | RD + eval | Extract with the vector-PDF reader, match to programme, same checks as ALE variants; file kept outside the repo. |
 | G.2 | Parti generation: genes, massing, joint evaluation, forcedness, parti card, `ale parti` | QUEUED (dispatch after the 16:20 UTC reset) | G.3 | RD + eval | User decision U-16. |
 | U.1 | Local web interface (Streamlit), `ale ui` | QUEUED (dispatch after the 16:20 UTC usage reset) | — | RD + eval | User decision U-17: UI now, to test the tool. |
-| G.1 | Exact plans in any orthogonal footprint (N pieces, several junctions; contracts 1.6.0) | **IN-PROGRESS** | — | RD + eval | Needed to build U, T, comb, courtyard partis in detail. |
+| G.1 | Exact plans in any orthogonal footprint (N pieces, several junctions; contracts 1.6.0) | **DONE** | — | RD + eval | Needed to build U, T, comb, courtyard partis in detail. |
 | G.3 | Form-finding: outline from the outside (cell growth on the plot), `ale form` | **DONE** | A.4, R.9 | RD + eval | Phase 1 of the target pipeline. |
 | R.9 | Whole-programme cell-growth seeding (user's method) | **DONE (option, not adopted)** | A.4 done | RD + eval | Adopted as default only if it beats the spring seeder. Carries the Q.4 D05 target NO_FACADE ≤ 1. |
 | A.4 | Contract: site anchors (entrances, cores, plot mode, setbacks, party edges) + room anchors + floors (1.5.0) | **DONE** | — | RD + eval | Needed by R.9, G.3 and multi-storey. |
@@ -109,6 +109,7 @@ with ground truth. The Router will issue an annotation template before Phase 1.
 
 - 2026-11-06 — v2.0 workspace initialised (tickets 1.1, 1.2 specified).
 - 2026-11-09 — User: yes to seed-rulebook draft and Claude as VLM. Seed draft written and validated; P.1 specified and dispatched. CI: raster extra added to the install line.
+- 2026-11-11 — **G.1 merged** (contracts 1.6.0): U, T, H, comb, Z, courtyard ring (≤ 12 pieces) realise exactly; one connected circulation; several junction fingers per piece. Follow-ups: courtyards (holes) still refused at site/programme intake (`ale.program`); feasibility façade estimate assumes ≤ 2 pieces.
 - 2026-11-11 — **G.3 merged** (`ale form`): one mass, outside connected, rooms contiguous (G310: 0 fragmented rooms over 12 candidates, verified by the Router), outline on the 0.60 m grid. Known limits for G.2 to address: ragged outlines (50–128 vertices), up to 8 façade rooms without façade and 5–17 rooms off circulation per candidate; a few rooms can end short (reported).
 - 2026-11-11 — G.3 review: G301–G309 pass but rooms are fragmented (15–20 rooms per candidate split into several pieces). Spec gap: contiguity was not required. Router adds G310 (every room and the circulation one 4-connected region); returned to the Worker, not merged.
 - 2026-11-11 — **R.10 + X.2 merged**: `ale score` reads the real AREP-MS sheet (327 filled zones) and matches every programme line of both buildings. Limit found: one sheet holds both buildings and the score has no way to tell which plan belongs to which building yet (follow-up: plan → building assignment, `--plans` selection).
