@@ -40,7 +40,7 @@ Maintained by the Router only. Directive: `specs/DIRECTIVE.md` (v2.2, supersedes
 | R.5 | Adjacencies from the functional programme (Claude, reviewed) | QUEUED | user: functional programme | roadmap | |
 | R.6 | Visual critique of a variant (Claude, advisory) | **DONE** | — | RD + eval | |
 | R.10 | Baseline scoring of the manual AREP-MS scheme (junior's Archicad sheet) | QUEUED | — | — | Extract with the vector-PDF reader, match to programme, same checks as ALE variants; file kept outside the repo. |
-| R.9 | Whole-programme cell-growth seeding (user's method; Voronoi as a variant) | QUEUED (after R.1) | R.1, A.4 | RD + eval (to revise) | Adopted as default only if it beats the spring seeder. Carries the Q.4 D05 target NO_FACADE ≤ 1. |
+| R.9 | Whole-programme cell-growth seeding (user's method) | **IN-PROGRESS** | A.4 done | RD + eval | Adopted as default only if it beats the spring seeder. Carries the Q.4 D05 target NO_FACADE ≤ 1. |
 | A.4 | Contract: site anchors (entrances, cores, plot mode, setbacks, party edges) + room anchors + floors (1.5.0) | **DONE** | — | RD + eval | Needed by R.9, G.3 and multi-storey. |
 | R.8 | Depth/shape rules learned from built plans | QUEUED | Q.4 | roadmap | User decision U-9. |
 | R.7 | VLM geometry reader for raster plans | **DONE** | X.1 done | roadmap | |

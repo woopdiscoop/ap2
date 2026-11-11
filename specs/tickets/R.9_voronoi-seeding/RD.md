@@ -1,34 +1,52 @@
-# Ticket R.9 — Voronoi seeding experiment · Requirements Document
+# Ticket R.9 — Whole-programme cell-growth seeding (the architect's method) · Requirements Document
 
-> **Starts after R.1 merges** (same seeding/optimiser files). Context = this file, `eval.md`, `ale.topology`
-> (`embed.py`, `seed.py`, `depth.py`), `ale.optimize` (multi-start of R.1, deterministic budgets of Q.3), the grammar
-> note. No contract changes. **An experiment**: it is adopted as default only if it beats the current seeder (§4).
+> Context = this file, `eval.md`, `specs/design/research_roadmap.md` (target pipeline, phase 3), the prototype
+> (Part A of the grid-sizing page; its algorithm is summarised in §3), contracts 1.5.0 (A.4: `SiteSpec.entrances`,
+> `SiteSpec.cores`, `RoomSpec.anchor`), `ale.topology` (`seed.py`, `embed.py`, `depth.py`), `ale.geometry`,
+> Q.3/Q.4 eval reports (deterministic budgets; D05 target moved here). No contract changes. **Do not edit
+> `ale.optimize`** (R.1 is changing it): the new seeder is reached through `seed_plan(..., seeder=...)` only.
 
 ## 1. Purpose
-The current seeder orders rooms from a spring layout of the adjacency graph, which ignores the footprint's shape,
-the target areas and where the façade is. A **weighted Voronoi (power) diagram in the Manhattan (L1) metric**
-computed inside the footprint gives area-proportional, axis-aligned cells. They are read as a *topology hint*: which
-rooms neighbour which, which reach the façade, and the order along each band. The grammar still produces the
-geometry, so every by-construction guarantee is unchanged.
+Replace the abstract spring ordering of the seeder by the architect's method: lay the whole programme down as
+module cells on the footprint, anchors first, then grow every room to its exact cell count. The grown diagram decides
+**which rooms get façade, who neighbours whom and the order along each band**; the corridor grammar then realises it.
+The diagram is also an output (SVG) for the architect.
 
 ## 2. Files (ownership)
-`src/ale/topology/voronoi.py` (NEW), `src/ale/topology/seed.py` (ONLY: a `seeder` option), `src/ale/config` is a
-contract, so no new config key: the choice is a keyword argument `seeder: Literal["spring", "voronoi"] = "spring"`
-on `seed_plan` and `generate`, `tests/topology/test_voronoi*.py`, `specs/tickets/R.9_voronoi-seeding/eval_report.md`
-(with the comparison tables).
+`src/ale/topology/cellgrow.py` (NEW: diagram), `src/ale/topology/fromdiagram.py` (NEW: diagram → CorridorPlan
+assignment), `src/ale/topology/seed.py` (ONLY: `seeder: Literal["spring", "cells"] = "spring"` + dispatch),
+`src/ale/export/diagram.py` (NEW: SVG of the cell diagram), `tests/topology/test_cellgrow*.py`,
+`tests/export/test_export_diagram.py`, `specs/tickets/R.9_voronoi-seeding/eval_report.md`.
 
-## 3. Method
-1. Seeds: one per room instance, initial positions from the existing embedding; `needs_facade` rooms start on the
-   exterior edge nearest to their orientation preference; weights from target areas.
-2. Lloyd-style iterations (bounded, deterministic): compute the L1 power diagram on the module grid (raster at the
-   module size is acceptable), move each seed to its cell centroid, adjust its weight towards its target area; stop at
-   a mean area error ≤ 5 % or N iterations.
-3. Read the result: façade rooms = cells with exterior contact ≥ f; neighbour pairs = cells sharing ≥ c; projection
-   of the cell centroids on the band serpentine of 3.2 §5.3 gives the assignment order. Feed these to the existing
-   assignment, capacity and repair steps instead of the spring ordering.
+## 3. Cell diagram (`cellgrow.py`), deterministic for a seed
+1. Grid = module footprint cells; cores (`SiteSpec.cores`, rounded to modules) are fixed blocks; entrances from
+   `SiteSpec.entrances` (main first; default: midpoint of the access edge).
+2. **Façade ribbon**: walk the exterior edges from the first `anchor="corner"` room's corner (default: the corner
+   nearest the access edge) and give each `needs_facade` room a frontage share = ceil(n / d) cells, d = min(depth
+   limit in cells, round(sqrt(1.6 n))), depth limit = `facade.max_depth_m` if set else 7.2 m; scale shares down if
+   their sum exceeds the usable perimeter; rooms ordered by macro-zone then programme order. Seed = middle of its
+   share, **on the façade line**. `anchor="corner"` rooms take the corner; `anchor="entrance"` rooms take the share
+   that contains the main entrance (or the nearest).
+3. Non-façade rooms: seeded next to their first REQUIRED partner on the interior side (offset = half the partner's
+   depth + 1); `service_core` rooms next to a core; others at the free cell nearest the footprint centre.
+4. **Simultaneous growth**: each round, every unfinished room claims cells in proportion to its size (quota =
+   max(1, round(4 n / n_max))) from its frontier, scoring −3·own neighbours + 0.5·distance to own centroid; façade
+   rooms +0.25·distance to façade and a +10 penalty beyond the depth limit; +0.6·Manhattan distance to the entrance
+   for the entrance room; +0.08·distance to REQUIRED partners' centroids; ties broken by cell index. Stop when all
+   rooms have their count or no progress. Unclaimed cells = circulation reserve.
+5. Output `CellDiagram(owner grid, per-room cells, checks)` with the checks of the prototype: area, façade, corner,
+   entrance, adjacency, next to a core.
 
-## 4. Adoption rule (measured, deterministic budgets)
-Compare `spring` and `voronoi` on P25 and P60 (and the AREP top-floor demo of Q.4 D05), 5 seeds each, the same total
-budget: final hard count, `NO_FACADE`, `REQUIRED_ADJ`, cost, seeding time. **Adopt** (default `voronoi`) only if the
-mean final hard count is lower on P60 and not higher on P25 and the AREP floor, and the seeding time stays within the
-budget. Otherwise keep `spring` as default, keep `voronoi` as an option, and record the result.
+## 4. From the diagram to a CorridorPlan (`fromdiagram.py`)
+Use the existing band/block structure chosen by the current seeder (band counts, connectors) and replace only the
+**assignment and order**: a room goes to the block whose region contains most of its cells (façade rooms to the
+exterior block on their façade side), ordered along the spine by the projection of its cell centroid; then the
+existing capacity estimate and repair steps of 3.2 run as today. If realisation fails, fall back to the spring
+seeder for that attempt (recorded).
+
+## 5. Adoption rule (measured; deterministic budgets of Q.3)
+Compare `spring` vs `cells` on P25, P60 and the AREP top-floor programme of Q.4 D05 (hard mode and soft mode), 5 seeds,
+same attempts and annealing iterations: final hard count, NO_FACADE, REQUIRED_ADJ, cost. **Adopt** (`cells` as the
+default in a later ticket wiring `generate`) only if the mean final hard is lower on P60 and on the AREP floor and
+not higher on P25. In every case report the table. The Q.4 D05 hard-mode target NO_FACADE ≤ 1 is re-tested with
+`cells` (R9-08) and kept as written.
