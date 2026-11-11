@@ -12,7 +12,6 @@ from pathlib import Path
 import parti_case as case
 import pytest
 import yaml
-from conftest import run_cli
 from shapely import Polygon as ShPolygon
 from shapely import box
 
@@ -278,7 +277,7 @@ def test_P207_ranking(inputs: tuple[Path, Path], tmp_path: Path) -> None:
     ]
     assert non_dominated(keys) == [False, True, True, True, True, False]
     out = tmp_path / "p"
-    run_cli(inputs, out, "--count", "8")
+    case.run_cli(inputs, out, "--count", "8")
     md = (out / "partis.md").read_text(encoding="utf-8")
     assert md.startswith("# Génération de partis")
     for word in ("Classement", "Fiche du parti", "Manques durs", "non dominés"):
@@ -315,7 +314,7 @@ def test_P208_from_forms(
     assert {m.name: m.typology for m in matches} == {k: v.typology for k, v in wanted.items()}
     assert all(m.iou >= 0.95 for m in matches), matches
     out = tmp_path / "out"
-    run_cli(inputs, out, "--count", "5", "--from-forms", str(forms))
+    case.run_cli(inputs, out, "--count", "5", "--from-forms", str(forms))
     md = (out / "partis.md").read_text(encoding="utf-8")
     assert "Formes G.3 rapprochées" in md and "IoU" in md
     for name, g in wanted.items():
@@ -325,8 +324,8 @@ def test_P208_from_forms(
 # ------------------------------------------------------------------------------ P209
 def test_P209_outputs(inputs: tuple[Path, Path], tmp_path: Path) -> None:
     a, b = tmp_path / "a", tmp_path / "b"
-    run_cli(inputs, a, "--count", "6")
-    run_cli(inputs, b, "--count", "6")
+    case.run_cli(inputs, a, "--count", "6")
+    case.run_cli(inputs, b, "--count", "6")
     files = sorted(p.relative_to(a) for p in a.rglob("*") if p.is_file())
     assert files == sorted(p.relative_to(b) for p in b.rglob("*") if p.is_file())
     assert len([f for f in files if f.suffix == ".svg"]) == 6
@@ -348,7 +347,7 @@ def test_P210_gates_speed(inputs: tuple[Path, Path], tmp_path: Path) -> None:
     """40 partis in <= 60 s through the command (ruff, mypy, coverage and `lock --check` are
     run as gates by the ticket; see eval_report.md)."""
     t0 = time.perf_counter()
-    run_cli(inputs, tmp_path / "o", "--count", "40")
+    case.run_cli(inputs, tmp_path / "o", "--count", "40")
     assert time.perf_counter() - t0 <= 60.0
     assert len(list((tmp_path / "o").glob("parti_*.svg"))) == 40
     assert COURT_TYPES  # keep the import honest

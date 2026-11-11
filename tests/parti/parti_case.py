@@ -54,3 +54,15 @@ def write_site_yaml(path: Path, **over: Any) -> Path:
     data["footprint"] = data["footprint"]["exterior"]
     path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
     return path
+
+
+def run_cli(inputs: tuple[Path, Path], out: Path, *extra: str) -> None:
+    from typer.testing import CliRunner
+
+    from ale.cli import app
+
+    result = CliRunner().invoke(
+        app,
+        ["parti", "--program", str(inputs[0]), "--site", str(inputs[1]), "--out", str(out), *extra],
+    )
+    assert result.exit_code == 0, result.output

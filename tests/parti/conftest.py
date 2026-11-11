@@ -13,9 +13,7 @@ if str(_HERE) not in sys.path:
 
 import parti_case as case  # noqa: E402
 from program_helpers import program_to_xlsx  # noqa: E402
-from typer.testing import CliRunner  # noqa: E402
 
-from ale.cli import app  # noqa: E402
 from ale.contracts.models import Program, SiteSpec  # noqa: E402
 from ale.parti import Dropped, Entry, run_partis  # noqa: E402
 
@@ -41,11 +39,3 @@ def inputs(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, Path]:
     return program_to_xlsx(case.program(), d / "programme.xlsx"), case.write_site_yaml(
         d / "site.yaml"
     )
-
-
-def run_cli(inputs: tuple[Path, Path], out: Path, *extra: str) -> None:
-    result = CliRunner().invoke(
-        app,
-        ["parti", "--program", str(inputs[0]), "--site", str(inputs[1]), "--out", str(out), *extra],
-    )
-    assert result.exit_code == 0, result.output
