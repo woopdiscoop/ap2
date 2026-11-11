@@ -19,7 +19,9 @@ Base commit `c3f8b33`. No contract change (contracts 1.6.0, `lock --check` OK).
 
 ## Gates
 
-See the end of this file (filled in after the whole-suite run).
+- `ruff check`, `ruff format --check` (283 files), `mypy --strict` on src (138 files): clean. `python -m ale.contracts.lock --check`: OK.
+- Whole suite under coverage (`--cov=ale.program`, no marker filter, so slow tests included): 1474 passed, 13 skipped, 3 xfailed (pre-existing xfails), 63 min.
+- Coverage of the touched modules: `program/feasibility.py` 100 %, `program/prepare.py` 96 %, `program/site.py` 96 %.
 
 ## Spec issues
 
