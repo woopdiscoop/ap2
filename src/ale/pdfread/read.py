@@ -17,7 +17,9 @@ total wall centreline length and ``D`` the page diagonal (points)::
     plan_score = (min(1, W / 4) + min(1, R / 2) + min(1, L / (0.6 * D))) / 3
 
 so ``plan_score`` ∈ [0, 1] and equals 1 exactly when the page is plan-likely. A page
-that is not plan-likely returns ``plans == ()``.
+that is not plan-likely returns ``plans == ()``. Ticket X.2: when wall-loop tracing finds fewer
+than 3 rooms and at least 3 credible filled zones exist (:mod:`ale.pdfread.zones`), the zones
+are the rooms and the page is plan-likely (``plan_score`` 1.0).
 
 ``read_pdf_page`` never raises: unreadable, encrypted or corrupt files, a bad page index
 and internal errors become warnings.
@@ -51,6 +53,7 @@ from ale.pdfread.walls import (
     extract_walls,
     merged_wall_count,
 )
+from ale.pdfread.zones import ZoneFill, trace_zones, zones_credible
 
 __all__ = [
     "MAX_PATH_ITEMS",
@@ -87,6 +90,7 @@ class PdfReadResult(BaseModel):
 class _Page:
     strokes: list[StrokeSeg] = field(default_factory=list)
     filled: list[FilledShape] = field(default_factory=list)
+    zone_fills: list[ZoneFill] = field(default_factory=list)
     chains: list[list[Bezier]] = field(default_factory=list)
     texts: list[TextItem] = field(default_factory=list)
     room_texts: list[RoomText] = field(default_factory=list)
@@ -127,6 +131,14 @@ def _corners(item: Any) -> list[Pt] | None:
     return clean if len(clean) == 4 else None
 
 
+def _rgb(fill: Any) -> tuple[float, float, float] | None:
+    try:
+        r, g, b = (float(v) for v in fill)
+    except (TypeError, ValueError):
+        return None
+    return (r, g, b) if all(math.isfinite(v) for v in (r, g, b)) else None
+
+
 def _collect_path(d: dict[str, Any], out: _Page) -> int:
     """Add one drawing path to ``out``; returns its number of items."""
     ptype = str(d.get("type") or "")
@@ -135,12 +147,15 @@ def _collect_path(d: dict[str, Any], out: _Page) -> int:
     width = d.get("width")
     w = float(width) if isinstance(width, int | float) and math.isfinite(width) else 0.0
     items = d.get("items") or []
+    rgb = _rgb(d.get("fill")) if filled else None
     poly: list[Pt] = []  # current subpath of line items
     chain: list[Bezier] = []
 
     def flush_poly() -> None:
         if filled and len(poly) >= 3:
             out.filled.append(FilledShape(tuple(poly)))
+            if rgb is not None:
+                out.zone_fills.append(ZoneFill(tuple(poly), rgb))
         if stroked and d.get("closePath") and len(poly) >= 3 and poly[0] != poly[-1]:
             out.strokes.append(StrokeSeg((poly[-1], poly[0]), w))
         poly.clear()
@@ -184,6 +199,8 @@ def _collect_path(d: dict[str, Any], out: _Page) -> int:
                 continue
             if filled:
                 out.filled.append(FilledShape(tuple(corners)))
+                if rgb is not None:
+                    out.zone_fills.append(ZoneFill(tuple(corners), rgb))
             if stroked:
                 for i in range(4):
                     a, b = corners[i], corners[(i + 1) % 4]
@@ -287,7 +304,7 @@ def _with_width_m(openings: list[Opening], scale: float | None) -> list[Opening]
 
 
 def _analyse(
-    col: _Page, diagonal: float, *, source_sha256: str, page: int
+    col: _Page, diagonal: float, *, source_sha256: str, page: int, page_area: float | None = None
 ) -> tuple[PlanGeometry | None, bool, float, list[str]]:
     warnings = list(col.warnings)
     wr = extract_walls(col.strokes, col.filled)
@@ -302,9 +319,21 @@ def _analyse(
     lines = [*wr.face_lines, *door_closures(openings, walls)]
     faces = polygonize_rooms(lines, wr.material, scale.m_per_unit, warnings)
     rooms = label_rooms(faces, col.room_texts, warnings)
+    from_zones = False
+    if len(rooms) < 3 and len(col.zone_fills) >= 3:  # Ticket X.2: filled zones as rooms
+        zones = trace_zones(
+            col.zone_fills, col.room_texts, scale.m_per_unit, warnings, page_area=page_area
+        )
+        if zones_credible(zones):
+            warnings.append(f"rooms read from {len(zones)} filled zones")
+            rooms = zones
+            from_zones = True
     wall_length = sum(math.dist(w.centerline.coords[0], w.centerline.coords[-1]) for w in walls)
     n_merged = merged_wall_count(walls)
-    likely, score = plan_likeness(n_merged, len(rooms), wall_length, diagonal)
+    if from_zones:  # zone sheets: walls are single strokes, the zones are the evidence
+        likely, score = True, 1.0
+    else:
+        likely, score = plan_likeness(n_merged, len(rooms), wall_length, diagonal)
     if not likely:
         warnings.append(
             f"not a plan: {n_merged} merged walls ({len(walls)} pieces), {len(rooms)} rooms, "
@@ -365,7 +394,11 @@ def read_pdf_page(path: Path, page: int, *, source_sha256: str, config: AleConfi
             return _fail(f"cannot parse page {page}: {type(exc).__name__}: {exc}")
         try:
             plan, likely, score, warnings = _analyse(
-                col, diagonal, source_sha256=source_sha256, page=page
+                col,
+                diagonal,
+                source_sha256=source_sha256,
+                page=page,
+                page_area=float(rect.width) * float(rect.height),
             )
         except Exception as exc:  # never raise for a readable page
             log.warning("read_pdf_page: %s: %s", type(exc).__name__, exc)
