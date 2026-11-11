@@ -16,6 +16,19 @@ Order = value / cost. Items marked (v2) need the user's approval to widen the v1
 | 9 | **R.9** Voronoi seeding (experiment) | Weighted L1 Voronoi in the footprint as the topology hint for the seeder (neighbours, façade rooms, band order); grammar unchanged. | Adopted only if mean final hard is lower on P60 and not higher on P25 / AREP floor, 5 seeds, same budget. | R.1 | S–M |
 | 10 | **M.1–M.3** multi-storey (v2) | Liggett's two stages: **stacking** (assign entities to floors under floor rules, e.g. Présidence/DAP/DGS top floor; balance floor areas) → **blocking** (existing per-floor engine) → stacked cores and wet rooms as fixed bays shared across floors. | AREP-MS Région programme on a given bar footprint, R+3: every floor realises; top-floor rule met; cores aligned. | Q.4, R.1; directive change | L |
 
+### Target pipeline (v2): where the cell method sits
+| Phase | Question | Method | Tickets | Output (reviewed by the architect) |
+|---|---|---|---|---|
+| 0 Inputs | What is asked, where? | Annexe import, site + anchors, rulebook learned from built plans | P.2, A.4, R.8 | programme, site, rules |
+| 1 Form (parti) | What shape, how many floors? | Cell growth with the outside as a connected type, then massing types | G.3, G.2 | building outline(s) per height option |
+| 2 Stacking | Which entity on which floor? | Floor assignment, fixed cores and wet stacks | M.1 | stacking diagram |
+| 3 Cell diagram | What goes where on each floor? | Whole-programme cell growth: anchors, façade shares, adjacencies | R.9 | cell diagram per floor |
+| 4 Plan | Exact rooms and corridors | Corridor grammar + annealing (multi-start), depth rule | 3.3, Q.3, Q.4, R.1, G.1 | DXF/SVG plans, report |
+| 5 Evaluate | Is it good, which variant? | Checks, space syntax, visual critique, variant set | R.2, R.3, R.6 | report, critique, comparison |
+Loops: a failure in phase 4 (e.g. rooms without façade) is fixed upstream (phase 3 façade shares, phase 1 form);
+each defect seen in phase 5 becomes a rule (AREP-MS method). The cell diagram (phases 1–3) replaces the current
+abstract seeding and is a checkpoint the architect can edit (anchors, hard lines) before the exact plan.
+
 ### Building form (user decision U-12)
 The footprint is a design output, not only an input. Three steps, v2:
 - **G.1 any orthogonal footprint**, including courtyards (holes), U, T, H, combs: decompose into rectangular pieces
