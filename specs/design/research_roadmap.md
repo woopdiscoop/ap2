@@ -25,8 +25,15 @@ The footprint is a design output, not only an input. Three steps, v2:
   (wing depth from the room depths: about 2 × 7.2 m + corridor), placed on the buildable zone with setbacks; each
   candidate scored on capacity per floor, orientation of the long façades, compactness, prospects (courtyard ≥ H/2),
   site coverage. The AREP-MS method's "population of partis".
-- **G.3 form-finding by cell growth**: grow the programme cells (R.9) on the whole buildable zone with no fixed outline;
-  the mass that emerges is snapped to the nearest typologies of G.2.
+- **G.3 form-finding by cell growth, with the outside as a space type** (user proposal, 2026-11-11): the whole site is
+  gridded; "outside" is one more type, seeded on the site boundary and the setbacks; rooms grow from their anchors;
+  rule: **all outside cells stay connected to the site boundary** (no growth step may disconnect it: digital-topology
+  "simple point" test). The building's shape is what remains. Consequences: *façade* becomes "touches outside" (no
+  fixed façade edges); *depth* becomes the distance to the nearest outside cell (≤ 12 cells for 7.20 m); orientation
+  = which side the outside is on. Extra rules so the form is architectural: a **courtyard** type (enclosed outside,
+  allowed only if its short side ≥ H/2); minimum outside width (no slivers, ≥ setback / isolation distance); a
+  compactness term against façade-hungry sprawl; optional "n buildings" (AREP-MS: 2). Raw shapes are ragged and are
+  then snapped to G.2 typologies (wings of constant depth).
 
 ### Multi-storey requirements (user decision U-10)
 Stackability first: (1) **vertical cores fixed across floors**: stairs, lifts, shafts, wet rooms (sanitary, cleaning,
