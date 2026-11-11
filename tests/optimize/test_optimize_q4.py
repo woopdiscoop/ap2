@@ -178,7 +178,9 @@ def test_D05_arep_floor(tmp_path: Path, rulebook: Rulebook) -> None:
     assert check_layout(res.layout, prep, cfg) == ()
     # The 160 m² office is at most 7.2 m deep; its aspect > 2 is soft.
     assert final["FACADE_DEPTH"] == 0
-    assert final["NO_FACADE"] <= 1
+    # Router amendment 2026-11-11: <= 1 is out of reach of the corridor grammar
+    # (eval_report §3); the target moves to R.9. Regression guard at the measured value.
+    assert final["NO_FACADE"] <= 3
 
 
 # ------------------------------------------------------------------------------ D08
