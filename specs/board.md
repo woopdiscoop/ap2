@@ -43,7 +43,7 @@ Maintained by the Router only. Directive: `specs/DIRECTIVE.md` (v2.2, supersedes
 | R.10 | `ale score`: score an existing scheme against a programme (first use: the manual AREP-MS sheet) | **DONE** | — | RD + eval | Extract with the vector-PDF reader, match to programme, same checks as ALE variants; file kept outside the repo. |
 | X.3 | Courtyards at intake + façade estimate for N pieces | QUEUED (after the 16:20 UTC reset) | G.1 | RD + eval | G.1 follow-ups. |
 | G.2 | Parti generation: genes, massing, joint evaluation, forcedness, parti card, `ale parti` | QUEUED (dispatch after the 16:20 UTC reset) | G.3 | RD + eval | User decision U-16. |
-| U.1 | Local web interface (Streamlit), `ale ui` | QUEUED (dispatch after the 16:20 UTC usage reset) | — | RD + eval | User decision U-17: UI now, to test the tool. |
+| U.1 | Local web interface (Streamlit), `ale ui` | DONE | 537eba2 | RD + eval + eval report | Six French tabs (Programme, Site, Forme, Plans, Évaluer, Critique) on the CLI functions. Launch: `pip install -e ".[ui,excel,cad,pdf]"` then `ale ui --workspace ws`. Rulebook from a sidebar upload or the workspace/seed default (spec gap filled by the Worker). |
 | G.1 | Exact plans in any orthogonal footprint (N pieces, several junctions; contracts 1.6.0) | **DONE** | — | RD + eval | Needed to build U, T, comb, courtyard partis in detail. |
 | G.3 | Form-finding: outline from the outside (cell growth on the plot), `ale form` | **DONE** | A.4, R.9 | RD + eval | Phase 1 of the target pipeline. |
 | R.9 | Whole-programme cell-growth seeding (user's method) | **DONE (option, not adopted)** | A.4 done | RD + eval | Adopted as default only if it beats the spring seeder. Carries the Q.4 D05 target NO_FACADE ≤ 1. |
