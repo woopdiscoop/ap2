@@ -40,10 +40,10 @@ Maintained by the Router only. Directive: `specs/DIRECTIVE.md` (v2.2, supersedes
 | R.5 | Adjacencies from the functional programme (Claude, reviewed) | QUEUED | user: functional programme | roadmap | |
 | R.6 | Visual critique of a variant (Claude, advisory) | **DONE** | — | RD + eval | |
 | R.9 | Whole-programme cell-growth seeding (user's method; Voronoi as a variant) | QUEUED (after R.1) | R.1, A.4 | RD + eval (to revise) | Adopted as default only if it beats the spring seeder. Carries the Q.4 D05 target NO_FACADE ≤ 1. |
-| A.4 | Contract: site anchors (entrance, fixed cores) + room flags (corner, entrance) | PROPOSED | — | — | Needed by R.9 and multi-storey. |
+| A.4 | Contract: site anchors (entrances, cores, plot mode, setbacks, party edges) + room anchors + floors (1.5.0) | **IN-PROGRESS** | — | RD + eval | Needed by R.9, G.3 and multi-storey. |
 | R.8 | Depth/shape rules learned from built plans | QUEUED | Q.4 | roadmap | User decision U-9. |
 | R.7 | VLM geometry reader for raster plans | **DONE** | X.1 done | roadmap | |
-| M.1–3 | Multi-storey: stacking → blocking → shared cores (v2) | PROPOSED | user approval (scope) | roadmap | |
+| M.1–3 | Multi-storey: stacking → blocking → shared cores | QUEUED (in scope, U-13) | A.4, R.9 | roadmap | |
 | P.1 | Claude VLM provider | **DONE** | 3c9db4e | RD + eval + eval_report | User decision U-8: VLM = Claude (claude-opus-5-5, effort low, structured output, no sampling params, cached). |
 | I.1 | Integration: PDF/raster extract, labels, scale, `ale review` | **DONE** | — | RD + eval | Assigned to an external Codex agent; PR to be reviewed by the Router. |
 | 1.3 | Vector-PDF reader (library) | **DONE** | — | RD + eval | Plan-likeness on merged walls; HABS PDFs correctly identified as scanned (→ raster path). |
@@ -67,6 +67,7 @@ with ground truth. The Router will issue an annotation template before Phase 1.
 | U-5 | **More room types.** | Taxonomy v1.1: 25 → 75 types (retail, food service, education, health, sport, culture, services, outdoor), from Uniclass 2015 SL + French ERP types. Seed template: 23 core types active, 49 optional types listed commented-out. |
 | U-6 | **Corridor grammar** for circulation (instead of a free slicing tree + penalty). | Every room touches a corridor by construction; circulation always connected. Spine per footprint piece, blocks of room bays / finger bays; L shapes via J1 (corner finger) / J2 (collinear spines). Replaces directive §3.B.1 free tree and 3.4 moves M1–M3 with grammar moves G1–G6. Design: `specs/design/corridor_grammar.md`. Contract amendment A.1. |
 | U-7 | **Bands**: several parallel corridors per piece, joined by a connector corridor. | Deep plates (P60's 30 m piece) become feasible. Contract amendment A.2 (CorridorPlan /2, contracts 1.2.0), then 3.3 rework. Design note §8. |
+| U-13 | **Scope extended (user, 2026-11-11: "Ok go")**: multi-storey (M.1–M.3) and free building forms (G.1–G.3) are now in scope, following the target pipeline (roadmap). Work continues autonomously across usage-limit resets. | Order: R.1 → A.4 → R.9 → G.3/G.2 → M.1–M.3 → G.1; R.2, R.8 in between. |
 | U-12 | **The building form is not fixed**: the shape follows the programme: bar, L, courtyard, U, comb, freeform, whichever is best. | ALE v1 takes the footprint as input (rectangle / L). Proposed v2 tickets G.1 (N-piece orthogonal footprints incl. courtyards), G.2 (massing typologies generated and scored), G.3 (form-finding by cell growth with "outside" as a connected space type: the user's proposal). |
 | U-10 | **Multi-storey must be as stackable as possible**: shafts and water pipes at the same position on every floor; rooms of the same shape and area stacked above each other; a structure as regular as possible. | Requirement for M.1–M.3 (v2). |
 | U-11 | **User's sizing method**: fill the target area with 60 × 60 cm cells (0.36 m² each), regardless of shape, then reshape into the right rectangle at the right place, never below the programme area. | Matches ALE with `module_mm = 600`, area tol 0/+10 %. Diagram published. |
