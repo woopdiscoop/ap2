@@ -16,6 +16,18 @@ Order = value / cost. Items marked (v2) need the user's approval to widen the v1
 | 9 | **R.9** Voronoi seeding (experiment) | Weighted L1 Voronoi in the footprint as the topology hint for the seeder (neighbours, façade rooms, band order); grammar unchanged. | Adopted only if mean final hard is lower on P60 and not higher on P25 / AREP floor, 5 seeds, same budget. | R.1 | S–M |
 | 10 | **M.1–M.3** multi-storey (v2) | Liggett's two stages: **stacking** (assign entities to floors under floor rules, e.g. Présidence/DAP/DGS top floor; balance floor areas) → **blocking** (existing per-floor engine) → stacked cores and wet rooms as fixed bays shared across floors. | AREP-MS Région programme on a given bar footprint, R+3: every floor realises; top-floor rule met; cores aligned. | Q.4, R.1; directive change | L |
 
+### Building form (user decision U-12)
+The footprint is a design output, not only an input. Three steps, v2:
+- **G.1 any orthogonal footprint**, including courtyards (holes), U, T, H, combs: decompose into rectangular pieces
+  (generalising the L-shape J1/J2 junctions to N pieces and ring corridors around a courtyard). Freeform outlines are
+  approximated on the 60 cm grid with orthogonal rooms inside; curved façades stay out of scope.
+- **G.2 massing typologies**: a parametric family (bar, L, U, courtyard/ring, comb, T, hybrids) sized from the programme
+  (wing depth from the room depths: about 2 × 7.2 m + corridor), placed on the buildable zone with setbacks; each
+  candidate scored on capacity per floor, orientation of the long façades, compactness, prospects (courtyard ≥ H/2),
+  site coverage. The AREP-MS method's "population of partis".
+- **G.3 form-finding by cell growth**: grow the programme cells (R.9) on the whole buildable zone with no fixed outline;
+  the mass that emerges is snapped to the nearest typologies of G.2.
+
 ### Multi-storey requirements (user decision U-10)
 Stackability first: (1) **vertical cores fixed across floors**: stairs, lifts, shafts, wet rooms (sanitary, cleaning,
 technical) occupy the same grid cells on every floor; (2) **room stacking**: a room placed above another of the same
