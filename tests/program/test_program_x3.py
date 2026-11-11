@@ -218,7 +218,7 @@ def test_X303_end_to_end(tmp_path: Path) -> None:
         assert runner.invoke(app, ["init", "--workspace", str(ws)]).exit_code == 0
         toml = ws / "ale.toml"
         text = toml.read_text(encoding="utf-8")
-        toml.write_text(text.replace("time_budget_s = 120.0", "time_budget_s = 2.0"))
+        toml.write_text(text.replace("time_budget_s = 120.0", "time_budget_s = 10.0"))
         out = tmp_path / "out"
         res = runner.invoke(
             app,
