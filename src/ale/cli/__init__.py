@@ -11,7 +11,7 @@ import typer
 
 from ale import __version__
 from ale.cli.commands import critique as critique_cmd
-from ale.cli.commands import doctor, extract, generate, ingest, init, layers, review, rulebook
+from ale.cli.commands import doctor, extract, form, generate, ingest, init, layers, review, rulebook
 from ale.cli.commands import program as program_cmd
 from ale.cli.commands import status as status_cmd
 from ale.cli.commands._common import LOG_LEVEL_EXPLICIT_KEY
@@ -83,6 +83,7 @@ app.add_typer(program_cmd.app, name="program")
 app.command("generate")(generate.generate)
 app.command("status")(status_cmd.status)
 app.command("critique")(critique_cmd.critique)
+app.command("form")(form.form)
 
 
 def main() -> None:
