@@ -41,6 +41,7 @@ Maintained by the Router only. Directive: `specs/DIRECTIVE.md` (v2.2, supersedes
 | R.6 | Visual critique of a variant (Claude, advisory) | **DONE** | — | RD + eval | |
 | X.2 | Vector PDF: filled zones as rooms (Archicad exports) | **DONE** | R.10 | RD + eval | Found on the real AREP-MS sheet: 371 filled zones, walls as single strokes → 0 rooms read. |
 | R.10 | `ale score`: score an existing scheme against a programme (first use: the manual AREP-MS sheet) | **DONE** | — | RD + eval | Extract with the vector-PDF reader, match to programme, same checks as ALE variants; file kept outside the repo. |
+| X.3 | Courtyards at intake + façade estimate for N pieces | QUEUED (after the 16:20 UTC reset) | G.1 | RD + eval | G.1 follow-ups. |
 | G.2 | Parti generation: genes, massing, joint evaluation, forcedness, parti card, `ale parti` | QUEUED (dispatch after the 16:20 UTC reset) | G.3 | RD + eval | User decision U-16. |
 | U.1 | Local web interface (Streamlit), `ale ui` | QUEUED (dispatch after the 16:20 UTC usage reset) | — | RD + eval | User decision U-17: UI now, to test the tool. |
 | G.1 | Exact plans in any orthogonal footprint (N pieces, several junctions; contracts 1.6.0) | **DONE** | — | RD + eval | Needed to build U, T, comb, courtyard partis in detail. |
