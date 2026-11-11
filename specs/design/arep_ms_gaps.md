@@ -24,8 +24,8 @@ of underground car park, which is out of scope) and 3 843 m² AREP, matching the
    Large open spaces (150–500 m²) at aspect ≤ 2 are deeper than 7.20 m. Needs either a max-depth rule
    or splitting open spaces into façade-deep bays.
 3. **Two grid steps**: 60 cm for rooms with 30 cm tolerated for shafts, cleaning rooms, WC and control rooms. v1 has a single module.
-4. **Egress / fire safety** (distances 40/50 m, dead ends ≤ 10 m, two protected stairs > 5 m apart): out of scope
-   (v1 outputs are design studies, not code-checked).
+4. **Egress / fire safety** (distances 40/50 m, dead ends ≤ 10 m): out of scope (v1 outputs are design studies, not
+   code-checked). Vertical circulation (user, U-14): **one stairwell is required; one core may hold several stairs**.
 5. **Arbitrary footprints** (trapezoidal buildable zone, setbacks 10 m on three streets): v1 handles rectangles
    and L shapes only.
 6. **Organigram adjacency levels** (N1–N4 in the functional programme) → would map to graded adjacency weights
