@@ -27,10 +27,12 @@ seen so far, so ``elapsed_s <= time_budget_s`` holds on slow machines and under 
 from __future__ import annotations
 
 import itertools
+import logging
 import math
 import time
 from collections.abc import Sequence
 from fractions import Fraction
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, StrictFloat, StrictInt
 
@@ -54,8 +56,10 @@ from ale.geometry.evaluate import FACADE_CODES, hard_codes_of
 from ale.geometry.junction import across_origin, along_origin, cut_side, frame, to_abs
 from ale.guards import Budget, bounded
 from ale.program.models import PreparedInput
+from ale.topology.cellgrow import grow
 from ale.topology.depth import DEADLINE_KEY, BandSpec, fill_blocks
 from ale.topology.embed import Positions, embed
+from ale.topology.fromdiagram import diagram_positions
 from ale.topology.graph import AVOID, REQUIRED, TopologyReport, build_graph, planarity
 from ale.topology.repair import (
     Bay,
@@ -74,6 +78,7 @@ from ale.topology.repair import (
 
 __all__ = ["SeedResult", "seed_plan"]
 
+_LOG = logging.getLogger(__name__)
 _MAX_ATTEMPTS = 10_000
 SAFETY_TIME_S = 3600.0
 """Time cap of a run bound by ``max_attempts`` (a safety net only, Q.3)."""
@@ -415,6 +420,20 @@ class _Search:
         return combos
 
 
+def _cells_positions(search: _Search, k: int) -> Positions:
+    """Room positions of the cell diagram of attempt ``k`` (R.9): the plain diagram for
+    ``k = 0``, a seeded variant afterwards."""
+    ctx = search.ctx
+    diagram = grow(
+        ctx.prepared,
+        ctx.rulebook,
+        ctx.config,
+        seed=_attempt_seed(search.seed, k),
+        jitter=0.0 if k == 0 else 0.5,
+    )
+    return diagram_positions(diagram)
+
+
 def _attempt_seed(seed: int, k: int) -> int:
     return seed if k == 0 else seed * _SEED_STRIDE + k
 
@@ -447,6 +466,7 @@ def seed_plan(
     seed: int,
     time_budget_s: float = 20.0,
     max_attempts: int | None = None,
+    seeder: Literal["spring", "cells"] = "spring",
 ) -> SeedResult:
     """A first valid corridor plan for ``prepared`` (RD 3.2 §5); never raises.
 
@@ -456,6 +476,7 @@ def seed_plan(
     result does not depend on the machine's speed.
     """
     t0 = time.monotonic()
+    choices = ("cells", "spring") if seeder == "cells" else ("spring",)
     budget_s = max(float(time_budget_s), 1e-3)
     n_attempts = _MAX_ATTEMPTS
     if max_attempts is not None:
@@ -495,68 +516,75 @@ def seed_plan(
                 break
             attempts += 1
             t_attempt = time.monotonic()
-            pos = embed(search.graph, prepared, rulebook, seed=_attempt_seed(seed, k))
-            counts = combos[k % len(combos)]
-            # Q311: the assignment cuts its searches short early enough for the realisation.
-            ctx.memo[DEADLINE_KEY] = search.deadline - _STEP_SAFETY * search.slowest
-            t_assign = time.monotonic()
-            draft = assign(ctx, counts, pos)
-            slowest_assign = max(slowest_assign, time.monotonic() - t_assign)
-            # Q.1: when the assignment expects problems, try the other band counts on the
-            # same embedding and keep the best expectation (no realisation needed).
-            for other in combos:
-                if draft.estimate == (0, 0) or time.monotonic() - t0 > budget_s / 2:
+            for which in choices:
+                if which == "cells":
+                    pos = _cells_positions(search, k)
+                else:
+                    pos = embed(search.graph, prepared, rulebook, seed=_attempt_seed(seed, k))
+                counts = combos[k % len(combos)]
+                # Q311: the assignment cuts its searches short early enough for the realisation.
+                ctx.memo[DEADLINE_KEY] = search.deadline - _STEP_SAFETY * search.slowest
+                t_assign = time.monotonic()
+                draft = assign(ctx, counts, pos)
+                slowest_assign = max(slowest_assign, time.monotonic() - t_assign)
+                # Q.1: when the assignment expects problems, try the other band counts on the
+                # same embedding and keep the best expectation (no realisation needed).
+                for other in combos:
+                    if draft.estimate == (0, 0) or time.monotonic() - t0 > budget_s / 2:
+                        break
+                    if not search.affords(slowest_assign + search.slowest):  # Q311
+                        break
+                    if other != counts:
+                        t_assign = time.monotonic()
+                        alt = assign(ctx, other, pos)
+                        slowest_assign = max(slowest_assign, time.monotonic() - t_assign)
+                        if alt.estimate < draft.estimate:
+                            draft = alt
+                real = search.realise(draft)
+
+                def reassign(new_counts: list[int], pos: Positions = pos) -> Draft | None:
+                    return assign(ctx, new_counts, pos)
+
+                def resplit(
+                    current: Draft, slot: Slot, room: str, pos: Positions = pos
+                ) -> Draft | None:
+                    return _resplit(ctx, current, slot, room, pos)
+
+                def repack(current: Draft, got: Realization, pos: Positions = pos) -> Draft | None:
+                    return _repack(ctx, current, got, pos)
+
+                remaining = search.left() - search.slowest
+                if score(real) != (0, 0) and remaining > 0:
+                    with bounded(
+                        max_iter=4 * len(ctx.reqs) + 40,
+                        time_budget_s=remaining,
+                        label="seed-repair",
+                        on_exhaust="stop",
+                    ) as rep:
+
+                        def tick(rep: Budget = rep) -> bool:
+                            return rep.tick() and search.affords()
+
+                        for _ in range(4 * len(ctx.reqs) + 40):
+                            step = repair_step(
+                                ctx,
+                                draft,
+                                real,
+                                search.realise,
+                                reassign,
+                                search.allowed,
+                                tick,
+                                resplit,
+                                repack,
+                            )
+                            if step is None:
+                                break
+                            draft, real = step
+                            if score(real) == (0, 0):
+                                break
+                if which == "spring" or score(real) == (0, 0):
                     break
-                if not search.affords(slowest_assign + search.slowest):  # Q311
-                    break
-                if other != counts:
-                    t_assign = time.monotonic()
-                    alt = assign(ctx, other, pos)
-                    slowest_assign = max(slowest_assign, time.monotonic() - t_assign)
-                    if alt.estimate < draft.estimate:
-                        draft = alt
-            real = search.realise(draft)
-
-            def reassign(new_counts: list[int], pos: Positions = pos) -> Draft | None:
-                return assign(ctx, new_counts, pos)
-
-            def resplit(
-                current: Draft, slot: Slot, room: str, pos: Positions = pos
-            ) -> Draft | None:
-                return _resplit(ctx, current, slot, room, pos)
-
-            def repack(current: Draft, got: Realization, pos: Positions = pos) -> Draft | None:
-                return _repack(ctx, current, got, pos)
-
-            remaining = search.left() - search.slowest
-            if score(real) != (0, 0) and remaining > 0:
-                with bounded(
-                    max_iter=4 * len(ctx.reqs) + 40,
-                    time_budget_s=remaining,
-                    label="seed-repair",
-                    on_exhaust="stop",
-                ) as rep:
-
-                    def tick(rep: Budget = rep) -> bool:
-                        return rep.tick() and search.affords()
-
-                    for _ in range(4 * len(ctx.reqs) + 40):
-                        step = repair_step(
-                            ctx,
-                            draft,
-                            real,
-                            search.realise,
-                            reassign,
-                            search.allowed,
-                            tick,
-                            resplit,
-                            repack,
-                        )
-                        if step is None:
-                            break
-                        draft, real = step
-                        if score(real) == (0, 0):
-                            break
+                _LOG.info("cells seeding attempt %d unrealisable: spring fallback", k)
             slowest_attempt = max(slowest_attempt, time.monotonic() - t_attempt)
             sc = score(real)
             key = (sc, _rank(real) if sc == (0, 0) else (0, 0.0))
