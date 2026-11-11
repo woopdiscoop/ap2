@@ -41,6 +41,7 @@ Maintained by the Router only. Directive: `specs/DIRECTIVE.md` (v2.2, supersedes
 | R.6 | Visual critique of a variant (Claude, advisory) | **DONE** | — | RD + eval | |
 | X.2 | Vector PDF: filled zones as rooms (Archicad exports) | **DONE** | R.10 | RD + eval | Found on the real AREP-MS sheet: 371 filled zones, walls as single strokes → 0 rooms read. |
 | R.10 | `ale score`: score an existing scheme against a programme (first use: the manual AREP-MS sheet) | **DONE** | — | RD + eval | Extract with the vector-PDF reader, match to programme, same checks as ALE variants; file kept outside the repo. |
+| G.1 | Exact plans in any orthogonal footprint (N pieces, several junctions; contracts 1.6.0) | **IN-PROGRESS** | — | RD + eval | Needed to build U, T, comb, courtyard partis in detail. |
 | G.3 | Form-finding: outline from the outside (cell growth on the plot), `ale form` | **IN-PROGRESS** | A.4, R.9 | RD + eval | Phase 1 of the target pipeline. |
 | R.9 | Whole-programme cell-growth seeding (user's method) | **DONE (option, not adopted)** | A.4 done | RD + eval | Adopted as default only if it beats the spring seeder. Carries the Q.4 D05 target NO_FACADE ≤ 1. |
 | A.4 | Contract: site anchors (entrances, cores, plot mode, setbacks, party edges) + room anchors + floors (1.5.0) | **DONE** | — | RD + eval | Needed by R.9, G.3 and multi-storey. |
