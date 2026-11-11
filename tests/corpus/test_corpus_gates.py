@@ -43,7 +43,8 @@ def test_C16_gates() -> None:
 
     ci = yaml.safe_load((REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text("utf-8"))
     runs = [step.get("run", "") for job in ci["jobs"].values() for step in job["steps"]]
-    assert any('pip install -e ".[dev,excel,cad,pdf,raster,vlm]"' in r.splitlines() for r in runs)
+    install = 'pip install -e ".[dev,excel,cad,pdf,raster,vlm,ui]"'
+    assert any(install in r.splitlines() for r in runs)
 
     if importlib.util.find_spec("ruff") is None:  # pragma: no cover - dev extra installed
         pytest.skip("ruff not installed")

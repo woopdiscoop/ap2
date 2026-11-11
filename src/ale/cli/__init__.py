@@ -15,6 +15,7 @@ from ale.cli.commands import doctor, extract, form, generate, ingest, init, laye
 from ale.cli.commands import program as program_cmd
 from ale.cli.commands import score as score_cmd
 from ale.cli.commands import status as status_cmd
+from ale.cli.commands import ui as ui_cmd
 from ale.cli.commands._common import LOG_LEVEL_EXPLICIT_KEY
 from ale.logging_setup import configure_logging, shutdown_logging
 
@@ -86,6 +87,7 @@ app.command("status")(status_cmd.status)
 app.command("critique")(critique_cmd.critique)
 app.command("score")(score_cmd.score)
 app.command("form")(form.form)
+app.command("ui")(ui_cmd.ui)
 
 
 def main() -> None:

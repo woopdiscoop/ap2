@@ -64,9 +64,24 @@ ale program check --program my_programme.xlsx --site examples/p25_site.yaml \
 A site is a YAML file: `footprint` (outline points in metres, counter-clockwise), `north_angle_deg`,
 `access_edge` (index of the edge with the entrance), `core_hint` (optional). See `p25_site.yaml`.
 
+## Interface
+
+A local web interface (French) wraps the same functions as the commands: programme (Annexe or ALE
+template), site form, form search (when `ale form` is present), plans, scoring of an existing project and
+critique (when a VLM provider is configured).
+
+```bash
+pip install -e ".[ui,excel,cad,pdf]"
+ale ui --workspace my_ws          # opens http://localhost:8501 (use --port to change it)
+```
+
+Set the time per variant in the sidebar (30 s is enough for quick tries). Rules default to the first
+`my_ws/rulebook/*.yaml`, else `examples/rulebook_seed_draft.yaml`; upload your own in the sidebar.
+Everything runs on your machine; nothing is uploaded anywhere.
+
 ## Current limits (v1)
 
 - Rectangular and L-shaped footprints only, one storey.
 - Large programs (P60) still end with a few hard-rule violations, mostly offices without façade. This is
   being worked on (ticket Q.3).
-- Command line only; a graphical interface is planned for v2.
+- Command line, plus a small local web interface (see « Interface »).
