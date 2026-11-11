@@ -62,6 +62,11 @@ FROZEN_CODES = {
     "W_UNKNOWN_COLUMN",
     "W_ZONE_DEFAULTED",
     "W_FACADE_TIGHT",  # Q.2a
+    "E_ANCHOR",  # A.4
+    "E_FLOORS_MULTIPLE",  # A.4
+    "W_ANCHOR_NO_ENTRANCE",  # A.4
+    "W_ANCHOR_CORNERS",  # A.4
+    "W_SITE_PLOT_MODE",  # A.4
 }
 
 
@@ -290,7 +295,7 @@ def test_X08_headers(tmp_path: Path) -> None:
 def test_X09_comments_blank(tmp_path: Path) -> None:
     rows = [
         good_row("R01"),
-        [None] * 16,
+        [None] * 17,
         row(ID="#note", Nom=None, Surface="pas un nombre"),
         ["", "  ", None],
         good_row("R05", Surface=-1),
@@ -332,7 +337,7 @@ def test_X10_never_raises(tmp_path: Path) -> None:
         if rng.random() < 0.8:
             headers: list[Any] = list(HEADERS)
             rng.shuffle(headers)
-            headers = headers[: rng.randint(4, 16)]
+            headers = headers[: rng.randint(4, 17)]
             if rng.random() < 0.3:
                 headers.append(_random_cell(rng))
         else:
@@ -379,7 +384,7 @@ def test_empty_sheet_and_no_rooms(tmp_path: Path) -> None:
     assert program is None
     assert [i.code for i in report.issues] == ["E_MISSING_COLUMN"] * 4
 
-    program, report = read_rows(tmp_path, [[None] * 16, row(ID="# seulement un commentaire")])
+    program, report = read_rows(tmp_path, [[None] * 17, row(ID="# seulement un commentaire")])
     assert program is None
     assert codes(report) == [("E_NO_ROOMS", None)]
 

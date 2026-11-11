@@ -23,7 +23,9 @@ from ale.contracts.units import to_decimal
 from ale.program.models import Issue, ProgramReport, make_issue
 
 __all__ = [
+    "ANCHOR_LABELS",
     "COL_ADJ",
+    "COL_ANCHOR",
     "COL_AREA",
     "COL_AVOID",
     "COL_FACADE",
@@ -59,6 +61,7 @@ COL_MIN_WIDTH = "Largeur min (m)"
 COL_ADJ = "Adjacent à"
 COL_AVOID = "Éviter"
 COL_FLOOR = "Niveau"
+COL_ANCHOR = "Ancrage"
 COL_NOTES = "Remarques"
 
 #: Orientation columns and the bearing each one maps to (``O`` = Ouest → ``Bearing.W``).
@@ -69,7 +72,7 @@ ORIENTATION_COLUMNS: tuple[tuple[str, Bearing], ...] = (
     ("Orientation O", Bearing.W),
 )
 
-#: The 16 headers of the template, in column order (A-P).
+#: The 17 headers of the template, in column order (A-Q).
 HEADERS: tuple[str, ...] = (
     COL_ID,
     COL_NAME,
@@ -83,6 +86,7 @@ HEADERS: tuple[str, ...] = (
     COL_ADJ,
     COL_AVOID,
     COL_FLOOR,
+    COL_ANCHOR,
     COL_NOTES,
 )
 REQUIRED_HEADERS: tuple[str, ...] = (COL_ID, COL_NAME, COL_TYPE, COL_AREA)
@@ -119,6 +123,10 @@ def canon_header(text: str) -> str:
     """Canonical header: accents, case, extra spaces and a ``(m²)``/``(m)`` suffix ignored."""
     return _UNIT_SUFFIX_RE.sub("", _fold(text)).strip()
 
+
+#: « Ancrage » words (folded) → ``RoomSpec.anchor``; the label is what the template writes.
+ANCHOR_LABELS: dict[str, str] = {"corner": "Coin", "entrance": "Entrée"}
+_ANCHOR_WORDS: dict[str, str] = {"coin": "corner", "entree": "entrance"}
 
 _ZONE_WORDS: dict[str, MacroZone] = {
     **{_fold(label): zone for zone, label in ZONE_LABELS.items()},
@@ -217,6 +225,7 @@ _FIELD_CODES: dict[str, str] = {
     "adjacent_to": "E_REF_UNKNOWN",
     "avoid": "E_REF_UNKNOWN",
     "floor": "E_FLOOR",
+    "anchor": "E_ANCHOR",
     "rooms": "E_NO_ROOMS",
 }
 _FIELD_COLUMNS: dict[str, str] = {
@@ -231,6 +240,7 @@ _FIELD_COLUMNS: dict[str, str] = {
     "adjacent_to": COL_ADJ,
     "avoid": COL_AVOID,
     "floor": COL_FLOOR,
+    "anchor": COL_ANCHOR,
 }
 
 
@@ -324,6 +334,7 @@ class _Reader:
         r.adjacent = self._refs(get(COL_ADJ), COL_ADJ, bad)
         r.avoid = self._refs(get(COL_AVOID), COL_AVOID, bad)
         self._floor(r, get(COL_FLOOR), bad)
+        self._anchor(r, get(COL_ANCHOR), bad)
         return r
 
     def _id(self, r: _Row, value: Any, bad: _Bad) -> None:
@@ -506,10 +517,20 @@ class _Reader:
             r.data["floor"] = 0
             return
         d = _number(value)
-        if d is None or d != 0:
-            bad("E_FLOOR", "Seul le niveau 0 est accepté en v1.", COL_FLOOR, value)
+        if d is None or d != d.to_integral_value() or d < 0:
+            bad("E_FLOOR", "Le niveau doit être un entier ≥ 0.", COL_FLOOR, value)
             return
-        r.data["floor"] = 0
+        r.data["floor"] = int(d)
+
+    def _anchor(self, r: _Row, value: Any, bad: _Bad) -> None:
+        if value is None:
+            r.data["anchor"] = None
+            return
+        anchor = _ANCHOR_WORDS.get(_fold(value)) if isinstance(value, str) else None
+        if anchor is None:
+            bad("E_ANCHOR", "L'ancrage doit valoir « coin » ou « entrée ».", COL_ANCHOR, value)
+            return
+        r.data["anchor"] = anchor
 
     # ---------------------------------------------------------------- cross-row
 

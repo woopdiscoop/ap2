@@ -60,6 +60,8 @@ __all__ = [
     "AdjEntry",
     "Adjacency",
     "CoreOffset",
+    "CoreSpec",
+    "Entrance",
     "GridSpec",
     "LabelledPolygon",
     "Layout",
@@ -136,6 +138,9 @@ class RoomSpec(BaseModel):
     adjacent_to: tuple[RoomId, ...] = ()
     avoid: tuple[RoomId, ...] = ()
     floor: StrictInt = 0
+    anchor: Literal["corner", "entrance"] | None = None
+    """Hard line of the architect (A.4): ``corner`` = the room takes a corner of the building,
+    ``entrance`` = the room is at the main entrance. Not used by the v1 engines."""
 
     @field_validator("type")
     @classmethod
@@ -145,9 +150,10 @@ class RoomSpec(BaseModel):
 
     @field_validator("floor")
     @classmethod
-    def _floor_zero(cls, v: int) -> int:
-        if v != 0:
-            raise ValueError("floor must be 0 in v1")
+    def _floor_non_negative(cls, v: int) -> int:
+        """Levels start at 0 (A.4); v1 engines are single-floor (``prepare_input`` checks)."""
+        if v < 0:
+            raise ValueError("floor must be >= 0")
         return v
 
     @model_validator(mode="after")
@@ -201,8 +207,40 @@ class Program(BaseModel):
         return tuple(out)
 
 
+#: Tolerance (metres) of the "entrance on the boundary" check: one module at the default
+#: grid (100 mm). The contract has no grid, so the tolerance does not follow ``module_mm``.
+ENTRANCE_TOLERANCE_M = 0.1
+_GEOM_EPS = 1e-9
+
+
+class Entrance(BaseModel):
+    """An entrance of the building or plot (metres); at most one is ``main``."""
+
+    model_config = _CONFIG
+
+    point: Point2
+    label: StrictStr = ""
+    main: StrictBool = False
+
+
+class CoreSpec(BaseModel):
+    """A fixed vertical core: ``rect = (x, y, w, h)`` in metres (lower-left corner, size)."""
+
+    model_config = _CONFIG
+
+    id: RoomId
+    rect: tuple[Float, Float, Annotated[Float, Field(gt=0.0)], Annotated[Float, Field(gt=0.0)]]
+    kind: Literal["stair", "lift", "shaft", "core"]
+
+
 class SiteSpec(BaseModel):
-    """Buildable site (metres, y-up)."""
+    """Buildable site (metres, y-up).
+
+    ``core_hint`` is deprecated (kept for compatibility): use ``cores``. ``mode`` is
+    ``"footprint"`` (the polygon is the building outline, today's behaviour) or ``"plot"``
+    (the polygon is the plot and ``setbacks`` apply). ``party_edges`` lists exterior edges on a
+    party wall. None of the A.4 fields is used by the v1 engines.
+    """
 
     model_config = _CONFIG
 
@@ -210,6 +248,11 @@ class SiteSpec(BaseModel):
     north_angle_deg: Annotated[Float, Field(ge=0.0, lt=360.0)]
     access_edge: StrictInt
     core_hint: Point2 | None = None
+    entrances: tuple[Entrance, ...] = ()
+    cores: tuple[CoreSpec, ...] = ()
+    mode: Literal["footprint", "plot"] = "footprint"
+    setbacks: tuple[Annotated[Float, Field(ge=0.0)], ...] | None = None
+    party_edges: tuple[StrictInt, ...] = ()
 
     @model_validator(mode="after")
     def _site(self) -> SiteSpec:
@@ -223,7 +266,59 @@ class SiteSpec(BaseModel):
         n_ext = len(self.footprint.exterior)
         if not 0 <= self.access_edge < n_ext:
             raise ValueError(f"access_edge {self.access_edge} out of range 0..{n_ext - 1}")
+        self._check_anchors(n_ext)
         return self
+
+    def _check_anchors(self, n_ext: int) -> None:
+        if self.setbacks is not None:
+            if self.mode != "plot":
+                raise ValueError(
+                    "setbacks : seulement avec mode « plot » (mode actuel : « footprint »)"
+                )
+            if len(self.setbacks) != n_ext:
+                raise ValueError(
+                    f"setbacks : {len(self.setbacks)} valeurs pour {n_ext} côtés extérieurs"
+                )
+        for i in self.party_edges:
+            if not 0 <= i < n_ext:
+                raise ValueError(f"party_edges : côté {i} hors limites (0 à {n_ext - 1})")
+        dups = sorted({i for i in self.party_edges if self.party_edges.count(i) > 1})
+        if dups:
+            raise ValueError(f"party_edges : côtés en double {dups}")
+        if sum(e.main for e in self.entrances) > 1:
+            raise ValueError("entrances : une seule entrée peut être « main »")
+        dup_ids = _duplicates(c.id for c in self.cores)
+        if dup_ids:
+            raise ValueError(f"cores : identifiants en double {dup_ids}")
+        if not (self.entrances or self.cores):
+            return
+        from shapely import Point, box
+        from shapely import Polygon as ShapelyPolygon
+
+        site = ShapelyPolygon(self.footprint.exterior, self.footprint.holes)
+        boundary = site.boundary
+        for k, e in enumerate(self.entrances):
+            pt = Point(e.point)
+            if self.mode == "plot":
+                if not site.buffer(_GEOM_EPS).covers(pt):
+                    raise ValueError(f"entrances[{k}] : le point {e.point} est hors de la parcelle")
+            elif boundary.distance(pt) > ENTRANCE_TOLERANCE_M + _GEOM_EPS:
+                raise ValueError(
+                    f"entrances[{k}] : le point {e.point} n'est pas sur le contour de l'emprise "
+                    f"(tolérance {ENTRANCE_TOLERANCE_M} m)"
+                )
+        boxes: list[Any] = []
+        for k, c in enumerate(self.cores):
+            x, y, w, h = c.rect
+            rect = box(x, y, x + w, y + h)
+            if not site.buffer(_GEOM_EPS).covers(rect):
+                raise ValueError(f"cores[{k}] ({c.id!r}) : le rectangle {c.rect} sort du site")
+            for j, other in enumerate(boxes):
+                if rect.intersection(other).area > _GEOM_EPS:
+                    raise ValueError(
+                        f"cores[{k}] ({c.id!r}) : chevauche cores[{j}] ({self.cores[j].id!r})"
+                    )
+            boxes.append(rect)
 
 
 # --------------------------------------------------------------------------- 9.2 Layout
