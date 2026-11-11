@@ -52,7 +52,8 @@ The footprint is a design output, not only an input. Three steps, v2:
 Stackability first: (1) **vertical cores fixed across floors**: stairs, lifts, shafts, wet rooms (sanitary, cleaning,
 technical) occupy the same grid cells on every floor; (2) **room stacking**: a room placed above another of the same
 footprint is rewarded, and floors share one bay rhythm (same bay widths along each band where possible);
-(3) **structural regularity**: one column grid for all floors (multiple of the 60 cm module), partition lines
+(3) floor outlines may recede upwards to make **terraces** (user, U-15): cores, wet stacks and the column grid stay
+continuous, the floor plate above sits within the one below unless an overhang is a deliberate choice; (4) **structural regularity**: one column grid for all floors (multiple of the 60 cm module), partition lines
 aligned to it where possible. Approach: lay out the most constrained floor first (or a "typical floor"), freeze its
 cores and bay rhythm, then lay out the other floors inside that skeleton; scored by a stackability metric (share of
 room area with an identical room above / below, core alignment = hard).
