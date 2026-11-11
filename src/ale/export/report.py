@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from decimal import ROUND_HALF_EVEN, Decimal
 from fractions import Fraction
 
+from ale.analysis import RoomSyntax, SyntaxAnalysis, analyse
 from ale.contracts.config import AleConfig
 from ale.contracts.enums import MacroZone
 from ale.contracts.geometry import ModulePolygon, ModuleRect, Point2
@@ -226,6 +227,83 @@ def _row(cells: list[str]) -> str:
     return "| " + " | ".join(_cell(c) for c in cells) + " |"
 
 
+def _fr_frac(x: Fraction) -> str:
+    return fr_num(Decimal(x.numerator) / Decimal(x.denominator))
+
+
+def _syntax_sentences(
+    rooms: tuple[RoomSyntax, ...], names: Mapping[str, str], syn: SyntaxAnalysis
+) -> list[str]:
+    integrated = [r for r in rooms if r.integration is not None]
+    reached = [r for r in rooms if r.depth is not None]
+    parts: list[str] = []
+    if integrated:
+        best = max(integrated, key=lambda r: (r.integration or Fraction(0), -rooms.index(r)))
+        parts.append(
+            f"La pièce la plus intégrée est {names[best.instance_id]} "
+            f"(intégration {_fr_frac(best.integration or Fraction(0))})"
+        )
+    else:
+        parts.append("Aucune intégration n'est définie")
+    if reached:
+        deep = max(reached, key=lambda r: (r.depth or 0, -rooms.index(r)))
+        parts.append(f"la plus profonde est {names[deep.instance_id]} (profondeur {deep.depth})")
+    first = "; ".join(parts) + "."
+    pub = syn.zone_mean_depth.get(MacroZone.PUBLIC)
+    adm = syn.zone_mean_depth.get(MacroZone.ADMINISTRATIVE)
+    if pub is None or adm is None:
+        second = (
+            "La profondeur moyenne des pièces publiques et administratives "
+            "ne peut pas être comparée."
+        )
+    else:
+        rel = "inférieure à" if pub < adm else "supérieure à" if pub > adm else "égale à"
+        second = (
+            f"La profondeur moyenne des pièces publiques ({_fr_frac(pub)}) est {rel} "
+            f"celle des pièces administratives ({_fr_frac(adm)})."
+        )
+    return [first, second]
+
+
+def _syntax_section(
+    layout: Layout, prepared: PreparedInput, config: AleConfig, infos: tuple[RoomInfo, ...]
+) -> list[str]:
+    """Space-syntax reading (Ticket R.3), a ``###`` block closing the report."""
+    syn = analyse(layout, prepared, config)
+    names = {i.instance_id: i.name for i in infos}
+    dash = "—"
+    mean = _fr_frac(syn.mean_depth) if syn.mean_depth is not None else dash
+    walk = _fr_frac(syn.max_walk_m) if syn.max_walk_m is not None else dash
+    lines = ["", "### Lecture spatiale (space syntax)", ""]
+    lines += [
+        f"- Profondeur moyenne : {mean}",
+        f"- Distance maximale depuis l'entrée : {walk} m",
+        f"- Entrée inférée : {'oui' if syn.entrance_inferred else 'non'}",
+        "",
+        _row(["ID", "Nom", "Profondeur", "Intégration", "Contrôle", "Distance depuis l'entrée m"]),
+        "|" + "---|" * 6,
+    ]
+    for r in syn.rooms:
+        lines.append(
+            _row(
+                [
+                    r.instance_id,
+                    names.get(r.instance_id, r.instance_id),
+                    str(r.depth) if r.depth is not None else dash,
+                    _fr_frac(r.integration) if r.integration is not None else dash,
+                    _fr_frac(r.control),
+                    _fr_frac(r.walk_m) if r.walk_m is not None else dash,
+                ]
+            )
+        )
+    lines += ["", _row(["Zone", "Profondeur moyenne"]), "|---|---|"]
+    for zone in MacroZone:
+        zmean = syn.zone_mean_depth.get(zone)
+        lines.append(_row([ZONE_FR[zone], _fr_frac(zmean) if zmean is not None else dash]))
+    lines += ["", *_syntax_sentences(syn.rooms, names, syn)]
+    return lines
+
+
 def render_report(
     layout: Layout,
     prepared: PreparedInput,
@@ -346,4 +424,5 @@ def render_report(
         lines.append(f"- `{DXF_NAME}` : DXF non généré ({dxf_note})")
     lines.append(f"- `{SVG_NAME}` : aperçu (SVG)")
     lines.append(f"- `{REPORT_NAME}` : ce rapport")
+    lines += _syntax_section(layout, prepared, config, infos)
     return "\n".join(lines) + "\n"
