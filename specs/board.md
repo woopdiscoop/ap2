@@ -33,7 +33,7 @@ Maintained by the Router only. Directive: `specs/DIRECTIVE.md` (v2.2, supersedes
 | P.2 | Import « programme physique » (Annexe format) | **DONE** | e730d6a | RD + eval | `ale program import`; AREP-MS mapping as default rules; synthetic fixtures only. |
 | Q.4 | Max depth from façade (7.20 m) | **DONE** | Q.3 | RD + eval | Contracts 1.4.0 `facade.max_depth_m`; `FACADE_DEPTH` hard; depth beats aspect for big rooms. |
 | X.1 | `ale extract --force` + exact raster extent | **DONE** | I.2 | RD + eval | I.2 follow-ups; independent of P.2/Q.3/Q.4 files. |
-| R.1 | Multi-start annealing (stable quality) | READY | Q.4 | roadmap | See `specs/design/research_roadmap.md`. |
+| R.1 | Multi-start annealing (stable quality) | **IN-PROGRESS** | Q.4 | roadmap | See `specs/design/research_roadmap.md`. |
 | R.2 | Non-dominated variant set + diversity score | QUEUED | R.1 | roadmap | |
 | R.3 | Space-syntax measures in the report | **DONE** | — | RD + eval | |
 | R.4 | Plain-language explanation per variant | QUEUED | R.3 | roadmap | |
