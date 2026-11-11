@@ -78,6 +78,19 @@ class InputCheck:
         return [i for i in self.issues if i.severity == "warning"]
 
     @property
+    def structure(self) -> tuple[int, int, int] | None:
+        """``(pieces, junctions, courtyards)`` of the module footprint (X.3), if it decomposes."""
+        if self.footprint is None:
+            return None
+        from ale.contracts.footprint import decompose_footprint
+
+        try:
+            fp = decompose_footprint(self.footprint.polygon)
+        except ValueError:  # outside the grammar (more than 12 pieces)
+            return None
+        return len(fp.pieces), len(fp.junctions), len(self.footprint.polygon.holes)
+
+    @property
     def anchors(self) -> tuple[tuple[str, str, str], ...]:
         """``(room id, name, anchor)`` of every anchored room of the program (A.4)."""
         if self.program is None:

@@ -26,6 +26,7 @@ __all__ = [
     "CORE_KEYS",
     "DXF_KEYS",
     "ENTRANCE_KEYS",
+    "FOOTPRINT_KEYS",
     "SITE_KEYS",
     "module_perimeter_mm",
     "normalise_footprint",
@@ -52,6 +53,7 @@ ENTRANCE_KEYS: frozenset[str] = frozenset({"point", "label", "main"})
 CORE_KEYS: frozenset[str] = frozenset({"id", "rect", "kind"})
 CORE_KINDS: tuple[str, ...] = ("stair", "lift", "shaft", "core")
 DXF_KEYS: frozenset[str] = frozenset({"path", "layer", "units"})
+FOOTPRINT_KEYS: frozenset[str] = frozenset({"exterior", "holes"})
 
 #: Metres per drawing unit, by unit name and by DXF ``$INSUNITS`` code.
 _UNIT_FACTORS: dict[str, Decimal] = {"mm": Decimal("0.001"), "cm": Decimal("0.01"), "m": Decimal(1)}
@@ -183,6 +185,19 @@ def _normalise_edges(points_mm: Sequence[MmPoint], access_edge: int) -> tuple[li
             f"access_edge {access_edge} hors limites : l'emprise a {n_in} côtés (0 à {n_in - 1}).",
             access_edge,
         )
+    edges = _clean_edges(points_mm)
+    for k, e in enumerate(edges):
+        if access_edge in e.tags:
+            return edges, k
+    raise _fail(
+        "E_SITE_ACCESS_EDGE",
+        f"Le côté d'accès {access_edge} est de longueur nulle après arrondi au millimètre.",
+        access_edge,
+    )
+
+
+def _clean_edges(points_mm: Sequence[MmPoint]) -> list[_Edge]:
+    """Simplified, CCW, rotated, simple and orthogonal edge list of a ring (E_SITE_* errors)."""
     edges = _simplify(_ring_edges(points_mm))
     pts = [e.a for e in edges]
     area2 = _twice_area(pts) if len(pts) >= 3 else 0
@@ -204,14 +219,50 @@ def _normalise_edges(points_mm: Sequence[MmPoint], access_edge: int) -> tuple[li
                 "parallèles aux axes et exprimez la rotation dans north_angle_deg.",
                 (mm_to_m(e.a[0]), mm_to_m(e.a[1]), mm_to_m(e.b[0]), mm_to_m(e.b[1])),
             )
-    for k, e in enumerate(edges):
-        if access_edge in e.tags:
-            return edges, k
-    raise _fail(
-        "E_SITE_ACCESS_EDGE",
-        f"Le côté d'accès {access_edge} est de longueur nulle après arrondi au millimètre.",
-        access_edge,
-    )
+    return edges
+
+
+def _hole_ring(points_mm: Sequence[MmPoint], k: int) -> tuple[MmPoint, ...]:
+    """Courtyard ``k`` normalised: clockwise, starting at its lowest-then-leftmost vertex."""
+    try:
+        edges = _clean_edges(points_mm)
+    except _Fail as exc:
+        first = exc.issues[0]
+        text = first.message.replace("Emprise", "emprise", 1)
+        raise _fail(first.code, f"Cour intérieure {k} (holes[{k}]) : {text}", k) from None
+    ccw = [e.a for e in edges]
+    cw = [ccw[0], *reversed(ccw[1:])]  # same start vertex, opposite orientation
+    return tuple(cw)
+
+
+def _hole_geometry_issues(ext: Sequence[MmPoint], holes: Sequence[tuple[MmPoint, ...]]) -> None:
+    """Every hole strictly inside the exterior and the holes apart from each other."""
+    import shapely
+
+    outer = shapely.Polygon(ext)
+    polys = [shapely.Polygon(h) for h in holes]
+    for k, poly in enumerate(polys):
+        if not outer.contains(poly):
+            raise _fail(
+                "E_SITE_INVALID",
+                f"Cour intérieure {k} (holes[{k}]) : hors de l'emprise extérieure.",
+                k,
+            )
+        if poly.intersects(outer.exterior):
+            raise _fail(
+                "E_SITE_INVALID",
+                f"Cour intérieure {k} (holes[{k}]) : touche le contour extérieur "
+                "(une cour doit être strictement à l'intérieur).",
+                k,
+            )
+    for k, a in enumerate(polys):
+        for j in range(k + 1, len(polys)):
+            if a.intersects(polys[j]):
+                raise _fail(
+                    "E_SITE_INVALID",
+                    f"Cour intérieure {j} (holes[{j}]) : chevauche ou touche la cour {k}.",
+                    j,
+                )
 
 
 # --------------------------------------------------------------------------- YAML
@@ -445,34 +496,64 @@ def _core(c: Mapping[str, Any]) -> CoreSpec:
     return CoreSpec(id=c["id"].strip(), rect=(x, y, w, h), kind=c["kind"])
 
 
+def _ring_points(raw: object, name: str) -> list[tuple[Decimal, Decimal]]:
+    """Points ``[x, y]`` (metres) of a ring given in ``site.yaml``."""
+    if not isinstance(raw, list | tuple) or len(raw) < 3:
+        raise _fail("E_SITE_SCHEMA", f"{name} doit être une liste d'au moins 3 points.", raw)
+    points: list[tuple[Decimal, Decimal]] = []
+    for v in raw:
+        pt = _point(v)
+        if pt is None:
+            raise _fail("E_SITE_SCHEMA", f"Chaque point de {name} doit être [x, y].", v)
+        points.append(pt)
+    return points
+
+
 def _site(data: object, base_dir: Path) -> SiteSpec:
     if not isinstance(data, Mapping):
         raise _fail("E_SITE_SCHEMA", "site.yaml doit contenir un dictionnaire.", data)
     issues = _schema_issues(data)
     if issues:
         raise _Fail(*issues)
+    holes_mm: list[tuple[MmPoint, ...]] = []
     if "footprint" in data:
         raw = data["footprint"]
-        if not isinstance(raw, list | tuple) or len(raw) < 3:
-            raise _fail("E_SITE_SCHEMA", "footprint doit être une liste d'au moins 3 points.", raw)
-        points: list[tuple[Decimal, Decimal]] = []
-        for v in raw:
-            pt = _point(v)
-            if pt is None:
-                raise _fail("E_SITE_SCHEMA", "Chaque point de footprint doit être [x, y].", v)
-            points.append(pt)
+        raw_holes: object = []
+        if isinstance(raw, Mapping):
+            for key in sorted(str(k) for k in raw if k not in FOOTPRINT_KEYS):
+                raise _fail("E_SITE_SCHEMA", f"Clé inconnue « {key} » dans footprint.", key)
+            if "exterior" not in raw:
+                raise _fail("E_SITE_SCHEMA", "footprint doit contenir la clé exterior.")
+            raw_holes = raw.get("holes", [])
+            raw = raw["exterior"]
+        points = _ring_points(
+            raw, "footprint" if not isinstance(data["footprint"], Mapping) else "footprint.exterior"
+        )
+        if not isinstance(raw_holes, list | tuple):
+            raise _fail(
+                "E_SITE_SCHEMA", "footprint.holes doit être une liste d'anneaux.", raw_holes
+            )
+        for k, hole in enumerate(raw_holes):
+            hole_pts = _ring_points(hole, f"footprint.holes[{k}]")
+            holes_mm.append(tuple((m_to_mm(x), m_to_mm(y)) for x, y in hole_pts))
     else:
         spec = data["footprint_dxf"]
         points = _read_dxf(base_dir / spec["path"], spec["layer"], spec.get("units"))
     mm = [(m_to_mm(x), m_to_mm(y)) for x, y in points]
     edges, access = _normalise_edges(mm, data.get("access_edge", 0))
     ring = tuple(e.a for e in edges)
+    holes = tuple(_hole_ring(h, k) for k, h in enumerate(holes_mm))
+    if holes:
+        _hole_geometry_issues(ring, holes)
     party, setbacks = _remap_anchors(data, edges, len(mm))
     hint = data.get("core_hint")
     hint_pt = _point(hint) if hint is not None else None
     try:
         return SiteSpec(
-            footprint=Polygon(exterior=tuple((mm_to_m(x), mm_to_m(y)) for x, y in ring)),
+            footprint=Polygon(
+                exterior=tuple((mm_to_m(x), mm_to_m(y)) for x, y in ring),
+                holes=tuple(tuple((mm_to_m(x), mm_to_m(y)) for x, y in h) for h in holes),
+            ),
             north_angle_deg=float(data.get("north_angle_deg", 0)),
             access_edge=access,
             core_hint=None if hint_pt is None else (float(hint_pt[0]), float(hint_pt[1])),
@@ -585,17 +666,10 @@ def to_module_footprint(site: SiteSpec, grid: GridSpec) -> ModuleFootprint:
         raise InputError(exc.issues) from None
 
 
-def _module_footprint(site: SiteSpec, grid: GridSpec) -> ModuleFootprint:
-    module = check_module_mm(grid.module_mm)
-    if site.footprint.holes:
-        raise _fail("E_SITE_INVALID", "Les emprises avec trous ne sont pas prises en charge.")
-    ext = [(m_to_mm(x), m_to_mm(y)) for x, y in site.footprint.exterior]
-    n = len(ext)
-    if _twice_area(ext) <= 0:
-        raise _fail("E_SITE_INVALID", "L'emprise doit être orientée dans le sens trigonométrique.")
-    x0 = min(p[0] for p in ext)
-    y0 = min(p[1] for p in ext)
-    rel = [(x - x0, y - y0) for x, y in ext]
+def _snap_ring(ring: Sequence[MmPoint], x0: int, y0: int, module: int) -> list[MmPoint]:
+    """Inward snap of a ring (material on the left of each edge) onto the module grid."""
+    n = len(ring)
+    rel = [(x - x0, y - y0) for x, y in ring]
     xs: list[int | None] = [None] * n  # snapped x of vertical edges, by edge index
     ys: list[int | None] = [None] * n  # snapped y of horizontal edges
     for i in range(n):
@@ -615,6 +689,40 @@ def _module_footprint(site: SiteSpec, grid: GridSpec) -> ModuleFootprint:
                 f"Sommet {i} sans côté horizontal et vertical : emprise non normalisée.",
             )
         snapped.append((x, y))
+    return snapped
+
+
+def _module_holes(
+    holes_mm: Sequence[Sequence[MmPoint]], x0: int, y0: int, module: int
+) -> tuple[tuple[MmPoint, ...], ...]:
+    """Courtyards snapped outward (the material shrinks), each at least 3 x 3 modules."""
+    out: list[tuple[MmPoint, ...]] = []
+    for k, ring in enumerate(holes_mm):
+        snapped = _snap_ring(ring, x0, y0, module)
+        edges = _simplify(_ring_edges(snapped))
+        pts = tuple(e.a for e in _rotate_to_start(edges)) if len(edges) >= 4 else ()
+        xs_ = [p[0] for p in pts]
+        ys_ = [p[1] for p in pts]
+        if not pts or max(xs_) - min(xs_) < 3 or max(ys_) - min(ys_) < 3:
+            raise _fail(
+                "E_SITE_TOO_SMALL",
+                f"Cour intérieure {k} (holes[{k}]) : trop petite pour la trame de {module} mm "
+                "(au moins 3 x 3 modules).",
+                k,
+            )
+        out.append(pts)
+    return tuple(out)
+
+
+def _module_footprint(site: SiteSpec, grid: GridSpec) -> ModuleFootprint:
+    module = check_module_mm(grid.module_mm)
+    ext = [(m_to_mm(x), m_to_mm(y)) for x, y in site.footprint.exterior]
+    if _twice_area(ext) <= 0:
+        raise _fail("E_SITE_INVALID", "L'emprise doit être orientée dans le sens trigonométrique.")
+    x0 = min(p[0] for p in ext)
+    y0 = min(p[1] for p in ext)
+    snapped = _snap_ring(ext, x0, y0, module)
+    holes_mm = [[(m_to_mm(x), m_to_mm(y)) for x, y in h] for h in site.footprint.holes]
     edges = _simplify(_ring_edges(snapped))
     too_small = _fail(
         "E_SITE_TOO_SMALL",
@@ -624,8 +732,16 @@ def _module_footprint(site: SiteSpec, grid: GridSpec) -> ModuleFootprint:
         raise too_small
     edges = _rotate_to_start(edges)
     try:
-        polygon = ModulePolygon(exterior=tuple(e.a for e in edges))
-    except ValidationError:
+        polygon = ModulePolygon(
+            exterior=tuple(e.a for e in edges), holes=_module_holes(holes_mm, x0, y0, module)
+        )
+    except ValidationError as exc:
+        if holes_mm:
+            raise _fail(
+                "E_SITE_INVALID",
+                "Cour intérieure invalide une fois l'emprise calée sur la trame "
+                f"(cour fusionnée avec le contour ou une autre cour) : {exc.errors()[0]['msg']}.",
+            ) from None
         raise too_small from None
     if polygon.area_cells() <= 0:  # pragma: no cover - ModulePolygon requires CCW
         raise too_small
@@ -636,7 +752,7 @@ def _module_footprint(site: SiteSpec, grid: GridSpec) -> ModuleFootprint:
             f"Le côté d'accès {site.access_edge} disparaît une fois l'emprise calée sur la trame.",
             site.access_edge,
         )
-    metric_mm2 = Fraction(_twice_area(ext), 2)
+    metric_mm2 = Fraction(_twice_area(ext) + sum(_twice_area(h) for h in holes_mm), 2)
     module_mm2 = polygon.area_cells() * module * module
     sliver = (metric_mm2 - module_mm2) / _MM2_PER_M2
     return ModuleFootprint(
@@ -648,8 +764,12 @@ def _module_footprint(site: SiteSpec, grid: GridSpec) -> ModuleFootprint:
 
 
 def module_perimeter_mm(polygon: ModulePolygon, grid: GridSpec) -> int:
-    """Perimeter of a module polygon in millimetres (exact)."""
+    """Perimeter of a module polygon in millimetres (exact), courtyard faces included."""
     total = 0
     for a, b in polygon.edges():
         total += abs(b[0] - a[0]) + abs(b[1] - a[1])
+    for hole in polygon.holes:
+        for i, a in enumerate(hole):
+            b = hole[(i + 1) % len(hole)]
+            total += abs(b[0] - a[0]) + abs(b[1] - a[1])
     return total * check_module_mm(grid.module_mm)
