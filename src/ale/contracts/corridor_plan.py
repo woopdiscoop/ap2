@@ -140,6 +140,12 @@ class FingerBay(BaseModel):
             raise ValueError("junction_to is a child piece index (>= 1)")
         return self
 
+    def with_rooms(self, left: tuple[str, ...], right: tuple[str, ...]) -> FingerBay:
+        """This finger with other stacks, keeping ``junction`` and ``junction_to``."""
+        return FingerBay(
+            left=left, right=right, junction=self.junction, junction_to=self.junction_to
+        )
+
     @model_serializer(mode="wrap")
     def _drop_unset_target(self, handler: Any) -> Any:
         out = handler(self)

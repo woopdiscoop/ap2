@@ -31,13 +31,23 @@ def share_length(a: ModuleRect, b: ModuleRect) -> int:
     return 0
 
 
+def _edges(poly: ModulePolygon) -> list[tuple[tuple[int, int], tuple[int, int]]]:
+    """Edges of the exterior ring, then of every courtyard ring."""
+    out = list(poly.edges())
+    for ring in poly.holes:
+        n = len(ring)
+        out += [(ring[i], ring[(i + 1) % n]) for i in range(n)]  # int-mod
+    return out
+
+
 def exterior_contacts(rect: ModuleRect, poly: ModulePolygon) -> list[tuple[int, tuple[int, int]]]:
     """``(length, outward normal)`` of every footprint edge the rectangle lies along.
 
     Edges are taken in polygon order; the normal is the edge's outward axis vector.
     """
     out: list[tuple[int, tuple[int, int]]] = []
-    for (ax, ay), (bx, by) in poly.edges():
+    # Courtyard rings (G.1) run clockwise with the region on their left, like the exterior.
+    for (ax, ay), (bx, by) in _edges(poly):
         if ay == by:  # horizontal edge; CCW: +x runs along the bottom (outward -y)
             normal = (0, -1) if bx > ax else (0, 1)
             side = rect.y if normal[1] < 0 else rect.y2()
@@ -76,8 +86,13 @@ def _clip(
 
 
 def rect_in_polygon_cells(rect: ModuleRect, poly: ModulePolygon) -> int:
-    """Exact area of ``rect ∩ poly`` in cells."""
-    pts: list[tuple[Fraction, Fraction]] = [(Fraction(x), Fraction(y)) for x, y in poly.exterior]
+    """Exact area of ``rect ∩ poly`` in cells (courtyards subtracted)."""
+    return _clipped_cells(rect, poly.exterior) - sum(_clipped_cells(rect, h) for h in poly.holes)
+
+
+def _clipped_cells(rect: ModuleRect, ring: tuple[tuple[int, int], ...]) -> int:
+    """Exact area of ``rect`` ∩ the region bounded by ``ring`` (either orientation)."""
+    pts: list[tuple[Fraction, Fraction]] = [(Fraction(x), Fraction(y)) for x, y in ring]
     for axis, bound, keep_le in (
         (0, rect.x, False),
         (0, rect.x2(), True),

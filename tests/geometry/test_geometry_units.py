@@ -135,16 +135,11 @@ def test_realization_validator() -> None:
 
 
 def test_footprint_unsupported_and_piece_too_small() -> None:
-    u_shape = [
-        (0, 0),
-        (300, 0),
-        (300, 200),
-        (200, 200),
-        (200, 100),
-        (100, 100),
-        (100, 200),
-        (0, 200),
-    ]
+    # A.1 rejected every footprint beyond an L (a U among them); since G.1 only footprints that
+    # need more than 12 pieces are unsupported (a staircase of 14 steps needs 14).
+    u_shape = [(0, 0), (140, 0)]
+    for k in range(14):
+        u_shape += [(140 - 10 * k, 10 * (k + 1)), (130 - 10 * k, 10 * (k + 1))]
     prepared = prepared_poly(u_shape, [room("r1", 12.0)])
     real = realize(prepared, one_piece(b=[rb("r1")]), RULEBOOK, CONFIG)
     assert [f.code for f in real.failures] == ["FOOTPRINT_UNSUPPORTED"]

@@ -142,7 +142,7 @@ def _outermost(plan: CorridorPlan, room: str, ctx: MoveContext) -> Iterator[Corr
             left = (*left, room)
         else:
             right = (*right, room)
-        dst[b] = FingerBay(left=left, right=right, junction=bay.junction)
+        dst[b] = bay.with_rooms(left, right)
         if not (dst is src and b == pos.bay):
             _remove_room(src, pos.bay, room)
         got = _finish(plan, pieces, ctx)

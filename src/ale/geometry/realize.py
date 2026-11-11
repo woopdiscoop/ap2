@@ -22,6 +22,15 @@ included). A block is *exterior* when its outer long side (band 0 block A, last 
 B) lies on the footprint exterior along at least half of the band region; there, room bays
 of ``needs_facade`` rooms take the smallest compliant width (RD 3.3 §5.2, amended).
 
+Ticket G.1 (contracts 1.6.0): a footprint of more than two pieces is a tree of pieces
+(:attr:`FootprintPieces.junctions`). Pieces are realised parent before child: a piece with
+children brings the links of all its junctions to the band search of its (adjacent) band; a
+J1 child hangs on the junction finger that names it (``junction_to``) and takes the depth
+that aligns its spine with that finger; a J2 child takes the depth that puts its spine in the
+same absolute band as its (single-band) parent's. Every non-root piece of such a plan has one
+band. The finger (J1) or the spine band (J2) must lie inside the cut; open contacts need no
+link. Plans of one or two pieces run the unchanged L code.
+
 Deterministic and exact (integer modules, ``Fraction`` targets); no randomness — ``seed``
 is only recorded in the layout. Problems with a valid plan become :class:`Failure` entries,
 never exceptions.
@@ -38,13 +47,14 @@ from pydantic import BaseModel, ConfigDict, StrictStr, model_validator
 
 from ale.contracts.config import AleConfig
 from ale.contracts.corridor_plan import BandPlan, ConnectorBay, CorridorPlan, FingerBay, RoomBay
-from ale.contracts.footprint import FootprintPieces, Piece, decompose_footprint
+from ale.contracts.footprint import FootprintPieces, Junction, Piece, decompose_footprint
 from ale.contracts.models import Layout, LayoutMetrics, PlacedRoom, RoomSpec, Rulebook
 from ale.geometry.blocks import AnyBay, BlockOut, Consts, Item, RoomReq, Solver
 from ale.geometry.checks import exterior_contacts
 from ale.geometry.evaluate import evaluate
 from ale.geometry.junction import (
     across_origin,
+    along_origin,
     band_fits,
     cut_side,
     frame,
@@ -349,6 +359,11 @@ class _Realizer:
         if hit is None:
             depth = frame(self.fp.pieces[p])[1]
             band = self.band_at(p, 0, depth, d_a)
+            if len(self.fp.pieces) > 2:  # G.1: the piece may carry children
+                link = self._band_link(p, 0, None)
+                if link is not None:
+                    got = link(d_a, band.a, band.b)
+                    band.link = got if got is not None else _Link(extra=[_NO_FIT])
             hit = _PieceOut(p, self.fp.pieces[p], "none", [band])
             self._fixed[key] = hit
         return hit
@@ -451,6 +466,8 @@ class _Realizer:
     # ------------------------------------------------------------------ L shapes
     def search(self) -> list[_PieceOut] | None:
         fp = self.fp
+        if len(fp.pieces) > 2:
+            return self._tree()
         if fp.junction == "NONE":
             primary = self.piece(0, {})
             return None if primary is None else [primary]
@@ -557,6 +574,126 @@ class _Realizer:
                 fresh.link = at(u0 + ju)
                 primary.bands[jb] = fresh
         return [primary, *primary.linked()]
+
+    # ------------------------------------------------------------------ trees (G.1)
+    def _band_link(self, p: int, k: int, u_c: int | None) -> LinkFn | None:
+        """Combined link of every child of piece ``p`` attached to its band ``k`` (``None``
+        when there is none). ``u_c``: final inner-connector position of the piece, if any."""
+        n = len(self.plan.pieces[p].bands)
+        fns: list[LinkFn] = []
+        for j in self.fp.children(p):
+            if j.kind == "J2":
+                if k == 0:
+                    fns.append(self._j2_link(j))
+            elif k == (0 if j.facing_block == "A" else n - 1):
+                fns.append(self._j1_link(j, u_c))
+        if not fns:
+            return None
+
+        def link(v: int, a: BlockOut, b: BlockOut) -> _Link | None:
+            out = _Link()
+            for fn in fns:
+                got = fn(v, a, b)
+                if got is None:
+                    return None
+                out.pieces += got.pieces
+                out.extra += got.extra
+            return out
+
+        return link
+
+    def _in_cut(self, j: Junction, start: int) -> bool:
+        """Whether the corridor strip ``[start, start + s)`` (absolute coordinate across the
+        cut) lies inside the cut segment."""
+        (x0, y0), (x1, y1) = j.cut
+        lo, hi = (x0, x1) if y0 == y1 else (y0, y1)
+        return lo <= start and start + self.k.s <= hi
+
+    def _clamp_depth(self, j: Junction, d_sec: int) -> int:
+        """``d_sec`` moved to the nearest ``D_A`` of piece ``j.child`` that keeps its spine
+        inside the piece and inside the cut of ``j``."""
+        child = self.fp.pieces[j.child]
+        (x0, y0), (x1, y1) = j.cut
+        lo, hi = (x0, x1) if y0 == y1 else (y0, y1)
+        origin = across_origin(child)
+        low = max(0, lo - origin)
+        high = min(frame(child)[1] - self.k.s, hi - self.k.s - origin)
+        return max(low, min(d_sec, high)) if low <= high else max(0, min(d_sec, high))
+
+    def _j1_link(self, j: Junction, u_c: int | None) -> LinkFn:
+        parent, child = self.fp.pieces[j.parent], self.fp.pieces[j.child]
+        u0, _ = self.region(j.parent)
+        s = self.k.s
+
+        def link(v: int, a: BlockOut, b: BlockOut) -> _Link:
+            block = a if j.facing_block == "A" else b
+            fu = block.finger_at(j.child, u_c)
+            if fu is None:  # pragma: no cover - the plan names every J1 child
+                return _Link(extra=[("JUNCTION_MISALIGNED", f"no junction finger to {j.child}")])
+            ju = u0 + fu
+            d_sec = j1_secondary_depth(parent, child, ju)
+            if band_fits(child, d_sec, s) and self._in_cut(j, along_origin(parent) + ju):
+                return _Link([self.fixed_piece(j.child, d_sec)])
+            detail = (
+                f"junction finger at u = {ju} puts the spine of piece {j.child} at {d_sec},"
+                f" outside piece {j.child} or its cut"
+            )
+            # Realise the child at the nearest depth that fits, so the failure does not hide
+            # the child's own problems (the failure alone keeps the layout from being built).
+            near = self._clamp_depth(j, d_sec)
+            return _Link([self.fixed_piece(j.child, near)], extra=[("JUNCTION_MISALIGNED", detail)])
+
+        return link
+
+    def _j2_link(self, j: Junction) -> LinkFn:
+        parent, child = self.fp.pieces[j.parent], self.fp.pieces[j.child]
+        s = self.k.s
+
+        def link(v: int, a: BlockOut, b: BlockOut) -> _Link | None:
+            d_sec = j2_secondary_depth(parent, child, v)
+            start = across_origin(parent) + v
+            if not (band_fits(child, d_sec, s) and self.fits(j.child, d_sec)):
+                return None
+            if not self._in_cut(j, start):
+                return None
+            return _Link([self.fixed_piece(j.child, d_sec)])
+
+        return link
+
+    def _tree(self) -> list[_PieceOut] | None:
+        """Realise a tree of pieces: the root's band search carries all children links."""
+        n = len(self.plan.pieces[0].bands)
+        links: dict[int, LinkFn] = {}
+        for k in range(n):
+            fn = self._band_link(0, k, None)
+            if fn is not None:
+                links[k] = fn
+        root = self.piece(0, links)
+        if root is None:
+            return None
+        if root.u_c is not None:
+            # Inner connector: the search placed the fingers as if u_c were its own block's;
+            # re-align the children with the final connector position.
+            for k in links:
+                bo = root.bands[k]
+                fn = self._band_link(0, k, root.u_c)
+                assert fn is not None
+                fresh = self.band_at(0, k, bo.depth, bo.d_a)
+                got = fn(bo.d_a + sum(b.depth for b in root.bands[:k]), fresh.a, fresh.b)
+                fresh.link = got if got is not None else _Link(extra=[_NO_FIT])
+                root.bands[k] = fresh
+        return sorted(_flatten(root), key=lambda po: po.index)
+
+
+_NO_FIT: Fail = ("JUNCTION_MISALIGNED", "a child piece does not fit its parent's spine band")
+
+
+def _flatten(po: _PieceOut) -> list[_PieceOut]:
+    """``po`` and, recursively, every piece linked below it."""
+    out = [po]
+    for child in po.linked():
+        out += _flatten(child)
+    return out
 
 
 def _bay_rooms(bay: AnyBay) -> tuple[str, ...]:
