@@ -37,6 +37,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+import shapely
+
 from ale.cad import (
     LayerMap,
     convert_dwg,
@@ -45,7 +47,7 @@ from ale.cad import (
     read_cad,
     save_layer_map,
 )
-from ale.contracts.enums import FileStatus, SourceKind
+from ale.contracts.enums import FileStatus, Frame, SourceKind
 from ale.contracts.models import PlanGeometry
 from ale.contracts.serialization import canonical_json
 from ale.corpus.db import CorpusDbError, add_event, connect, migrate, utc_now
@@ -56,6 +58,8 @@ from ale.labels.providers import MissingApiKeyError, make_provider, prepare_imag
 from ale.labels.render import plan_image
 from ale.pdfread import read_pdf_page
 from ale.raster import rasterize_pdf_page, read_raster
+from ale.raster.compare import compare
+from ale.raster.vlm_reader import geometry_caller, read_rooms_vlm, to_labelled_polygons
 from ale.workspace import CORPUS_FILENAME, LAYER_MAP_FILENAME, Workspace, WorkspaceError
 
 __all__ = [
@@ -310,6 +314,12 @@ class ExtractReport:
     vlm_calls: int = 0
     #: Why the configured VLM is disabled for this run (French), or None.
     vlm_warning: str | None = None
+    #: Raster plans whose geometry came from the VLM / the classical reader (VLM geometry
+    #: on), those flagged GEOMETRY_DISAGREEMENT, and VLM geometry reads that failed.
+    geometry_vlm: int = 0
+    geometry_classical: int = 0
+    geometry_disagreements: int = 0
+    geometry_errors: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -330,6 +340,10 @@ class ExtractReport:
             "vlm_errors": self.vlm_errors,
             "vlm_calls": self.vlm_calls,
             "vlm_warning": self.vlm_warning,
+            "geometry_vlm": self.geometry_vlm,
+            "geometry_classical": self.geometry_classical,
+            "geometry_disagreements": self.geometry_disagreements,
+            "geometry_errors": self.geometry_errors,
         }
 
 
@@ -614,7 +628,12 @@ def _extract_unit(
         _fail(conn, unit, name, NO_PLAN_REASON, report, warnings=warnings)
         return
     processed = []
+    extra_flags: dict[int, str] = {}
     for plan in plans:
+        if vlm is not None and unit.kind in _BITMAP_KINDS:
+            plan, geometry_flag = _geometry(ws, plan, vlm, report, source=source, bitmap=bitmap)
+            if geometry_flag is not None:
+                extra_flags[plan.plan_index] = geometry_flag
         scaled = resolve_scale(plan, meta=meta, config=ws.config)
         processed.append(_label(ws, scaled, vlm, report, source=source, bitmap=bitmap))
     conn.execute("DELETE FROM review_flags WHERE sha256 = ? AND page = ?", (unit.sha256, unit.page))
@@ -629,7 +648,10 @@ def _extract_unit(
             "INSERT INTO review_flags (sha256, page, plan_index, flag) VALUES (?, ?, ?, ?)",
             [
                 (unit.sha256, unit.page, plan.plan_index, flag)
-                for flag in review_flags(plan, ws.config)
+                for flag in (
+                    *review_flags(plan, ws.config),
+                    *([extra_flags[plan.plan_index]] if plan.plan_index in extra_flags else []),
+                )
             ],
         )
     _remove_stale(ws, unit.sha256, unit.page, len(processed))
@@ -667,6 +689,95 @@ def _fail(
     report.failed += 1
     report.problems.append((name, reason))
     log.warning("%s: extraction failed: %s", name, reason, extra={"event": "corpus.extract_failed"})
+
+
+GEOMETRY_DISAGREEMENT = "GEOMETRY_DISAGREEMENT"
+_BITMAP_KINDS = (SourceKind.RASTER.value, SourceKind.PDF_SCANNED.value)
+
+
+class _GeometryProxy:
+    """Provider seen by the geometry reader; its calls count on the run's provider."""
+
+    def __init__(self, counting: _CountingProvider) -> None:
+        self.model_id = counting.model_id
+        self._counting = counting
+        self._reader = geometry_caller(counting.inner)
+
+    def read_geometry(self, image_png: bytes, prompt: str) -> str:
+        assert self._reader is not None
+        self._counting.calls += 1
+        try:
+            return self._reader(image_png, prompt)
+        except Exception:
+            self._counting.errors += 1
+            raise
+
+
+def _geometry(
+    ws: Workspace,
+    plan: PlanGeometry,
+    vlm: _Vlm,
+    report: ExtractReport,
+    *,
+    source: Path,
+    bitmap: Any | None,
+) -> tuple[PlanGeometry, str | None]:
+    """Cross-check the classical rooms with the VLM's (Ticket R.7); ``(plan, extra flag)``.
+
+    Only a geometry-capable provider is asked; never raises (the classical plan is kept).
+    """
+    if geometry_caller(vlm.provider.inner) is None:
+        return plan, None
+    warnings = list(plan.warnings)
+    calls, errors = vlm.provider.calls, vlm.provider.errors
+    try:
+        png, extent = plan_image(plan, config=ws.config, source=source, bitmap=bitmap)
+        image = prepare_image(png).png
+        found = read_rooms_vlm(
+            image, extent, Frame(plan.frame), _GeometryProxy(vlm.provider), vlm.cache, ws.config
+        )
+    except Exception as exc:
+        warnings.append(f"géométrie VLM ignorée : {type(exc).__name__}: {exc}")
+        report.geometry_errors += 1
+        report.geometry_classical += 1
+        warnings.append("géométrie : lecteur classique")
+        return plan.model_copy(update={"warnings": tuple(dict.fromkeys(warnings))}), None
+    report.vlm_calls += vlm.provider.calls - calls
+    if vlm.provider.calls > calls:
+        report.vlm_plans += 1
+    elif found.cached:
+        report.vlm_cache_hits += 1
+    if vlm.provider.errors > errors:
+        report.vlm_errors += 1
+    warnings.extend(found.warnings)
+    flag: str | None = None
+    rooms = plan.rooms
+    if found.error is not None:
+        warnings.append(found.error)
+        report.geometry_errors += 1
+        source_name = "lecteur classique"
+    else:
+        agreement = compare(
+            [shapely.Polygon(r.polygon.exterior) for r in plan.rooms],
+            [r.polygon for r in found.rooms],
+        )
+        decision = agreement.choice()
+        if decision == "vlm":
+            rooms = tuple(to_labelled_polygons(found.rooms))
+            source_name = "VLM"
+        else:
+            source_name = "lecteur classique"
+            if decision == "disagreement":
+                flag = GEOMETRY_DISAGREEMENT
+                report.geometry_disagreements += 1
+    if source_name == "VLM":
+        report.geometry_vlm += 1
+    else:
+        report.geometry_classical += 1
+    warnings.append(f"géométrie : {source_name}")
+    return plan.model_copy(
+        update={"rooms": rooms, "warnings": tuple(dict.fromkeys(warnings))}
+    ), flag
 
 
 def _proposed_map(
