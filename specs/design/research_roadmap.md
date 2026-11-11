@@ -34,7 +34,17 @@ The footprint is a design output, not only an input. Three steps, v2:
 - **G.1 any orthogonal footprint**, including courtyards (holes), U, T, H, combs: decompose into rectangular pieces
   (generalising the L-shape J1/J2 junctions to N pieces and ring corridors around a courtyard). Freeform outlines are
   approximated on the 60 cm grid with orthogonal rooms inside; curved façades stay out of scope.
-- **G.2 massing typologies**: a parametric family (bar, L, U, courtyard/ring, comb, T, hybrids) sized from the programme
+- **G.2 parti generation** (user decision U-16: a good solution solves several problems at once). A parti = a few
+  strong decisions generated together, as genes: massing type (bar, L, U, comb, courtyard, terraced), orientation of
+  the long façades, core position, circulation figure (spine, loop, comb fingers), entrance/forecourt relation,
+  terraces. The programme is placed *by* these decisions (phases 2–4), never patched after. Scoring:
+  - **forcedness** = share of requirements met by the parti before any local repair + number of local exceptions
+    the plan needed (end strips, fillers, odd room shapes, rooms moved to get a façade, dead ends) — lower is better;
+  - **parti card** in the report: each major element and the problems it solves (e.g. the courtyard: daylight for
+    the deep wing + forecourt + separation of the two institutions); an element that solves only one problem is
+    flagged as a possible patch;
+  - all jury criteria evaluated jointly (non-dominated set, R.2), never one after another.
+- **G.2 massing typologies** (as the parti's form gene): a parametric family (bar, L, U, courtyard/ring, comb, T, hybrids) sized from the programme
   (wing depth from the room depths: about 2 × 7.2 m + corridor), placed on the buildable zone with setbacks; each
   candidate scored on capacity per floor, orientation of the long façades, compactness, prospects (courtyard ≥ H/2),
   site coverage. The AREP-MS method's "population of partis".
