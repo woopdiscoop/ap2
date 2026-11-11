@@ -39,6 +39,7 @@ Maintained by the Router only. Directive: `specs/DIRECTIVE.md` (v2.2, supersedes
 | R.4 | Plain-language explanation per variant | QUEUED | R.3 | roadmap | |
 | R.5 | Adjacencies from the functional programme (Claude, reviewed) | QUEUED | user: functional programme | roadmap | |
 | R.6 | Visual critique of a variant (Claude, advisory) | **IN-PROGRESS** | — | RD + eval | |
+| R.9 | Voronoi seeding experiment (L1 power diagram → topology hint) | QUEUED (after R.1) | R.1 | RD + eval | Adopted as default only if it beats the spring seeder. |
 | R.8 | Depth/shape rules learned from built plans | QUEUED | Q.4 | roadmap | User decision U-9. |
 | R.7 | VLM geometry reader for raster plans | **IN-PROGRESS** | X.1 done | roadmap | |
 | M.1–3 | Multi-storey: stacking → blocking → shared cores (v2) | PROPOSED | user approval (scope) | roadmap | |
@@ -93,6 +94,7 @@ with ground truth. The Router will issue an annotation template before Phase 1.
 
 - 2026-11-06 — v2.0 workspace initialised (tickets 1.1, 1.2 specified).
 - 2026-11-09 — User: yes to seed-rulebook draft and Claude as VLM. Seed draft written and validated; P.1 specified and dispatched. CI: raster extra added to the install line.
+- 2026-11-11 — User: queue R.9 (Voronoi seeding experiment) after R.1. Voronoi also noted for v2: floor-plate zoning and medial-axis decomposition of non-rectangular footprints.
 - 2026-11-11 — **X.1 merged** (PR #2, Codex). Codex is now off: its remaining work is picked up by Claude workers (Sonnet low). Router on Opus 5.5.
 - 2026-11-10 — Literature check of the user's research database (`specs/design/literature_review_2026-11.md`) → research roadmap R.1–R.7 + M (v2) (`research_roadmap.md`). Q.4 interrupted by the weekly limit, WIP saved (90f5a00), resumed with a new worker.
 - 2026-11-09 — **Q.3 merged** (30169cf): P60 hard 18 → 9 (NO_FACADE 6), P25 → 5, P8 0 for seeds 1–5; quality gates iteration-bound (same result on any machine / under coverage); O03 strict restored; seed deadline fixed (T05); generate budget split 25/75. Router review: 2 integrated full runs, 1203 passed each. Caveat: P60 NO_FACADE ≤ 6 is budget-sensitive (7–10 at other iteration counts). 3.3 RD §5.7 amended. Q.4 dispatched.
