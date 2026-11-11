@@ -65,9 +65,8 @@ def _parse_pins(data: dict[str, Any], errors: list[str]) -> dict[str, str | int]
         errors.append("Règles d'empilement : « pins » doit être un dictionnaire.")
         return pins
     for name, where in raw.items():
-        if where in ("top", "ground"):
-            pins[str(name)] = where
-        elif isinstance(where, int) and not isinstance(where, bool) and where >= 0:
+        is_level = isinstance(where, int) and not isinstance(where, bool) and where >= 0
+        if where in ("top", "ground") or is_level:
             pins[str(name)] = where
         else:
             errors.append(
@@ -94,7 +93,9 @@ def parse_rules(data: Any) -> StackRules:
         errors.append("Règles d'empilement : « together » doit être une liste de paires.")
         raw_together = []
     for pair in raw_together:
-        if not (isinstance(pair, list) and len(pair) == 2 and all(isinstance(p, str) for p in pair)):
+        if not (
+            isinstance(pair, list) and len(pair) == 2 and all(isinstance(p, str) for p in pair)
+        ):
             errors.append(f"Paire « together » invalide : {pair!r} (deux noms de groupes).")
             continue
         together.append((pair[0], pair[1]))

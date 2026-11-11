@@ -126,9 +126,7 @@ class Stacking:
 
     def together_met(self) -> dict[tuple[str, str], bool]:
         gf = self.group_floors()
-        return {
-            (a, b): _gap(gf.get(a, ()), gf.get(b, ())) <= 1 for a, b in self.problem.together
-        }
+        return {(a, b): _gap(gf.get(a, ()), gf.get(b, ())) <= 1 for a, b in self.problem.together}
 
     def misses(self) -> tuple[str, ...]:
         """French description of every hard miss with its shortfall in m²."""
@@ -382,7 +380,7 @@ def solve(p: Problem) -> Stacking:
 def brute_force(p: Problem) -> Score:
     """Optimum by exhaustive enumeration (tests; small problems only)."""
     free = _free(p)
-    base = [p.fixed_level(i) if p.fixed_level(i) is not None else -1 for i in range(len(p.units))]
+    base = [-1 if (lv := p.fixed_level(i)) is None else lv for i in range(len(p.units))]
     best: Score | None = None
     for combo in product(range(p.n_floors), repeat=len(free)):
         if p.keep_whole:
