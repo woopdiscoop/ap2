@@ -9,4 +9,5 @@
 | G306 | yaml | `form_kk.yaml` loads as a `SiteSpec` (mode footprint) with cores and entrances carried over. |
 | G307 | deterministic | Same inputs and K → identical files (two fresh processes); K candidates differ (at least 3 distinct outlines for K = 6). |
 | G308 | ranking | `forms.md` ranks by the key of RD §5; metrics match recomputation. |
+| G310 | contiguity (Router addition 2026-11-11) | Every room and the circulation zone is a single 4-connected region in every candidate (K = 6, with and without `--courtyard`); a room that cannot reach its count is reported short, never scattered. |
 | G309 | gates | ruff, format, mypy strict; coverage of `ale.form` ≥ 90 % (path-form); lock --check; whole suite passes; a P25-size case runs in ≤ 10 s per candidate. |
