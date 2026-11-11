@@ -174,19 +174,23 @@ def facade_usable_mm(
     """Grammar-aware usable façade length (mm) of a module footprint (Q.2a).
 
     Pieces from :func:`decompose_footprint`. Σ over pieces of the length of the edges
-    parallel to the spine axis minus their part on the cut, minus ``s x n0`` for each
+    parallel to the spine axis minus their part on any junction cut (X.3: all the junctions
+    of the piece tree; a courtyard face is a façade), minus ``s x n0`` for each
     exterior short edge of the piece (a short edge touching the cut is not exterior);
     ``n0`` = :func:`band_estimate` of the piece. Floored at 0.
     """
     fp = decompose_footprint(polygon)
+    cuts: list[Segment] = [j.cut for j in fp.junctions]
     total = 0
     for piece in fp.pieces:
         long_edges, short_edges = _piece_edges(piece)
         for (ax, ay), (bx, by) in long_edges:
-            total += abs(bx - ax) + abs(by - ay) - _overlap(((ax, ay), (bx, by)), fp.cut)
+            total += (
+                abs(bx - ax) + abs(by - ay) - sum(_overlap(((ax, ay), (bx, by)), c) for c in cuts)
+            )
         depth = piece.rect.h if piece.spine_axis == "X" else piece.rect.w
         n0 = band_estimate(depth, targets, s)
-        ends = sum(1 for seg in short_edges if _overlap(seg, fp.cut) == 0)
+        ends = sum(1 for seg in short_edges if all(_overlap(seg, c) == 0 for c in cuts))
         total -= s * n0 * ends
     return max(0, total) * module_mm
 

@@ -147,6 +147,11 @@ def check(
         lines = [f"Erreurs ({len(errors)}) :", *(_issue_line(i) for i in errors)]
         lines += [f"Avertissements ({len(warnings)}) :", *(_issue_line(i) for i in warnings)]
         lines += _anchor_lines(result)
+        if result.structure is not None:
+            pieces, junctions, courtyards = result.structure
+            lines.append(
+                f"Emprise : {pieces} pièces, {junctions} jonctions, {courtyards} cours intérieures"
+            )
         if result.feasibility is not None:
             lines += _summary(result.feasibility)
         lines.append("OK" if not errors else "ÉCHEC : corrigez les erreurs ci-dessus.")
