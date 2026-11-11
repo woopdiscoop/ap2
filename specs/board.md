@@ -41,8 +41,9 @@ Maintained by the Router only. Directive: `specs/DIRECTIVE.md` (v2.2, supersedes
 | R.6 | Visual critique of a variant (Claude, advisory) | **DONE** | — | RD + eval | |
 | X.2 | Vector PDF: filled zones as rooms (Archicad exports) | **DONE** | R.10 | RD + eval | Found on the real AREP-MS sheet: 371 filled zones, walls as single strokes → 0 rooms read. |
 | R.10 | `ale score`: score an existing scheme against a programme (first use: the manual AREP-MS sheet) | **DONE** | — | RD + eval | Extract with the vector-PDF reader, match to programme, same checks as ALE variants; file kept outside the repo. |
-| X.3 | Courtyards at intake + façade estimate for N pieces | QUEUED (after the 16:20 UTC reset) | G.1 | RD + eval | G.1 follow-ups. |
-| G.2 | Parti generation: genes, massing, joint evaluation, forcedness, parti card, `ale parti` | QUEUED (dispatch after the 16:20 UTC reset) | G.3 | RD + eval | User decision U-16. |
+| X.3 | Courtyards at intake + façade estimate for N pieces | RUNNING | G.1 | RD + eval | G.1 follow-ups. |
+| G.2 | Parti generation: genes, massing, joint evaluation, forcedness, parti card, `ale parti` | DONE | 19af7d9 | RD + eval + eval report | 7 typologies; 40 partis in ~13 s; P201–P210 pass. Known limits: cellgrow fragments rooms (G.2 keeps the largest piece, strays → circulation, counted in forcedness); courtyards diagrammed with a slit (cellgrow rejects holes). Router fix at review: test helper imported as `conftest` clashed with tests/cli (2c8478f). |
+| M.1 | Multi-storey stacking, vertical skeleton (one core + wet stack on identical cells), per-floor cell diagrams, `ale stack` | RUNNING | G.2 | RD + eval | U-10, U-14, U-15. Exact per-floor plans in the skeleton = M.2; room stacking / bay rhythm / column grid = M.3. |
 | U.1 | Local web interface (Streamlit), `ale ui` | DONE | 537eba2 | RD + eval + eval report | Six French tabs (Programme, Site, Forme, Plans, Évaluer, Critique) on the CLI functions. Launch: `pip install -e ".[ui,excel,cad,pdf]"` then `ale ui --workspace ws`. Rulebook from a sidebar upload or the workspace/seed default (spec gap filled by the Worker). |
 | G.1 | Exact plans in any orthogonal footprint (N pieces, several junctions; contracts 1.6.0) | **DONE** | — | RD + eval | Needed to build U, T, comb, courtyard partis in detail. |
 | G.3 | Form-finding: outline from the outside (cell growth on the plot), `ale form` | **DONE** | A.4, R.9 | RD + eval | Phase 1 of the target pipeline. |
@@ -50,7 +51,7 @@ Maintained by the Router only. Directive: `specs/DIRECTIVE.md` (v2.2, supersedes
 | A.4 | Contract: site anchors (entrances, cores, plot mode, setbacks, party edges) + room anchors + floors (1.5.0) | **DONE** | — | RD + eval | Needed by R.9, G.3 and multi-storey. |
 | R.8 | Depth/shape rules learned from built plans | QUEUED | Q.4 | roadmap | User decision U-9. |
 | R.7 | VLM geometry reader for raster plans | **DONE** | X.1 done | roadmap | |
-| M.1–3 | Multi-storey: stacking → blocking → shared cores | QUEUED (in scope, U-13) | A.4, R.9 | roadmap | |
+| M.2–3 | Multi-storey: M.2 exact per-floor plans inside the skeleton (engine honours fixed cores), M.3 room stacking + bay rhythm + column grid | QUEUED (in scope, U-13; after M.1) | A.4, R.9 | roadmap | |
 | P.1 | Claude VLM provider | **DONE** | 3c9db4e | RD + eval + eval_report | User decision U-8: VLM = Claude (claude-opus-5-5, effort low, structured output, no sampling params, cached). |
 | I.1 | Integration: PDF/raster extract, labels, scale, `ale review` | **DONE** | — | RD + eval | Assigned to an external Codex agent; PR to be reviewed by the Router. |
 | 1.3 | Vector-PDF reader (library) | **DONE** | — | RD + eval | Plan-likeness on merged walls; HABS PDFs correctly identified as scanned (→ raster path). |
