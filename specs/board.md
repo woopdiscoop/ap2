@@ -39,8 +39,9 @@ Maintained by the Router only. Directive: `specs/DIRECTIVE.md` (v2.2, supersedes
 | R.4 | Plain-language explanation per variant | QUEUED | R.3 | roadmap | |
 | R.5 | Adjacencies from the functional programme (Claude, reviewed) | QUEUED | user: functional programme | roadmap | |
 | R.6 | Visual critique of a variant (Claude, advisory) | **DONE** | — | RD + eval | |
+| R.10 | Baseline scoring of the manual AREP-MS scheme (junior's Archicad sheet) | QUEUED | — | — | Extract with the vector-PDF reader, match to programme, same checks as ALE variants; file kept outside the repo. |
 | R.9 | Whole-programme cell-growth seeding (user's method; Voronoi as a variant) | QUEUED (after R.1) | R.1, A.4 | RD + eval (to revise) | Adopted as default only if it beats the spring seeder. Carries the Q.4 D05 target NO_FACADE ≤ 1. |
-| A.4 | Contract: site anchors (entrances, cores, plot mode, setbacks, party edges) + room anchors + floors (1.5.0) | **IN-PROGRESS** | — | RD + eval | Needed by R.9, G.3 and multi-storey. |
+| A.4 | Contract: site anchors (entrances, cores, plot mode, setbacks, party edges) + room anchors + floors (1.5.0) | **DONE** | — | RD + eval | Needed by R.9, G.3 and multi-storey. |
 | R.8 | Depth/shape rules learned from built plans | QUEUED | Q.4 | roadmap | User decision U-9. |
 | R.7 | VLM geometry reader for raster plans | **DONE** | X.1 done | roadmap | |
 | M.1–3 | Multi-storey: stacking → blocking → shared cores | QUEUED (in scope, U-13) | A.4, R.9 | roadmap | |
@@ -99,6 +100,7 @@ with ground truth. The Router will issue an annotation template before Phase 1.
 
 - 2026-11-06 — v2.0 workspace initialised (tickets 1.1, 1.2 specified).
 - 2026-11-09 — User: yes to seed-rulebook draft and Claude as VLM. Seed draft written and validated; P.1 specified and dispatched. CI: raster extra added to the install line.
+- 2026-11-11 — **A.4 merged** (contracts 1.5.0: entrances, cores, plot mode, setbacks, party edges, room anchors « coin »/« entrée », floors). Container restart killed R.1's final run; WIP saved (4c9a3bb) and R.1 relaunched. User's manual AREP-MS scheme reviewed: areas below programme (344.55/350 ×2, 87.79/90, 77.20/80, 48.48/50, 38.51/40 ×2, 34.94/35), one stair per bar, open spaces not stacked; R.10 baseline scoring queued.
 - 2026-11-11 — **Q.4, R.3, R.6, R.7 merged** (integrated suite 1324 passed, 0 failed). Q.4 D05 amended: NO_FACADE ≤ 1 target moved to R.9. User's whole-programme cell method prototyped in the grid-sizing page; R.9 redirected to it (Voronoi kept as a growth-rule variant); A.4 contract proposed.
 - 2026-11-11 — User: queue R.9 (Voronoi seeding experiment) after R.1. Voronoi also noted for v2: floor-plate zoning and medial-axis decomposition of non-rectangular footprints.
 - 2026-11-11 — **X.1 merged** (PR #2, Codex). Codex is now off: its remaining work is picked up by Claude workers (Sonnet low). Router on Opus 5.5.
