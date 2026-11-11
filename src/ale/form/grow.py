@@ -36,7 +36,7 @@ SEED_AT = 0.60
 CIRC_ID = "CIRC"
 PARTY = -4
 COURT = -5
-_MAX_RESEEDS = 8
+_MAX_RESTARTS = 10
 _EPS = 1e-9
 #: 8-neighbourhood in cyclic order (E, NE, N, NW, W, SW, S, SE); even entries are 4-neighbours.
 _RING = ((1, 0), (1, 1), (0, 1), (-1, 1), (-1, 0), (-1, -1), (0, -1), (1, -1))
@@ -157,7 +157,9 @@ class _Grower:
         self.frontier: list[set[int]] = [set() for _ in self.names]
         self.edge: set[int] = set()
         self.count = [0] * len(self.names)
-        self.reseeds = [0] * len(self.names)
+        self.done: set[int] = set()
+        self.borrowed = [0] * len(self.names)
+        self.restarts = [0] * len(self.names)
         self.touched_cores: set[int] = set()
         self.circ_extra = 0
         for i, v in enumerate(self.owner):
@@ -371,11 +373,20 @@ class _Grower:
         out4 = sum(_is_outside(v) for v in n4)
         cx, cy = self.xy(i)
         s = _noise(i, r, self.seed) * 0.15 + self._mass_term(i, n4)
+        for v in set(n4):  # do not smother a neighbour that is still growing
+            if v >= 0 and v != r and self.count[v] < self.need[v] and len(self.frontier[v]) <= 10:
+                s -= 2.5
         if r == self.circ:
             s += 2.0 * own4 + 0.6 * own8 - 0.8 * out4
             tgt = self._core_target(cx, cy)
             return s - 1.2 * tgt if tgt is not None else s
         s += 1.2 * own4 + 0.3 * own8
+        free4 = sum(v == FREE for v in n4)
+        left = self.need[r] - self.count[r] - 1
+        if left > 0:  # keep liberties: do not close the room's own last way out
+            liberties = free4 + len(self.frontier[r]) - 1
+            if liberties < min(left, 6):
+                s -= 1.5 * (min(left, 6) - liberties)
         s += 0.9 * min(out4, 2) if self.facade[r] else -0.4 * out4
         if any(v == self.circ for v in n4):
             s += 0.2 if self._touches_circ(r) else 3.0
@@ -397,13 +408,13 @@ class _Grower:
         built4 = sum(v >= 0 or v == CORE_CELL for v in n4)
         s = 0.5 * built4
         if (n4[0] >= 0 or n4[0] == CORE_CELL) and (n4[1] >= 0 or n4[1] == CORE_CELL):
-            s += 1.5
+            s += 1.6
         if (n4[2] >= 0 or n4[2] == CORE_CELL) and (n4[3] >= 0 or n4[3] == CORE_CELL):
-            s += 1.5
+            s += 1.6
         for d in (1, -1, self.wp, -self.wp):
             far = owner[i + 2 * d]
             if owner[i + d] == FREE and (far >= 0 or far == CORE_CELL):
-                s -= 1.2
+                s -= 1.6
         return s
 
     def _core_dist(self, cx: int, cy: int, k: int) -> float:
@@ -468,15 +479,45 @@ class _Grower:
         s += 0.3 * sum(v >= 0 or v == CORE_CELL for v in n4)
         w = self.wp
         s += 0.3 * sum(self.owner[i + dx + dy * w] == FREE for dx, dy in _RING)
-        return s + 0.6 * _noise(i, r + 7, self.seed)
+        return s + 0.6 * _noise(i, r + 7 + 131 * self.restarts[r], self.seed)
+
+    def _space(self, start: int, limit: int) -> int:
+        """Free cells reachable from ``start`` through free cells (capped at ``limit``)."""
+        seen = {start}
+        queue = deque([start])
+        while queue and len(seen) < limit:
+            c = queue.popleft()
+            for m in self._nbr4(c):
+                if m not in seen and self.owner[m] == FREE:
+                    seen.add(m)
+                    queue.append(m)
+        return len(seen)
 
     def _seed(self, r: int, pool: list[int] | None = None) -> bool:
+        """Seed ``r`` on one cell where the room can still grow to its count (best score
+        first; the largest free space when none can)."""
         cands = [i for i in (sorted(self.edge) if pool is None else pool) if self.owner[i] == FREE]
-        for i in sorted(cands, key=lambda c: (-self._seed_score(r, c), c)):
-            if self._may_claim(i):
-                self._claim(r, i)
-                return True
-        return False
+        ranked = sorted(cands, key=lambda c: (-self._seed_score(r, c), c))
+        need = self.need[r] - self.count[r]
+        best, best_space = -1, -1
+        for i in ranked[:30]:
+            if not self._may_claim(i):
+                continue
+            space = self._space(i, need)
+            if space >= need:
+                best = i
+                break
+            if space > best_space:
+                best, best_space = i, space
+        if best < 0:
+            for i in ranked[30:]:
+                if self._may_claim(i):
+                    best = i
+                    break
+        if best < 0:
+            return False
+        self._claim(r, best)
+        return True
 
     def _seed_hall(self, r: int) -> bool:
         for i in self._hall_order()[:20]:
@@ -489,7 +530,7 @@ class _Grower:
     def run(self) -> None:
         queue = deque(self.order)
         active: list[int] = []
-        done: set[int] = set()
+        done = self.done
         last: int | None = None
         last_stuck = False
         first = self.order[0]
@@ -525,13 +566,134 @@ class _Grower:
             if self._want_more(r):
                 if self._grow_one(r):
                     continue
-                if self.reseeds[r] < _MAX_RESEEDS and self._seed(r):
-                    self.reseeds[r] += 1
+                if self.count[r] == 0 and self._seed(r):
+                    continue
+                if self._steal(r) or self._borrow(r) or self._restart(r):
                     continue
             done.add(r)
             if r == last:
                 last_stuck = True
+        for r in range(len(self.names) - 1):  # last resort: the circulation may shrink to 50 %
+            while self.count[r] < self.need[r] and self._steal(r, 0.5):
+                pass
         self.circ_extra = max(0, self.count[self.circ] - self.need[self.circ])
+
+    def _steal(self, r: int, floor: float = 0.75) -> bool:
+        """The circulation is the elastic zone: a stuck room takes ONE circulation cell next to
+        its own region when the circulation stays in one piece, keeps touching its cores and
+        keeps at least ``floor`` of its target."""
+        c = self.circ
+        if r == c or self.count[c] <= floor * self.need[c]:
+            return False
+        mine = set(self.cells[r])
+        cand = sorted({n for i in mine for n in self._nbr4(i) if self.owner[n] == c})
+        for n in cand:
+            if any(self.owner[m] == CORE_CELL for m in self._nbr4(n)):
+                continue
+            rest = [i for i in self.cells[c] if i != n]
+            if not self._piece(rest):
+                continue
+            self.cells[c] = rest
+            self.count[c] -= 1
+            self._refrontier(c)
+            self.owner[n] = r
+            self.cells[r].append(n)
+            self.count[r] += 1
+            for m in self._nbr4(n):
+                if self.owner[m] == FREE:
+                    self.frontier[r].add(m)
+            return True
+        return False
+
+    def _borrow(self, r: int) -> bool:
+        """A stuck room takes ONE cell next to its region from a neighbour that still has a free
+        way out (the neighbour stays in one piece and regrows elsewhere)."""
+        if self.borrowed[r] >= 150:
+            return False
+        mine = set(self.cells[r])
+        for n in sorted({n for i in mine for n in self._nbr4(i)}):
+            y = self.owner[n]
+            if y < 0 or y == r or y in (self.circ, self.rid[self.hall]) or self.borrowed[y] >= 150:
+                continue
+            free_out = [m for m in self.frontier[y] if self.owner[m] == FREE]
+            if not free_out:
+                continue
+            rest = [i for i in self.cells[y] if i != n]
+            if not self._piece(rest):
+                continue
+            self.cells[y] = rest
+            self.count[y] -= 1
+            self._refrontier(y)
+            self.owner[n] = r
+            self.cells[r].append(n)
+            self.count[r] += 1
+            self.borrowed[r] += 1
+            self.done.discard(y)
+            for m in self._nbr4(n):
+                if self.owner[m] == FREE:
+                    self.frontier[r].add(m)
+            return True
+        return False
+
+    def _refrontier(self, r: int) -> None:
+        """Free cells touching the room's own cells (after it lost a cell)."""
+        self.frontier[r] = {
+            n for i in self.cells[r] for n in self._nbr4(i) if self.owner[n] == FREE
+        }
+
+    def _piece(self, cells: list[int]) -> bool:
+        """The cells form one 4-connected region."""
+        left = set(cells)
+        if not left:
+            return True
+        start = cells[0]
+        left.discard(start)
+        stack = [start]
+        while stack:
+            for m in self._nbr4(stack.pop()):
+                if m in left:
+                    left.discard(m)
+                    stack.append(m)
+        return not left
+
+    def _outside_ok(self) -> bool:
+        """Every outside cell reaches a street or the courtyard."""
+        owner = self.owner
+        seen = {i for i, v in enumerate(owner) if self.root[i] and _is_outside(v)}
+        queue = deque(seen)
+        while queue:
+            c = queue.popleft()
+            for m in self._nbr4(c):
+                if 0 <= m < len(owner) and m not in seen and _is_outside(owner[m]):
+                    seen.add(m)
+                    queue.append(m)
+        return len(seen) == sum(_is_outside(v) for v in owner)
+
+    def _restart(self, r: int) -> bool:
+        """A stuck room is released and reseeded as ONE piece on the mass edge (never a
+        second, disconnected seed). The release must keep the outside connected."""
+        if r in (self.circ, self.rid[self.hall]) or self.restarts[r] >= _MAX_RESTARTS:
+            return False
+        released = list(self.cells[r])
+        for i in released:
+            self.owner[i] = FREE
+        if not self._outside_ok():
+            for i in released:
+                self.owner[i] = r
+            self.restarts[r] = _MAX_RESTARTS
+            return False
+        self.restarts[r] += 1
+        self.cells[r], self.count[r], self.frontier[r] = [], 0, set()
+        for i in released:
+            for n in self._nbr4(i):
+                v = self.owner[n]
+                if v >= 0:
+                    self.frontier[v].add(i)
+                    if v != r and self._want_more(v):
+                        self.done.discard(v)  # the released cell gives it a way out again
+            if any(self.owner[n] >= 0 or self.owner[n] == CORE_CELL for n in self._nbr4(i)):
+                self.edge.add(i)
+        return self._seed(r)
 
     def _want_more(self, r: int) -> bool:
         if self.count[r] < self.need[r]:
