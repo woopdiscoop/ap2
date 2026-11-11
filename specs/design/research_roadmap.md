@@ -16,4 +16,13 @@ Order = value / cost. Items marked (v2) need the user's approval to widen the v1
 | 9 | **R.9** Voronoi seeding (experiment) | Weighted L1 Voronoi in the footprint as the topology hint for the seeder (neighbours, façade rooms, band order); grammar unchanged. | Adopted only if mean final hard is lower on P60 and not higher on P25 / AREP floor, 5 seeds, same budget. | R.1 | S–M |
 | 10 | **M.1–M.3** multi-storey (v2) | Liggett's two stages: **stacking** (assign entities to floors under floor rules, e.g. Présidence/DAP/DGS top floor; balance floor areas) → **blocking** (existing per-floor engine) → stacked cores and wet rooms as fixed bays shared across floors. | AREP-MS Région programme on a given bar footprint, R+3: every floor realises; top-floor rule met; cores aligned. | Q.4, R.1; directive change | L |
 
+### Multi-storey requirements (user decision U-10)
+Stackability first: (1) **vertical cores fixed across floors**: stairs, lifts, shafts, wet rooms (sanitary, cleaning,
+technical) occupy the same grid cells on every floor; (2) **room stacking**: a room placed above another of the same
+footprint is rewarded, and floors share one bay rhythm (same bay widths along each band where possible);
+(3) **structural regularity**: one column grid for all floors (multiple of the 60 cm module), partition lines
+aligned to it where possible. Approach: lay out the most constrained floor first (or a "typical floor"), freeze its
+cores and bay rhythm, then lay out the other floors inside that skeleton; scored by a stackability metric (share of
+room area with an identical room above / below, core alignment = hard).
+
 Not planned: learned generators, text-to-plan prompting, BIM/IFC, urban scale (see the review, §3).
