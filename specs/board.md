@@ -31,17 +31,18 @@ Maintained by the Router only. Directive: `specs/DIRECTIVE.md` (v2.2, supersedes
 | 1.2c | CAD → corpus CLI (`ale layers`, `ale extract` dxf/dwg) | **DONE** | — | RD + eval | Empty layer map → in-memory proposal + warning; NEEDS_TOOL DWGs retried. |
 | I.2 | Claude labelling in `ale extract` | **DONE** | I.1 | RD + eval | Render plan image per kind (bbox model), prepare_image, make_provider; opt-in; mocked tests. |
 | P.2 | Import « programme physique » (Annexe format) | **DONE** | e730d6a | RD + eval | `ale program import`; AREP-MS mapping as default rules; synthetic fixtures only. |
-| Q.4 | Max depth from façade (7.20 m) | **IN-PROGRESS** | Q.3 | RD + eval | Contracts 1.4.0 `facade.max_depth_m`; `FACADE_DEPTH` hard; depth beats aspect for big rooms. |
+| Q.4 | Max depth from façade (7.20 m) | **DONE** | Q.3 | RD + eval | Contracts 1.4.0 `facade.max_depth_m`; `FACADE_DEPTH` hard; depth beats aspect for big rooms. |
 | X.1 | `ale extract --force` + exact raster extent | **DONE** | I.2 | RD + eval | I.2 follow-ups; independent of P.2/Q.3/Q.4 files. |
-| R.1 | Multi-start annealing (stable quality) | READY (after Q.4) | Q.4 | roadmap | See `specs/design/research_roadmap.md`. |
+| R.1 | Multi-start annealing (stable quality) | READY | Q.4 | roadmap | See `specs/design/research_roadmap.md`. |
 | R.2 | Non-dominated variant set + diversity score | QUEUED | R.1 | roadmap | |
-| R.3 | Space-syntax measures in the report | **IN-PROGRESS** | — | RD + eval | |
+| R.3 | Space-syntax measures in the report | **DONE** | — | RD + eval | |
 | R.4 | Plain-language explanation per variant | QUEUED | R.3 | roadmap | |
 | R.5 | Adjacencies from the functional programme (Claude, reviewed) | QUEUED | user: functional programme | roadmap | |
-| R.6 | Visual critique of a variant (Claude, advisory) | **IN-PROGRESS** | — | RD + eval | |
-| R.9 | Voronoi seeding experiment (L1 power diagram → topology hint) | QUEUED (after R.1) | R.1 | RD + eval | Adopted as default only if it beats the spring seeder. |
+| R.6 | Visual critique of a variant (Claude, advisory) | **DONE** | — | RD + eval | |
+| R.9 | Whole-programme cell-growth seeding (user's method; Voronoi as a variant) | QUEUED (after R.1) | R.1, A.4 | RD + eval (to revise) | Adopted as default only if it beats the spring seeder. Carries the Q.4 D05 target NO_FACADE ≤ 1. |
+| A.4 | Contract: site anchors (entrance, fixed cores) + room flags (corner, entrance) | PROPOSED | — | — | Needed by R.9 and multi-storey. |
 | R.8 | Depth/shape rules learned from built plans | QUEUED | Q.4 | roadmap | User decision U-9. |
-| R.7 | VLM geometry reader for raster plans | **IN-PROGRESS** | X.1 done | roadmap | |
+| R.7 | VLM geometry reader for raster plans | **DONE** | X.1 done | roadmap | |
 | M.1–3 | Multi-storey: stacking → blocking → shared cores (v2) | PROPOSED | user approval (scope) | roadmap | |
 | P.1 | Claude VLM provider | **DONE** | 3c9db4e | RD + eval + eval_report | User decision U-8: VLM = Claude (claude-opus-5-5, effort low, structured output, no sampling params, cached). |
 | I.1 | Integration: PDF/raster extract, labels, scale, `ale review` | **DONE** | — | RD + eval | Assigned to an external Codex agent; PR to be reviewed by the Router. |
@@ -96,6 +97,7 @@ with ground truth. The Router will issue an annotation template before Phase 1.
 
 - 2026-11-06 — v2.0 workspace initialised (tickets 1.1, 1.2 specified).
 - 2026-11-09 — User: yes to seed-rulebook draft and Claude as VLM. Seed draft written and validated; P.1 specified and dispatched. CI: raster extra added to the install line.
+- 2026-11-11 — **Q.4, R.3, R.6, R.7 merged** (integrated suite 1324 passed, 0 failed). Q.4 D05 amended: NO_FACADE ≤ 1 target moved to R.9. User's whole-programme cell method prototyped in the grid-sizing page; R.9 redirected to it (Voronoi kept as a growth-rule variant); A.4 contract proposed.
 - 2026-11-11 — User: queue R.9 (Voronoi seeding experiment) after R.1. Voronoi also noted for v2: floor-plate zoning and medial-axis decomposition of non-rectangular footprints.
 - 2026-11-11 — **X.1 merged** (PR #2, Codex). Codex is now off: its remaining work is picked up by Claude workers (Sonnet low). Router on Opus 5.5.
 - 2026-11-10 — Literature check of the user's research database (`specs/design/literature_review_2026-11.md`) → research roadmap R.1–R.7 + M (v2) (`research_roadmap.md`). Q.4 interrupted by the weekly limit, WIP saved (90f5a00), resumed with a new worker.
