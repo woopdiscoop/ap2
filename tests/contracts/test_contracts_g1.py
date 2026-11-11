@@ -464,6 +464,7 @@ TOUCHED = [
     "src/ale/contracts",
     "src/ale/geometry/blocks.py",
     "src/ale/geometry/checks.py",
+    "src/ale/geometry/greedy.py",
     "src/ale/geometry/realize.py",
     "src/ale/topology/repair.py",
     "src/ale/topology/seed.py",

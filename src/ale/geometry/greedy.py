@@ -94,6 +94,8 @@ def greedy_plan(prepared: PreparedInput, rulebook: Rulebook, config: AleConfig) 
     del rulebook
     k = Consts.from_config(config)
     fp = decompose_footprint(prepared.footprint.polygon)
+    if len(fp.pieces) > 2:  # G.1: trees of pieces are planned by ``ale.topology.seed_plan``
+        raise ValueError("greedy_plan supports footprints of one or two pieces only")
     reqs = {iid: k.req(spec) for iid, spec in prepared.instances}
     order = {iid: i for i, (iid, _) in enumerate(prepared.instances)}
     targets = [r.target for r in reqs.values()]

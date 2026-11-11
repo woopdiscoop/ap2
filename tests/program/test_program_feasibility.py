@@ -306,22 +306,15 @@ def test_F3_tight_warning(rulebook: Rulebook) -> None:
 
 
 def test_F3_non_grammar_footprint_falls_back_to_perimeter(rulebook: Rulebook) -> None:
-    # A U-shaped footprint is outside decompose_footprint: no raise, usable = perimeter.
-    u_shape = ModulePolygon(
-        exterior=(
-            (0, 0),
-            (300, 0),
-            (300, 200),
-            (200, 200),
-            (200, 100),
-            (100, 100),
-            (100, 200),
-            (0, 200),
-        )
-    )
+    # A footprint outside decompose_footprint (G.1: one needing more than 12 pieces, here a
+    # staircase of 14 steps; a U is decomposable since G.1): no raise, usable = perimeter.
+    steps: list[tuple[int, int]] = [(0, 0), (140, 0)]
+    for k in range(14):
+        steps += [(140 - 10 * k, 10 * (k + 1)), (130 - 10 * k, 10 * (k + 1))]
+    u_shape = ModulePolygon(exterior=tuple(steps))
     fp = ModuleFootprint(polygon=u_shape, origin_m=(0.0, 0.0), access_edge=0, sliver_loss_m2=0.0)
     report = check_feasibility(load_program("program_08"), fp, rulebook, CONFIG)
-    assert report.facade_usable_m == report.perimeter_m == pytest.approx(120.0)
+    assert report.facade_usable_m == report.perimeter_m == pytest.approx(56.0)
     assert "W_FACADE_TIGHT" not in [i.code for i in report.issues]
 
 

@@ -69,9 +69,11 @@ def test_shift_junction(prep_25_j1: PreparedInput, rulebook: Rulebook) -> None:
 
 
 def test_unsupported_footprint(prep_8: PreparedInput, rulebook: Rulebook) -> None:
-    poly = ModulePolygon(
-        exterior=((0, 0), (100, 0), (100, 40), (60, 40), (60, 70), (100, 70), (100, 100), (0, 100))
-    )
+    # G.1: the former C-shaped footprint decomposes now; a staircase of 14 steps does not.
+    steps = [(0, 0), (140, 0)]
+    for k in range(14):
+        steps += [(140 - 10 * k, 10 * (k + 1)), (130 - 10 * k, 10 * (k + 1))]
+    poly = ModulePolygon(exterior=tuple(steps))
     fp = prep_8.footprint.model_copy(update={"polygon": poly})
     odd = prep_8.model_copy(update={"footprint": fp})
     result = seed_plan(odd, rulebook, CONFIG, seed=1)

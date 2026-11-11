@@ -98,16 +98,10 @@ def test_cached_realize_matches_on_l_shapes(drawn: tuple[Any, list[bool], int]) 
 def test_cached_realize_early_failures() -> None:
     rooms = [room("a", 12.0), room("b", 12.0)]
     plan = one_piece([rb("a")], [rb("b")])
-    u_shape = [
-        (0, 0),
-        (300, 0),
-        (300, 200),
-        (200, 200),
-        (200, 100),
-        (100, 100),
-        (100, 200),
-        (0, 200),
-    ]
+    # G.1: a U decomposes now; a staircase of 14 steps (14 pieces) is still unsupported.
+    u_shape = [(0, 0), (140, 0)]
+    for k in range(14):
+        u_shape += [(140 - 10 * k, 10 * (k + 1)), (130 - 10 * k, 10 * (k + 1))]
     codes = set()
     for prep in (prepared_poly(u_shape, rooms), prepared_rect(300, 8, rooms)):
         got = RealizeCache(prep, _CFG).realize(plan, _RULEBOOK)

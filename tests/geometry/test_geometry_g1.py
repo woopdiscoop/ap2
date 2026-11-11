@@ -197,3 +197,31 @@ def test_tree_plan_rejections_reach_realize() -> None:
     plan = _tree_plan(_one([rb("a")], []), _one([], []))
     real = realize(prep, plan, RULEBOOK, CFG)
     assert [f.code for f in real.failures] == ["PLAN_INVALID"]
+
+
+def test_two_band_root_with_fingers_and_inner_connector() -> None:
+    """A comb whose base is deep enough for two bands: the plan realises; with an ``inner``
+    connector the fingers are re-aligned with the final connector position."""
+    from ale.topology.seed import _Search, with_inner
+
+    pts = (
+        (0, 0), (300, 0), (300, 260), (230, 260), (230, 200), (185, 200),
+        (185, 260), (115, 260), (115, 200), (70, 200), (70, 260), (0, 260),
+    )  # fmt: skip
+    prep = p25(pts)
+    res = seed_plan(prep, RULEBOOK, CFG, seed=3, max_attempts=SEED_ATTEMPTS)
+    layout = res.realization.layout
+    assert layout is not None and check_layout(layout, prep, CFG) == ()
+    assert [len(p.bands) for p in res.plan.pieces] == [2, 1, 1, 1]
+    search = _Search(prep, RULEBOOK, CFG, decompose_footprint(prep.footprint.polygon), 3)
+    inner = with_inner(res.plan, [0], search.ctx)
+    real = realize(prep, inner, RULEBOOK, CFG)
+    assert len(real.depths) == 5  # 2 bands + 3 fingers' pieces, none hidden
+    assert "JUNCTION_MISALIGNED" not in {f.code for f in real.failures}
+
+
+def test_greedy_plan_is_for_one_or_two_pieces() -> None:
+    from ale.geometry.greedy import greedy_plan
+
+    with pytest.raises(ValueError, match="one or two pieces"):
+        greedy_plan(p25(U), RULEBOOK, CFG)
