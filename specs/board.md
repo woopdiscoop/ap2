@@ -39,7 +39,7 @@ Maintained by the Router only. Directive: `specs/DIRECTIVE.md` (v2.2, supersedes
 | R.4 | Plain-language explanation per variant | QUEUED | R.3 | roadmap | |
 | R.5 | Adjacencies from the functional programme (Claude, reviewed) | QUEUED | user: functional programme | roadmap | |
 | R.6 | Visual critique of a variant (Claude, advisory) | **DONE** | — | RD + eval | |
-| R.10 | Baseline scoring of the manual AREP-MS scheme (junior's Archicad sheet) | QUEUED | — | — | Extract with the vector-PDF reader, match to programme, same checks as ALE variants; file kept outside the repo. |
+| R.10 | `ale score`: score an existing scheme against a programme (first use: the manual AREP-MS sheet) | **IN-PROGRESS** | — | RD + eval | Extract with the vector-PDF reader, match to programme, same checks as ALE variants; file kept outside the repo. |
 | R.9 | Whole-programme cell-growth seeding (user's method) | **IN-PROGRESS** | A.4 done | RD + eval | Adopted as default only if it beats the spring seeder. Carries the Q.4 D05 target NO_FACADE ≤ 1. |
 | A.4 | Contract: site anchors (entrances, cores, plot mode, setbacks, party edges) + room anchors + floors (1.5.0) | **DONE** | — | RD + eval | Needed by R.9, G.3 and multi-storey. |
 | R.8 | Depth/shape rules learned from built plans | QUEUED | Q.4 | roadmap | User decision U-9. |
