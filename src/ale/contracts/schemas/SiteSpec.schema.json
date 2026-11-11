@@ -1,5 +1,90 @@
 {
   "$defs": {
+    "CoreSpec": {
+      "additionalProperties": false,
+      "description": "A fixed vertical core: ``rect = (x, y, w, h)`` in metres (lower-left corner, size).",
+      "properties": {
+        "id": {
+          "pattern": "^[A-Za-z0-9_-]{1,32}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "stair",
+            "lift",
+            "shaft",
+            "core"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "rect": {
+          "maxItems": 4,
+          "minItems": 4,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "gt": 0.0,
+              "type": "number"
+            },
+            {
+              "gt": 0.0,
+              "type": "number"
+            }
+          ],
+          "title": "Rect",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "rect",
+        "kind"
+      ],
+      "title": "CoreSpec",
+      "type": "object"
+    },
+    "Entrance": {
+      "additionalProperties": false,
+      "description": "An entrance of the building or plot (metres); at most one is ``main``.",
+      "properties": {
+        "label": {
+          "default": "",
+          "title": "Label",
+          "type": "string"
+        },
+        "main": {
+          "default": false,
+          "title": "Main",
+          "type": "boolean"
+        },
+        "point": {
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Point",
+          "type": "array"
+        }
+      },
+      "required": [
+        "point"
+      ],
+      "title": "Entrance",
+      "type": "object"
+    },
     "Polygon": {
       "additionalProperties": false,
       "description": "Polygon in native units or metres.\n\nRings are stored open (first point not repeated), with \u2265 3 points each; the polygon\nmust be valid according to shapely ``is_valid``.",
@@ -51,7 +136,7 @@
     }
   },
   "additionalProperties": false,
-  "description": "Buildable site (metres, y-up).",
+  "description": "Buildable site (metres, y-up).\n\n``core_hint`` is deprecated (kept for compatibility): use ``cores``. ``mode`` is\n``\"footprint\"`` (the polygon is the building outline, today's behaviour) or ``\"plot\"``\n(the polygon is the plot and ``setbacks`` apply). ``party_edges`` lists exterior edges on a\nparty wall. None of the A.4 fields is used by the v1 engines.",
   "properties": {
     "access_edge": {
       "title": "Access Edge",
@@ -79,14 +164,63 @@
       "default": null,
       "title": "Core Hint"
     },
+    "cores": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/CoreSpec"
+      },
+      "title": "Cores",
+      "type": "array"
+    },
+    "entrances": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/Entrance"
+      },
+      "title": "Entrances",
+      "type": "array"
+    },
     "footprint": {
       "$ref": "#/$defs/Polygon"
+    },
+    "mode": {
+      "default": "footprint",
+      "enum": [
+        "footprint",
+        "plot"
+      ],
+      "title": "Mode",
+      "type": "string"
     },
     "north_angle_deg": {
       "ge": 0.0,
       "lt": 360.0,
       "title": "North Angle Deg",
       "type": "number"
+    },
+    "party_edges": {
+      "default": [],
+      "items": {
+        "type": "integer"
+      },
+      "title": "Party Edges",
+      "type": "array"
+    },
+    "setbacks": {
+      "anyOf": [
+        {
+          "items": {
+            "ge": 0.0,
+            "type": "number"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Setbacks"
     }
   },
   "required": [

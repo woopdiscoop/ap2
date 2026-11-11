@@ -28,7 +28,7 @@ from ale.program.models import (
 )
 from ale.program.site import read_site, to_module_footprint
 
-__all__ = ["InputCheck", "check_inputs", "load_rulebook", "prepare_input"]
+__all__ = ["InputCheck", "check_inputs", "convex_corners", "load_rulebook", "prepare_input"]
 
 
 def load_rulebook(path: Path) -> tuple[Rulebook | None, tuple[Issue, ...]]:
@@ -77,6 +77,85 @@ class InputCheck:
         """Issues of severity ``warning``."""
         return [i for i in self.issues if i.severity == "warning"]
 
+    @property
+    def anchors(self) -> tuple[tuple[str, str, str], ...]:
+        """``(room id, name, anchor)`` of every anchored room of the program (A.4)."""
+        if self.program is None:
+            return ()
+        return tuple((r.id, r.name, r.anchor) for r in self.program.rooms if r.anchor is not None)
+
+
+def convex_corners(site: SiteSpec) -> int:
+    """Number of convex (left-turn) vertices of the exterior ring of a CCW rectilinear site."""
+    ring = site.footprint.exterior
+    n = len(ring)
+    count = 0
+    for i in range(n):
+        a, b, c = ring[i - 1], ring[i], ring[(i + 1) % n]
+        if (b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0]) > 0:
+            count += 1
+    return count
+
+
+def _floor_issues(program: Program, rows: dict[str, int]) -> list[Issue]:
+    """The v1 engines are single-floor: rooms on several levels are refused (A.4)."""
+    floors = sorted({r.floor for r in program.rooms})
+    if len(floors) <= 1:
+        return []
+    first = program.rooms[0].floor
+    other = next(r for r in program.rooms if r.floor != first)
+    levels = ", ".join(map(str, floors))
+    return [
+        make_issue(
+            "E_FLOORS_MULTIPLE",
+            f"Le programme comporte des pièces sur plusieurs niveaux ({levels}) "
+            "alors que le moteur ne gère qu'un seul niveau : placez toutes les pièces "
+            "sur le même niveau.",
+            row=rows.get(other.id),
+            column="Niveau",
+            value=other.floor,
+        )
+    ]
+
+
+def _anchor_issues(program: Program, site: SiteSpec, rows: dict[str, int]) -> list[Issue]:
+    """Warnings on anchors that the site cannot honour (A.4)."""
+    out: list[Issue] = []
+    entrance_rooms = [r for r in program.rooms if r.anchor == "entrance"]
+    corner_rooms = [r for r in program.rooms if r.anchor == "corner"]
+    if entrance_rooms and not site.entrances:
+        out.append(
+            make_issue(
+                "W_ANCHOR_NO_ENTRANCE",
+                f"La pièce « {entrance_rooms[0].id} » est ancrée à l'entrée mais le site "
+                "ne définit aucune entrée (clé entrances de site.yaml).",
+                row=rows.get(entrance_rooms[0].id),
+                column="Ancrage",
+                value="entrée",
+            )
+        )
+    corners = convex_corners(site)
+    n_corner = sum(r.quantity for r in corner_rooms)
+    if n_corner > corners:
+        out.append(
+            make_issue(
+                "W_ANCHOR_CORNERS",
+                f"{n_corner} pièces ancrées en coin pour {corners} coins saillants de l'emprise.",
+                column="Ancrage",
+                value="coin",
+            )
+        )
+    if site.mode == "plot":
+        out.append(
+            make_issue(
+                "W_SITE_PLOT_MODE",
+                "Site en mode « plot » : les moteurs actuels traitent le polygone comme "
+                "l'emprise du bâtiment et ignorent les retraits.",
+                value="plot",
+            )
+        )
+    return out
+
 
 def check_inputs(
     program_path: Path, site_path: Path, rulebook_path: Path, config: AleConfig
@@ -94,6 +173,11 @@ def check_inputs(
             out.footprint = to_module_footprint(out.site, grid)
         except InputError as exc:
             out.issues.extend(exc.issues)
+
+    if out.program is not None:
+        out.issues.extend(_floor_issues(out.program, out.report.rows))
+        if out.site is not None:
+            out.issues.extend(_anchor_issues(out.program, out.site, out.report.rows))
 
     out.rulebook, rulebook_issues = load_rulebook(Path(rulebook_path))
     out.issues.extend(rulebook_issues)

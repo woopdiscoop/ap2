@@ -18,12 +18,14 @@ import yaml
 from pydantic import ValidationError
 
 from ale.contracts.geometry import ModulePolygon, Polygon
-from ale.contracts.models import GridSpec, SiteSpec
+from ale.contracts.models import CoreSpec, Entrance, GridSpec, SiteSpec
 from ale.contracts.units import check_module_mm, m_to_mm, mm_to_m, to_decimal
 from ale.program.models import InputError, Issue, ModuleFootprint, make_issue
 
 __all__ = [
+    "CORE_KEYS",
     "DXF_KEYS",
+    "ENTRANCE_KEYS",
     "SITE_KEYS",
     "module_perimeter_mm",
     "normalise_footprint",
@@ -33,8 +35,22 @@ __all__ = [
 ]
 
 SITE_KEYS: frozenset[str] = frozenset(
-    {"footprint", "footprint_dxf", "north_angle_deg", "access_edge", "core_hint"}
+    {
+        "footprint",
+        "footprint_dxf",
+        "north_angle_deg",
+        "access_edge",
+        "core_hint",
+        "entrances",
+        "cores",
+        "mode",
+        "setbacks",
+        "party_edges",
+    }
 )
+ENTRANCE_KEYS: frozenset[str] = frozenset({"point", "label", "main"})
+CORE_KEYS: frozenset[str] = frozenset({"id", "rect", "kind"})
+CORE_KINDS: tuple[str, ...] = ("stair", "lift", "shaft", "core")
 DXF_KEYS: frozenset[str] = frozenset({"path", "layer", "units"})
 
 #: Metres per drawing unit, by unit name and by DXF ``$INSUNITS`` code.
@@ -155,6 +171,11 @@ def normalise_footprint(
 
 
 def _normalise(points_mm: Sequence[MmPoint], access_edge: int) -> tuple[tuple[MmPoint, ...], int]:
+    edges, k = _normalise_edges(points_mm, access_edge)
+    return tuple(e.a for e in edges), k
+
+
+def _normalise_edges(points_mm: Sequence[MmPoint], access_edge: int) -> tuple[list[_Edge], int]:
     n_in = len(points_mm)
     if not 0 <= access_edge < n_in:
         raise _fail(
@@ -185,7 +206,7 @@ def _normalise(points_mm: Sequence[MmPoint], access_edge: int) -> tuple[tuple[Mm
             )
     for k, e in enumerate(edges):
         if access_edge in e.tags:
-            return tuple(pts), k
+            return edges, k
     raise _fail(
         "E_SITE_ACCESS_EDGE",
         f"Le côté d'accès {access_edge} est de longueur nulle après arrondi au millimètre.",
@@ -277,7 +298,151 @@ def _schema_issues(data: Mapping[str, Any]) -> list[Issue]:
     hint = data.get("core_hint")
     if hint is not None and _point(hint) is None:
         bad("core_hint doit être null ou [x, y] en mètres.", hint)
+    issues.extend(_anchor_schema_issues(data))
     return issues
+
+
+def _bad_schema(message: str, value: object = None) -> Issue:
+    return make_issue("E_SITE_SCHEMA", message, value=value)
+
+
+def _anchor_schema_issues(data: Mapping[str, Any]) -> list[Issue]:
+    """Shape errors of the A.4 keys (each message names the key)."""
+    out: list[Issue] = []
+    mode = data.get("mode", "footprint")
+    if mode not in ("footprint", "plot"):
+        out.append(_bad_schema("mode doit valoir footprint ou plot.", mode))
+    entrances = data.get("entrances", [])
+    if not isinstance(entrances, list | tuple):
+        out.append(_bad_schema("entrances doit être une liste.", entrances))
+    else:
+        for k, e in enumerate(entrances):
+            if not isinstance(e, Mapping):
+                out.append(_bad_schema(f"entrances[{k}] doit être un dictionnaire.", e))
+                continue
+            for key in sorted(str(x) for x in e if x not in ENTRANCE_KEYS):
+                out.append(_bad_schema(f"Clé inconnue « {key} » dans entrances[{k}].", key))
+            if _point(e.get("point")) is None:
+                out.append(
+                    _bad_schema(f"entrances[{k}].point doit être [x, y] en mètres.", e.get("point"))
+                )
+            if not isinstance(e.get("label", ""), str):
+                out.append(_bad_schema(f"entrances[{k}].label doit être un texte.", e.get("label")))
+            if not isinstance(e.get("main", False), bool):
+                out.append(_bad_schema(f"entrances[{k}].main doit être true ou false.", e["main"]))
+    cores = data.get("cores", [])
+    if not isinstance(cores, list | tuple):
+        out.append(_bad_schema("cores doit être une liste.", cores))
+    else:
+        for k, c in enumerate(cores):
+            if not isinstance(c, Mapping):
+                out.append(_bad_schema(f"cores[{k}] doit être un dictionnaire.", c))
+                continue
+            for key in sorted(str(x) for x in c if x not in CORE_KEYS):
+                out.append(_bad_schema(f"Clé inconnue « {key} » dans cores[{k}].", key))
+            if not isinstance(c.get("id"), str) or not c["id"].strip():
+                out.append(_bad_schema(f"cores[{k}].id doit être un texte non vide.", c.get("id")))
+            rect = c.get("rect")
+            dims = (
+                [_decimal(v) for v in rect]
+                if isinstance(rect, list | tuple) and len(rect) == 4
+                else None
+            )
+            if dims is None or any(v is None for v in dims):
+                out.append(_bad_schema(f"cores[{k}].rect doit être [x, y, l, h] en mètres.", rect))
+            elif dims[2] is not None and dims[3] is not None and (dims[2] <= 0 or dims[3] <= 0):
+                out.append(
+                    _bad_schema(f"cores[{k}].rect : largeur et hauteur doivent être > 0.", rect)
+                )
+            if c.get("kind") not in CORE_KINDS:
+                out.append(
+                    _bad_schema(
+                        f"cores[{k}].kind doit valoir stair, lift, shaft ou core.", c.get("kind")
+                    )
+                )
+    setbacks = data.get("setbacks")
+    if setbacks is not None:
+        values = [_decimal(v) for v in setbacks] if isinstance(setbacks, list | tuple) else None
+        if values is None or any(v is None or v < 0 for v in values):
+            out.append(_bad_schema("setbacks doit être une liste de nombres ≥ 0 (m).", setbacks))
+    party = data.get("party_edges", [])
+    if not isinstance(party, list | tuple) or any(
+        isinstance(v, bool) or not isinstance(v, int) for v in party
+    ):
+        out.append(_bad_schema("party_edges doit être une liste d'entiers.", party))
+    return out
+
+
+def _edge_images(edges: list[_Edge], n_in: int) -> dict[int, int]:
+    """Input edge index → normalised edge index (zero-length input edges are absent)."""
+    return {i: k for k, e in enumerate(edges) for i in e.tags if i < n_in}
+
+
+def _remap_anchors(
+    data: Mapping[str, Any], edges: list[_Edge], n_in: int
+) -> tuple[tuple[int, ...], tuple[float, ...] | None]:
+    """``party_edges`` and ``setbacks`` of the input edges, expressed on the normalised ones."""
+    image = _edge_images(edges, n_in)
+    party: list[int] = []
+    for i in data.get("party_edges", []):
+        if not 0 <= i < n_in:
+            raise _fail(
+                "E_SITE_SCHEMA",
+                f"party_edges : côté {i} hors limites : l'emprise a {n_in} côtés (0 à {n_in - 1}).",
+                i,
+            )
+        if i not in image:
+            raise _fail(
+                "E_SITE_SCHEMA",
+                f"party_edges : le côté {i} est de longueur nulle après arrondi au millimètre.",
+                i,
+            )
+        if image[i] not in party:
+            party.append(image[i])
+    setbacks = data.get("setbacks")
+    if setbacks is None:
+        return tuple(sorted(party)), None
+    if len(setbacks) != n_in:
+        raise _fail(
+            "E_SITE_SCHEMA",
+            f"setbacks : {len(setbacks)} valeurs pour {n_in} côtés extérieurs.",
+            len(setbacks),
+        )
+    out: list[float] = []
+    for k, e in enumerate(edges):
+        values = {float(setbacks[i]) for i in e.tags if i < n_in}
+        if len(values) != 1:
+            raise _fail(
+                "E_SITE_SCHEMA",
+                f"setbacks : les côtés fusionnés en un seul côté {k} ont des retraits différents.",
+                sorted(values),
+            )
+        out.append(values.pop())
+    return tuple(sorted(party)), tuple(out)
+
+
+def _contract_issues(exc: ValidationError) -> tuple[Issue, ...]:
+    """French issues of a contract error on the A.4 keys (messages already name the key)."""
+    out: list[Issue] = []
+    for err in exc.errors(include_url=False):
+        msg = str(err["msg"]).removeprefix("Value error, ")
+        loc = ".".join(str(p) for p in err["loc"])
+        text = msg if err["type"] == "value_error" else f"{loc} : {msg}"
+        out.append(_bad_schema(f"Site refusé par le contrat : {text}."))
+    return tuple(out)
+
+
+def _entrance(e: Mapping[str, Any]) -> Entrance:
+    pt = _point(e["point"])
+    assert pt is not None  # checked by the schema pass
+    return Entrance(
+        point=(float(pt[0]), float(pt[1])), label=e.get("label", ""), main=e.get("main", False)
+    )
+
+
+def _core(c: Mapping[str, Any]) -> CoreSpec:
+    x, y, w, h = (float(v) for v in c["rect"])
+    return CoreSpec(id=c["id"].strip(), rect=(x, y, w, h), kind=c["kind"])
 
 
 def _site(data: object, base_dir: Path) -> SiteSpec:
@@ -300,7 +465,9 @@ def _site(data: object, base_dir: Path) -> SiteSpec:
         spec = data["footprint_dxf"]
         points = _read_dxf(base_dir / spec["path"], spec["layer"], spec.get("units"))
     mm = [(m_to_mm(x), m_to_mm(y)) for x, y in points]
-    ring, access = _normalise(mm, data.get("access_edge", 0))
+    edges, access = _normalise_edges(mm, data.get("access_edge", 0))
+    ring = tuple(e.a for e in edges)
+    party, setbacks = _remap_anchors(data, edges, len(mm))
     hint = data.get("core_hint")
     hint_pt = _point(hint) if hint is not None else None
     try:
@@ -309,9 +476,14 @@ def _site(data: object, base_dir: Path) -> SiteSpec:
             north_angle_deg=float(data.get("north_angle_deg", 0)),
             access_edge=access,
             core_hint=None if hint_pt is None else (float(hint_pt[0]), float(hint_pt[1])),
+            entrances=tuple(_entrance(e) for e in data.get("entrances", [])),
+            cores=tuple(_core(c) for c in data.get("cores", [])),
+            mode=data.get("mode", "footprint"),
+            setbacks=setbacks,
+            party_edges=party,
         )
-    except ValidationError as exc:  # pragma: no cover - checks above are stricter
-        raise _fail("E_SITE_INVALID", f"Site refusé par le contrat : {exc}.") from None
+    except ValidationError as exc:
+        raise _Fail(*_contract_issues(exc)) from None
 
 
 # --------------------------------------------------------------------------- DXF

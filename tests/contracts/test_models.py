@@ -47,6 +47,8 @@ from ale.contracts.models import (
     Adjacency,
     AdjEntry,
     CoreOffset,
+    CoreSpec,
+    Entrance,
     GridSpec,
     LabelledPolygon,
     Layout,
@@ -163,6 +165,8 @@ def _instances(h: SimpleNamespace) -> list[BaseModel]:
         *h.make_room_specs(),
         h.make_program(),
         h.make_site(),
+        Entrance(point=(0.0, 0.0), label="Principale", main=True),
+        CoreSpec(id="C1", rect=(1.0, 1.0, 2.0, 2.0), kind="stair"),
         layout,
         layout.grid,
         layout.rooms[0],
@@ -273,7 +277,8 @@ def test_M05_program_rules() -> None:
     with pytest.raises(ValidationError, match="avoids"):
         prog(_room_kwargs(adjacent_to=("R2",)), _room_kwargs(id="R2", avoid=("R1",)))
     with pytest.raises(ValidationError, match="floor"):
-        RoomSpec(**_room_kwargs(floor=1))
+        RoomSpec(**_room_kwargs(floor=-1))  # A.4: floors >= 0 are accepted (was: only 0)
+    assert RoomSpec(**_room_kwargs(floor=1)).floor == 1
     with pytest.raises(ValidationError, match="both in adjacent_to and avoid"):
         RoomSpec(**_room_kwargs(adjacent_to=("R2",), avoid=("R2",)))
     with pytest.raises(ValidationError, match="duplicates"):

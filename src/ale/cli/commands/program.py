@@ -26,6 +26,7 @@ from ale.config import AleConfig
 if TYPE_CHECKING:
     from ale.program.annexe import AnnexeResult
     from ale.program.models import FeasibilityReport, Issue
+    from ale.program.prepare import InputCheck
 
 app = typer.Typer(
     name="program",
@@ -82,6 +83,18 @@ def _issue_line(issue: Issue) -> str:
     return text
 
 
+def _anchor_lines(result: InputCheck) -> list[str]:
+    """Anchors found in the programme and the site (A.4)."""
+    site = result.site
+    entrances = () if site is None else site.entrances
+    cores = () if site is None else site.cores
+    lines = [f"Ancrages ({len(result.anchors)}) :"]
+    labels = {"corner": "coin", "entrance": "entrée"}
+    lines += [f"  {rid} ({name}) : {labels[a]}" for rid, name, a in result.anchors]
+    lines.append(f"  entrées du site : {len(entrances)}, noyaux du site : {len(cores)}")
+    return lines
+
+
 def _summary(f: FeasibilityReport) -> list[str]:
     return [
         "Faisabilité :",
@@ -133,6 +146,7 @@ def check(
     else:
         lines = [f"Erreurs ({len(errors)}) :", *(_issue_line(i) for i in errors)]
         lines += [f"Avertissements ({len(warnings)}) :", *(_issue_line(i) for i in warnings)]
+        lines += _anchor_lines(result)
         if result.feasibility is not None:
             lines += _summary(result.feasibility)
         lines.append("OK" if not errors else "ÉCHEC : corrigez les erreurs ci-dessus.")

@@ -16,7 +16,7 @@ from ale.contracts.taxonomy import load_taxonomy
 DATA = Path(__file__).resolve().parent / "data"
 RULEBOOK_TEST = DATA / "rulebook_test.yaml"
 
-#: The 16 headers of RD 3.1 section 4, in order (written here independently of the code).
+#: The 17 headers of RD 3.1 section 4 (+ « Ancrage », A.4), in order (written independently).
 HEADERS = [
     "ID",
     "Nom",
@@ -33,6 +33,7 @@ HEADERS = [
     "Adjacent à",
     "Éviter",
     "Niveau",
+    "Ancrage",
     "Remarques",
 ]
 ZONES_FR = {
@@ -62,10 +63,11 @@ def write_rows(
 
 
 def row(**cells: Any) -> list[Any]:
-    """A row in the 16 columns from keyword cells (``ID``, ``Nom``, ``Surface``, ...).
+    """A row in the 17 columns from keyword cells (``ID``, ``Nom``, ``Surface``, ...).
 
     Keys are header names with spaces/accents replaced: ``Surface``, ``Quantite``,
-    ``Facade``, ``N``/``E``/``S``/``O``, ``Largeur``, ``Adjacent``, ``Eviter``, ``Niveau``.
+    ``Facade``, ``N``/``E``/``S``/``O``, ``Largeur``, ``Adjacent``, ``Eviter``, ``Niveau``,
+    ``Ancrage``.
     """
     keys = [
         "ID",
@@ -83,6 +85,7 @@ def row(**cells: Any) -> list[Any]:
         "Adjacent",
         "Eviter",
         "Niveau",
+        "Ancrage",
         "Remarques",
     ]
     unknown = set(cells) - set(keys)
@@ -116,7 +119,7 @@ X07_ROWS: list[tuple[str, list[Any]]] = [
     ("E_ZONE", good_row("R10", Zone="Bureaux")),
     ("E_FACADE", good_row("R11", Facade="peut-être")),
     ("E_MIN_WIDTH", good_row("R12", Largeur=-1)),
-    ("E_FLOOR", good_row("R13", Niveau=1)),
+    ("E_FLOOR", good_row("R13", Niveau=-1)),
 ]
 
 
@@ -144,6 +147,7 @@ def program_to_xlsx(program: Program, path: Path) -> Path:
                 "; ".join(r.adjacent_to) or None,
                 "; ".join(r.avoid) or None,
                 r.floor,
+                {None: None, "corner": "Coin", "entrance": "Entrée"}[r.anchor],
                 None,
             ]
         )
@@ -163,6 +167,18 @@ def site_to_yaml(site: SiteSpec, path: Path) -> Path:
         "access_edge": site.access_edge,
         "core_hint": None if site.core_hint is None else list(site.core_hint),
     }
+    if site.entrances:
+        data["entrances"] = [
+            {"point": list(e.point), "label": e.label, "main": e.main} for e in site.entrances
+        ]
+    if site.cores:
+        data["cores"] = [{"id": c.id, "rect": list(c.rect), "kind": c.kind} for c in site.cores]
+    if site.mode != "footprint":
+        data["mode"] = site.mode
+    if site.setbacks is not None:
+        data["setbacks"] = list(site.setbacks)
+    if site.party_edges:
+        data["party_edges"] = list(site.party_edges)
     return write_site_yaml(path, data)
 
 

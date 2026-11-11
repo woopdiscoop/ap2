@@ -18,6 +18,8 @@ from ale.contracts.enums import MacroZone, TypeCategory
 from ale.contracts.models import Program, RoomSpec
 from ale.contracts.taxonomy import load_taxonomy
 from ale.program.excel import (
+    ANCHOR_LABELS,
+    COL_ANCHOR,
     COL_AREA,
     COL_FACADE,
     COL_QTY,
@@ -131,7 +133,12 @@ _HELP_ROWS: tuple[tuple[str, str, str], ...] = (
     ("Largeur min (m)", "Non", "Nombre > 0, en mètres."),
     ("Adjacent à", "Non", "Identifiants de pièces séparés par , ou ;."),
     ("Éviter", "Non", "Identifiants de pièces séparés par , ou ;."),
-    ("Niveau", "Non (0)", "0 uniquement (v1, un seul niveau)."),
+    (
+        "Niveau",
+        "Non (0)",
+        "Entier ≥ 0 (les moteurs v1 n'acceptent qu'un seul niveau par programme).",
+    ),
+    ("Ancrage", "Non", "Coin ou Entrée (liste) ; vide = aucun ancrage."),
     ("Remarques", "Non", "Texte libre, ignoré."),
 )
 
@@ -147,6 +154,7 @@ _WIDTHS: dict[str, float] = {
     "Adjacent à": 18,
     "Éviter": 18,
     "Niveau": 8,
+    "Ancrage": 12,
     "Remarques": 30,
 }
 
@@ -165,7 +173,7 @@ def _fmt_number(x: float) -> float | int:
 
 
 def program_rows(program: Program) -> list[list[Any]]:
-    """Rows (16 cells, template column order) of a program: types as ``label_fr``."""
+    """Rows (17 cells, template column order) of a program: types as ``label_fr``."""
     tax = load_taxonomy()
     rows: list[list[Any]] = []
     for r in program.rooms:
@@ -184,6 +192,7 @@ def program_rows(program: Program) -> list[list[Any]]:
                 ", ".join(r.adjacent_to) or None,
                 ", ".join(r.avoid) or None,
                 r.floor,
+                None if r.anchor is None else ANCHOR_LABELS[r.anchor],
                 None,
             ]
         )
@@ -238,6 +247,16 @@ def _validations(ws: Any, n_types: int) -> None:
         DataValidation(type="list", formula1='"Oui,Non"', allow_blank=True),
         "Façade",
         "Oui ou Non.",
+    )
+    add(
+        COL_ANCHOR,
+        DataValidation(
+            type="list",
+            formula1='"' + ",".join(ANCHOR_LABELS.values()) + '"',
+            allow_blank=True,
+        ),
+        "Ancrage",
+        "Coin ou Entrée.",
     )
     add(
         COL_AREA,

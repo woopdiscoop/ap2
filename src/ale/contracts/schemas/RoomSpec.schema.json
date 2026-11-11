@@ -34,6 +34,22 @@
       "title": "Adjacent To",
       "type": "array"
     },
+    "anchor": {
+      "anyOf": [
+        {
+          "enum": [
+            "corner",
+            "entrance"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Anchor"
+    },
     "avoid": {
       "default": [],
       "items": {

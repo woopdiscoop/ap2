@@ -51,6 +51,8 @@ ERROR_CODES: frozenset[str] = frozenset(
         "E_SELF_REF",
         "E_REQ_AVOID_CONFLICT",
         "E_FLOOR",
+        "E_ANCHOR",
+        "E_FLOORS_MULTIPLE",
         "E_ROOM_INFEASIBLE",
         "E_TYPE_NOT_IN_RULEBOOK",
         "E_NOT_FEASIBLE",
@@ -72,9 +74,17 @@ EXTRA_ERROR_CODES: frozenset[str] = frozenset(
     {"E_FILE_UNREADABLE", "E_SITE_SCHEMA", "E_RULEBOOK_INVALID"}
 )
 
-#: Warning codes of RD 3.1 section 4, plus ``W_FACADE_TIGHT`` (Q.2a).
+#: Warning codes of RD 3.1 section 4, plus ``W_FACADE_TIGHT`` (Q.2a) and the anchor warnings (A.4).
 WARNING_CODES: frozenset[str] = frozenset(
-    {"W_SHEET_NAME", "W_UNKNOWN_COLUMN", "W_ZONE_DEFAULTED", "W_FACADE_TIGHT"}
+    {
+        "W_SHEET_NAME",
+        "W_UNKNOWN_COLUMN",
+        "W_ZONE_DEFAULTED",
+        "W_FACADE_TIGHT",
+        "W_ANCHOR_NO_ENTRANCE",
+        "W_ANCHOR_CORNERS",
+        "W_SITE_PLOT_MODE",
+    }
 )
 
 Severity = Literal["error", "warning"]
