@@ -33,7 +33,7 @@ Maintained by the Router only. Directive: `specs/DIRECTIVE.md` (v2.2, supersedes
 | P.2 | Import « programme physique » (Annexe format) | **DONE** | e730d6a | RD + eval | `ale program import`; AREP-MS mapping as default rules; synthetic fixtures only. |
 | Q.4 | Max depth from façade (7.20 m) | **DONE** | Q.3 | RD + eval | Contracts 1.4.0 `facade.max_depth_m`; `FACADE_DEPTH` hard; depth beats aspect for big rooms. |
 | X.1 | `ale extract --force` + exact raster extent | **DONE** | I.2 | RD + eval | I.2 follow-ups; independent of P.2/Q.3/Q.4 files. |
-| R.1 | Multi-start annealing (stable quality) | **IN-PROGRESS** | Q.4 | roadmap | See `specs/design/research_roadmap.md`. |
+| R.1 | Multi-start annealing (stable quality) | **REJECTED (negative result)** | Q.4 | roadmap | See `specs/design/research_roadmap.md`. |
 | R.2 | Non-dominated variant set + diversity score | QUEUED | R.1 | roadmap | |
 | R.3 | Space-syntax measures in the report | **DONE** | — | RD + eval | |
 | R.4 | Plain-language explanation per variant | QUEUED | R.3 | roadmap | |
@@ -103,6 +103,7 @@ with ground truth. The Router will issue an annotation template before Phase 1.
 
 - 2026-11-06 — v2.0 workspace initialised (tickets 1.1, 1.2 specified).
 - 2026-11-09 — User: yes to seed-rulebook draft and Claude as VLM. Seed draft written and validated; P.1 specified and dispatched. CI: raster extra added to the install line.
+- 2026-11-11 — **R.1 rejected (negative result, not merged; branch worktree-agent-ad9e09805908d8bb3 @ 211d7d7 kept)**: 4 starts at the same total budget are worse on P60 (NO_FACADE 8–10, hard 11–13 at budgets 1000–1500) than one chain (6–10 / 9–13): chains of 250–375 iterations do not converge. Conclusion: the P60 weakness is the initial arrangement, not the optimiser → R.9 (cell-diagram seeding) and the parti-first G.2 (U-16) are the levers.
 - 2026-11-11 — **A.4 merged** (contracts 1.5.0: entrances, cores, plot mode, setbacks, party edges, room anchors « coin »/« entrée », floors). Container restart killed R.1's final run; WIP saved (4c9a3bb) and R.1 relaunched. User's manual AREP-MS scheme reviewed: areas slightly below programme (sketch tolerance, U-15), outline changes = terraces (U-15), "one stair per bar" withdrawn (U-14); R.10 baseline scoring queued.
 - 2026-11-11 — **Q.4, R.3, R.6, R.7 merged** (integrated suite 1324 passed, 0 failed). Q.4 D05 amended: NO_FACADE ≤ 1 target moved to R.9. User's whole-programme cell method prototyped in the grid-sizing page; R.9 redirected to it (Voronoi kept as a growth-rule variant); A.4 contract proposed.
 - 2026-11-11 — User: queue R.9 (Voronoi seeding experiment) after R.1. Voronoi also noted for v2: floor-plate zoning and medial-axis decomposition of non-rectangular footprints.
