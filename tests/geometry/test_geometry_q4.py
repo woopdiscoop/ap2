@@ -11,6 +11,7 @@ from __future__ import annotations
 from collections import Counter
 from fractions import Fraction
 
+import pytest
 from geometry_helpers import (
     fb,
     load_test_rulebook,
@@ -139,6 +140,33 @@ def test_D03_violation() -> None:
     assert "NO_FACADE" in inner_codes and "FACADE_DEPTH" not in inner_codes
     assert sorted(FACADE_CODES) == ["FACADE_DEPTH", "NO_FACADE"]
     assert "FACADE_DEPTH" in HARD_CODES and SOFT_ASPECT_CODE not in HARD_CODES
+
+
+# ------------------------------------------------------------------------------ D08
+def test_D08_soft_depth_unit() -> None:
+    """Soft mode (default): the 9.6 m office is reported, not hard, and costs depth/limit."""
+    soft = arep_config(hard=False)
+    layout = hand_layout(40, 18, {"office": (10, 0, 12, 16)})
+    prep = prepared(40, 18, [room("office", 12 * 16 * 0.36, needs_facade=True)], soft)
+    got = evaluate(layout, prep, RULEBOOK, soft)
+    assert [v.code for v in got.violations if v.code == "FACADE_DEPTH"] == ["FACADE_DEPTH"]
+    # cost term: (16 - 12) / 12 over one room
+    assert got.cost_breakdown["facade_depth"] == pytest.approx(4 / 12)
+    base = hard_count(layout.model_copy(update={"metrics": got}))  # unrelated hard codes
+    # Hard mode: counted in n_hard, no cost term.
+    hard_got = evaluate(layout, prep, RULEBOOK, CONFIG)
+    assert "facade_depth" not in hard_got.cost_breakdown
+    assert hard_count(layout.model_copy(update={"metrics": hard_got})) == base + 1
+    # Rule off: no term at all.
+    off = arep_config(None)
+    assert "facade_depth" not in evaluate(layout, prep, RULEBOOK, off).cost_breakdown
+    # Weight 0 removes its contribution to the total.
+    w0 = AleConfig.model_validate(
+        {**soft.model_dump(mode="json"), "optimizer": {"weights": {"facade_depth": 0.0}}}
+    )
+    assert evaluate(layout, prep, RULEBOOK, w0).total_cost == pytest.approx(
+        got.total_cost - got.cost_breakdown["facade_depth"]
+    )
 
 
 def test_D03_depth_from_longest_contact() -> None:

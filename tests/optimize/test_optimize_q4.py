@@ -31,7 +31,7 @@ from ale.contracts.models import Program, RoomSpec, Rulebook, SiteSpec
 from ale.contracts.serialization import canonical_json
 from ale.geometry import check_layout, realize
 from ale.geometry.blocks import Consts
-from ale.geometry.evaluate import SOFT_ASPECT_CODE
+from ale.geometry.evaluate import SOFT_ASPECT_CODE, hard_codes_of
 from ale.optimize import HARD_CODES, anneal
 from ale.program import prepare_input
 from ale.program.models import PreparedInput
@@ -179,6 +179,32 @@ def test_D05_arep_floor(tmp_path: Path, rulebook: Rulebook) -> None:
     # The 160 m² office is at most 7.2 m deep; its aspect > 2 is soft.
     assert final["FACADE_DEPTH"] == 0
     assert final["NO_FACADE"] <= 1
+
+
+# ------------------------------------------------------------------------------ D08
+@pytest.mark.slow
+@pytest.mark.timeout(900)
+def test_D08_soft_depth(tmp_path: Path, rulebook: Rulebook) -> None:
+    """Soft mode (the default): FACADE_DEPTH is reported but not hard, the cost term
+    ``facade_depth`` is in the breakdown, and ASPECT stays hard (no ASPECT_DEPTH)."""
+    cfg = arep_config(hard=False)
+    assert cfg.facade.max_depth_hard is False
+    prep = arep_prepared(tmp_path)
+    start = seed_plan(prep, rulebook, cfg, seed=AREP_SEED, max_attempts=SEED_ATTEMPTS)
+    assert start.realization.layout is not None, start.realization.failures
+    res = anneal(prep, rulebook, cfg, start.plan, seed=ANNEAL_SEED, max_iter=AREP_ITER)
+    assert res.stopped_by == "max_iter"
+    metrics = res.layout.metrics
+    final = Counter(v.code for v in metrics.violations)
+    hard_set = hard_codes_of(metrics, HARD_CODES)
+    hard = {c: n for c, n in sorted(final.items()) if c in hard_set}
+    print(f"AREP soft: final {dict(final)}, hard {hard}, depth {metrics.cost_breakdown}")
+    assert "facade_depth" in metrics.cost_breakdown
+    assert metrics.cost_breakdown["facade_depth"] >= 0.0
+    assert SOFT_ASPECT_CODE not in final  # ASPECT stays hard in soft mode
+    assert "FACADE_DEPTH" not in hard
+    assert res.final_hard == sum(hard.values())
+    assert check_layout(res.layout, prep, cfg) == ()
 
 
 # ------------------------------------------------------------------------------ D06

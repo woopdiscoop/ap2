@@ -4,7 +4,7 @@ Environment: Linux, Python 3.13, venv inside the worktree (`.venv`, `pip install
 ".[dev,excel,cad,pdf,raster,vlm]"`). Base: `origin/claude/new-session-2hmd3s` at `12b59b0`
 (Q.3 merged). Contracts go to **1.4.0**; `python -m ale.contracts.lock --check` reports OK.
 
-**Status:** every eval ID D01–D07 has a test named after it. D01, D02, D03, D04, D06 and D07
+**Status:** every eval ID D01–D08 has a test named after it. D01–D04, D06, D07 and D08
 pass. **D05 fails on `NO_FACADE ≤ 1`**: the AREP floor ends with `FACADE_DEPTH = 0` (met) and
 `NO_FACADE = 3`. The test is kept as written (no xfail); §3 explains why ≤ 1 is out of reach of
 the current grammar and optimiser in practice.
@@ -67,9 +67,10 @@ the current grammar and optimiser in practice.
 | D04 | `test_D04_big_room` (+ solver, block-count, rule-off tests; `tests/export/test_export_q4.py`) | pass: the 160 m² `needs_facade` room is realised 38 × 12 modules (22,8 × 7,2 m, depth 7.2 m, 456 cells within 445–488), `ASPECT_DEPTH` reported, no `ASPECT`/`FACADE_DEPTH`, `n_hard = 0`, `check_layout == ()`; the report lists it |
 | D05 | `tests/optimize/test_optimize_q4.py::test_D05_arep_floor` | **fail**: `FACADE_DEPTH` 0 (≤ 0 met), `NO_FACADE` **3** (target ≤ 1) — see §3 |
 | D06 | `test_D06_no_regression`; Q301–Q304 unchanged | pass: identical layouts (D02), so Q301 (P60 `NO_FACADE` 6), Q302 (P8 0, P25 5, P60 9), Q303 (P25 7 → 5), Q304 (P8 seeds 1–5) hold as in Q.3 |
+| D08 | `tests/optimize/test_optimize_q4.py::test_D08_soft_depth`, `tests/geometry/test_geometry_q4.py::test_D08_soft_depth_unit`, `tests/export/test_export_q4.py::test_D08_report_soft_depth` | pass (soft mode, the default, RD §6): `FACADE_DEPTH` reported but not hard, cost term `facade_depth` = Σ max(0, depth − limit)/limit ÷ rooms in the breakdown (9.6 m office: 4/12), weight 0 removes it, ASPECT stays hard (no `ASPECT_DEPTH`). AREP floor, soft: final FACADE_DEPTH 2 (soft), hard NO_FACADE 2, REQUIRED_ADJ 2; `check_layout == ()` |
 | D07 | `test_D07_gates` and the gate runs of §4 | see §4 |
 
-## 3. D05: the AREP-MS floor
+## 3. D05: the AREP-MS floor (hard mode, `max_depth_hard = true`)
 Programme rebuilt in the test: 16 lines, 25 rooms, 649 m²; bar 54 × 15.6 m = 90 × 26 modules;
 module 600 (`s = c = 2`, `f = 4`, `dmax = 12`); area 0 / +10 % / 0; aspect ≤ 2.
 Budgets: seed 3 with `max_attempts = 50`, anneal seed 6 with `max_iter = 1 500` (Q.3 convention).
@@ -125,10 +126,10 @@ further optimiser change was made and the test keeps its target.
 ## 4. Gates
 - ruff check: clean. ruff format --check: clean. mypy strict on `src`: 0 errors.
   `lock --check`: OK. `export_schemas --check`: OK.
-- Whole suite under coverage (`pytest --cov=src/ale --cov-branch`), twice:
-  - run 1: RUN1
-  - run 2: RUN2
-- Coverage of the touched packages: COVERAGE
+- Whole suite under coverage (`pytest --cov=src/ale --cov-branch`): 1242 passed, 13 skipped,
+  3 xfailed (pre-existing), **1 failed: `test_D05_arep_floor` (`NO_FACADE` 3 > 1)**, 21 min 08 s.
+- Coverage: TOTAL 98 %; touched packages all >= 94 % per file (`contracts/config.py` 94 %,
+  `geometry/greedy.py` 94 %, everything else higher; `export/report.py` 100 %).
 
 ## 5. Spec issues
 1. **Soft aspect needs its own code.** `n_hard` is a count of codes in `HARD_CODES`, so "the
@@ -146,6 +147,8 @@ further optimiser change was made and the test keeps its target.
    list (4–30 m²) is used. The test rulebook has no `waiting_area` / `cleaning_room` types, so
    the salon is a `reception` and the local ménage a `storage` room.
 5. **D05 target not reachable** with the current grammar and optimiser (§3).
+8. **eval.md lacks D08.** RD §6 says "new D08 checks the soft mode" but `eval.md` has no D08
+   row; the tests above define it (soft reporting, cost term, ASPECT hard, report note).
 6. **Config tests outside the ownership.** Adding a key to `AleConfig` breaks three key-count
    tests in `tests/cli` (`test_config.py::test_C01_defaults_complete`, `test_C04_frozen`,
    `test_init.py::test_I03_template_config_valid`). They were updated minimally: the expected
