@@ -422,7 +422,7 @@ def render_markdown(critique: Critique, names: dict[str, str], *, title: str) ->
         else:
             rooms = _GENERAL
         lines += [
-            f"### {n}. {KIND_FR[d.kind]} — gravité {d.severity}/3",
+            f"### {n}. {KIND_FR[d.kind]} — gravité {d.severity} sur 3",
             "",
             f"- Pièces : {rooms}",
             f"- Observation : {' '.join(d.observation.split())}",
