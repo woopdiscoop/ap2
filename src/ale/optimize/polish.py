@@ -7,9 +7,10 @@ neighbourhoods of the current best plan, in this order:
 1. ``REQUIRED_ADJ`` room ``a`` lacking spec ``B``: each instance ``b`` of ``B`` swapped with
    each room touching ``a``, and ``a`` swapped with each room touching ``b``; the bays of
    ``a`` and ``b`` moved to every other index of their blocks.
-2. ``NO_FACADE`` room ``a``: ``a`` made the outermost room of a same-zone stack (its own,
-   or one of an exterior block); ``a`` moved as a room bay into an exterior block (band 0 block
-   A or the last band's block B, every insertion point next to its zone or at a block end;
+2. ``NO_FACADE`` (Q.4: or ``FACADE_DEPTH``) room ``a``: ``a`` made the outermost room of a
+   same-zone stack (its own, or one of an exterior block); ``a`` moved as a room bay into an
+   exterior block (band 0 block A or the last band's block B, every insertion point next to
+   its zone or at a block end;
    the realiser then deepens the block, Q.3 narrow façade bays); ``a`` swapped with each
    room without ``needs_facade`` that has a façade contact (similar areas first).
 3. ``AVOID_ADJ`` pair: each of the two rooms swapped with each same-zone room.
@@ -30,6 +31,7 @@ from ale.contracts.corridor_plan import CorridorPlan, FingerBay, RoomBay
 from ale.contracts.geometry import ModuleRect
 from ale.contracts.models import Layout, RoomSpec
 from ale.geometry.checks import exterior_contacts
+from ale.geometry.evaluate import FACADE_CODES
 from ale.optimize.moves import (
     Block,
     MoveContext,
@@ -192,7 +194,7 @@ def _candidates(
                 yield from _shift(plan, a, ctx)
                 yield from _shift(plan, b, ctx)
     lacking = sorted(
-        {r for v in viol if v.code == "NO_FACADE" for r in v.instance_ids if r in rects}
+        {r for v in viol if v.code in FACADE_CODES for r in v.instance_ids if r in rects}
     )
     spare = [
         p.instance_id

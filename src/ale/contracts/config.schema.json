@@ -107,6 +107,26 @@
     "FacadeConfig": {
       "additionalProperties": false,
       "properties": {
+        "max_depth_hard": {
+          "default": false,
+          "description": "Whether max_depth_m is an absolute limit (contracts 1.4.0). False: FACADE_DEPTH is a soft finding and excess depth is a cost term (optimizer.weights.facade_depth). True: FACADE_DEPTH is hard and depth wins over the aspect limit.",
+          "title": "Max Depth Hard",
+          "type": "boolean"
+        },
+        "max_depth_m": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Maximum depth from the facade of a needs_facade room, metres (contracts 1.4.0); unset = rule off. A room with exterior contact on two opposite sides may be twice as deep. Violations are reported as FACADE_DEPTH (soft unless max_depth_hard).",
+          "title": "Max Depth M"
+        },
         "min_facade_len_m": {
           "default": 2.4,
           "description": "Minimum facade length, metres.",
@@ -255,6 +275,13 @@
           "default": 1.0,
           "minimum": 0.0,
           "title": "Core Distance",
+          "type": "number"
+        },
+        "facade_depth": {
+          "default": 1.0,
+          "description": "Weight of the excess facade depth term (contracts 1.4.0; used only with facade.max_depth_m set and max_depth_hard false).",
+          "minimum": 0.0,
+          "title": "Facade Depth",
           "type": "number"
         },
         "facade_orientation": {

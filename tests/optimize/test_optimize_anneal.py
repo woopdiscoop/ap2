@@ -43,6 +43,7 @@ def test_hard_codes() -> None:
         "ASPECT",
         "MIN_WIDTH",
         "NO_FACADE",
+        "FACADE_DEPTH",
         "REQUIRED_ADJ",
         "AVOID_ADJ",
         "NO_CIRCULATION_ACCESS",

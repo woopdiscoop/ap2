@@ -24,6 +24,16 @@ counts its ``needs_facade`` rooms predicted to end with less than ``f`` of faça
 (:attr:`BlockOut.no_facade`, the realiser's depth-search key): a room bay has façade = its
 width when the block is exterior, else none; a stack room has façade = the stack width only
 when it is the outermost room of its stack (no stack-end strip) in an exterior block.
+
+Ticket Q.4 (façade depth, contracts 1.4.0): with ``facade.max_depth_m`` set, ``dmax =
+floor(max_depth_m / module)`` (:attr:`Consts.dmax`). A ``needs_facade`` room that would have
+façade but whose depth exceeds ``dmax`` (a room bay deeper than ``dmax``, or the outermost
+stack room taller than ``dmax``) also counts in :attr:`BlockOut.no_facade` — one predicted
+``FACADE_DEPTH``, at the same key position as the Q.3 façade count. A *deep* room
+(``needs_facade`` with ``T > amax · dmax²``, :attr:`RoomReq.deep`) cannot satisfy both rules:
+at a depth ``<= dmax`` with no compliant width, its room bay takes the area rule's width with
+``aspect > amax`` (depth wins; :mod:`ale.geometry.evaluate` reports it as a soft
+``ASPECT_DEPTH``). With the rule off (``dmax is None``) nothing changes.
 """
 
 from __future__ import annotations
@@ -88,6 +98,11 @@ class Consts:
     f: int
     amax: Fraction
     tol: AreaTolerance
+    dmax: int | None = None
+    """Q.4: maximum façade depth in modules (``None``: rule off)."""
+    depth_hard: bool = False
+    """Q.4: ``facade.max_depth_hard`` — the depth limit is absolute (``FACADE_DEPTH`` hard,
+    depth beats aspect). ``False``: the limit is soft (a cost term, aspect stays hard)."""
 
     @classmethod
     def from_config(cls, config: AleConfig) -> Consts:
@@ -95,6 +110,9 @@ class Consts:
 
         def modules(length_m: float) -> int:
             return math.ceil(Fraction(to_decimal(length_m)) * 1000 / m)
+
+        max_depth = config.facade.max_depth_m
+        dmax = None if max_depth is None else math.floor(Fraction(to_decimal(max_depth)) * 1000 / m)
 
         return cls(
             module_mm=m,
@@ -107,6 +125,8 @@ class Consts:
                 up_pct=config.area.tol_up_pct,
                 up_abs_m2=config.area.tol_up_abs_m2,
             ),
+            dmax=dmax,
+            depth_hard=dmax is not None and config.facade.max_depth_hard,
         )
 
     @property
@@ -131,7 +151,15 @@ class Consts:
             hi=hi_mm2 // cell,
             wmin=self.wmin(spec),
             facade=spec.needs_facade,
+            deep=self.deep(spec.needs_facade, target),
         )
+
+    def deep(self, facade: bool, target: Fraction) -> bool:
+        """Q.4: a ``needs_facade`` room with ``T > amax · dmax²`` under a hard depth limit
+        (depth beats aspect); never with the soft rule."""
+        if not (facade and self.depth_hard) or self.dmax is None:
+            return False
+        return target > self.amax * self.dmax * self.dmax
 
 
 @dataclass(frozen=True)
@@ -144,11 +172,15 @@ class RoomReq:
     wmin: int
     facade: bool = False
     """``needs_facade`` (Q.3: façade-aware width in exterior blocks)."""
+    deep: bool = False
+    """Q.4: ``needs_facade`` and ``T > amax · dmax²`` (see :meth:`Consts.deep`)."""
     _hash: int = field(init=False, repr=False, compare=False, default=0)
 
     def __post_init__(self) -> None:
         object.__setattr__(
-            self, "_hash", hash((self.target, self.lo, self.hi, self.wmin, self.facade))
+            self,
+            "_hash",
+            hash((self.target, self.lo, self.hi, self.wmin, self.facade, self.deep)),
         )
 
     def __hash__(self) -> int:  # cached: requirements key every solver memo
@@ -258,6 +290,9 @@ class Solver:
 
         Q.3: a ``needs_facade`` room in an ``exterior`` block takes the smallest compliant
         width instead (see :meth:`facade_width`); the set of depths with a width is the same.
+
+        Q.4: a deep room (:attr:`RoomReq.deep`) with no compliant width at a depth ``<= dmax``
+        takes :meth:`deep_width` (area rule and ``wmin`` only, ``aspect > amax`` allowed).
         """
         narrow = exterior and req.facade
         key = (req, depth, narrow)
@@ -265,6 +300,8 @@ class Solver:
             got = self._room_bay_width(req, depth)
             if narrow and got is not None:
                 got = self.facade_width(req, depth)
+            elif got is None and req.deep and self.k.dmax is not None and depth <= self.k.dmax:
+                got = self.deep_width(req, depth, narrow)
             self._bay_cache[key] = got
         return self._bay_cache[key]
 
@@ -279,6 +316,30 @@ class Solver:
         if lo > hi:
             return None
         return max(lo, self.k.f) if self.k.f <= hi else lo
+
+    def _too_deep(self, out: BlockOut, excess: int, width: int) -> None:
+        """Q.4: a predicted ``FACADE_DEPTH`` of ``excess`` modules over ``width``: one more in
+        the façade key position under a hard limit; with the soft rule, the cells beyond the
+        limit added to the area deviation (the cost position of the depth-search key)."""
+        if self.k.depth_hard:
+            out.no_facade += 1
+        else:
+            out.area_dev += excess * width
+
+    def deep_width(self, req: RoomReq, depth: int, narrow: bool) -> int | None:
+        """Q.4: width of a deep room's bay at ``depth`` ignoring the aspect limit: the
+        smallest ``w >= wmin`` with ``lo <= w·D <= hi`` when ``narrow`` (exterior block, as
+        :meth:`facade_width`), else the smallest with ``T <= w·D <= hi`` and failing that the
+        smallest with ``lo <= w·D``; ``None`` if no width meets the area rule."""
+        if depth < req.wmin:
+            return None
+        hi = req.hi // depth
+        low = max(req.wmin, _ceil_div(req.lo, depth))
+        if not narrow:
+            up = max(req.wmin, req.ceil_div(depth))
+            if up <= hi:
+                return up
+        return low if low <= hi else None
 
     def _room_bay_width(self, req: RoomReq, depth: int) -> int | None:
         if depth < req.wmin:
@@ -446,6 +507,8 @@ class Solver:
                 w = max(req.wmin, req.ceil_div(depth)) if found is None else found
                 if req.facade and not (exterior and w >= self.k.f):
                     out.no_facade += 1
+                elif req.facade and self.k.dmax is not None and depth > self.k.dmax:
+                    self._too_deep(out, depth - self.k.dmax, w)
                 self._room(out, bay.room, req, u, 0, w, depth)
                 u += w
                 continue
@@ -493,6 +556,10 @@ class Solver:
         sol = self.stack(reqs, depth)
         lit = exterior and sol is not None and sol.rest == 0 and sol.w >= self.k.f
         out.no_facade += sum(r.facade for r in reqs[:-1]) + (reqs[-1].facade and not lit)
+        dmax = self.k.dmax
+        deep = lit and dmax is not None and reqs[-1].facade and sol is not None
+        if deep and sol is not None and dmax is not None and sol.heights[-1] > dmax:
+            self._too_deep(out, sol.heights[-1] - dmax, sol.w)
         if sol is None:
             out.failures.append(
                 (

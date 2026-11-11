@@ -30,6 +30,7 @@ from ale.contracts.corridor_plan import CorridorPlan
 from ale.contracts.models import Layout, Rulebook
 from ale.geometry.blocks import Consts
 from ale.geometry.checks import exterior_contacts
+from ale.geometry.evaluate import FACADE_CODES, hard_codes_of
 from ale.guards import bounded
 from ale.optimize.fastreal import RealizeCache
 from ale.optimize.moves import MoveContext, propose
@@ -57,12 +58,14 @@ HARD_CODES: frozenset[str] = frozenset(
         "ASPECT",
         "MIN_WIDTH",
         "NO_FACADE",
+        "FACADE_DEPTH",
         "REQUIRED_ADJ",
         "AVOID_ADJ",
         "NO_CIRCULATION_ACCESS",
     }
 )
-"""Violation codes counted as hard (user decisions D1/U-2)."""
+"""Violation codes counted as hard (user decisions D1/U-2). ``FACADE_DEPTH`` (Q.4) is hard
+only with ``facade.max_depth_hard``: see :func:`ale.geometry.evaluate.hard_codes_of`."""
 
 T0_SAMPLES = 50
 """Equal-hard uphill moves sampled from the start plan to calibrate ``T_c0``."""
@@ -110,21 +113,24 @@ class AnnealResult(BaseModel):
 
 
 def hard_count(layout: Layout) -> int:
-    """Number of hard violations of ``layout`` (codes in :data:`HARD_CODES`)."""
-    return sum(1 for v in layout.metrics.violations if v.code in HARD_CODES)
+    """Number of hard violations of ``layout`` (codes in :data:`HARD_CODES`; Q.4: without
+    ``FACADE_DEPTH`` when the layout was evaluated with the soft depth rule)."""
+    hard = hard_codes_of(layout.metrics, HARD_CODES)
+    return sum(1 for v in layout.metrics.violations if v.code in hard)
 
 
 def hard_rooms(layout: Layout) -> set[str]:
     """Rooms named by the hard violations of ``layout``."""
-    return {r for v in layout.metrics.violations if v.code in HARD_CODES for r in v.instance_ids}
+    hard = hard_codes_of(layout.metrics, HARD_CODES)
+    return {r for v in layout.metrics.violations if v.code in hard for r in v.instance_ids}
 
 
 def focus_on(ctx: MoveContext, layout: Layout, min_facade: int) -> MoveContext:
     """``ctx`` focused on the hard-violation rooms of ``layout``; for the façade pull (G9):
-    its ``NO_FACADE`` rooms, and the rooms without ``needs_facade`` that have a façade
-    contact of at least ``min_facade`` modules."""
+    its ``NO_FACADE`` and ``FACADE_DEPTH`` rooms (Q.4), and the rooms without
+    ``needs_facade`` that have a façade contact of at least ``min_facade`` modules."""
     lacking = {
-        r for v in layout.metrics.violations if v.code == "NO_FACADE" for r in v.instance_ids
+        r for v in layout.metrics.violations if v.code in FACADE_CODES for r in v.instance_ids
     }
     spare = {
         p.instance_id
@@ -312,7 +318,7 @@ def anneal(
         specs,
         ctx,
         min_facade=min_facade,
-        hard=HARD_CODES,
+        hard=hard_codes_of(best[2].metrics, HARD_CODES),
         max_evals=POLISH_EVALS,
         deadline=end_at,
     )

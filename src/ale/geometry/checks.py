@@ -148,7 +148,8 @@ def check_layout(layout: Layout, prepared: PreparedInput, config: AleConfig) -> 
     specs = dict(prepared.instances)
     for room in rooms:
         iid = room.instance_id
-        if not aspect_ok(room.rect.w, room.rect.h, k.amax) and ("ASPECT", iid) not in flagged:
+        steep = not aspect_ok(room.rect.w, room.rect.h, k.amax)
+        if steep and not {("ASPECT", iid), ("ASPECT_DEPTH", iid)} & flagged:
             out.append(f"{iid}: aspect above {k.amax} without an ASPECT violation")
         spec = specs.get(iid)
         if spec is None:

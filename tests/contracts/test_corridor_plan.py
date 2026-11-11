@@ -89,7 +89,7 @@ def fp(pts: tuple[tuple[int, int], ...]) -> FootprintPieces:
 
 
 def test_K01_version() -> None:
-    assert CONTRACTS_VERSION == "1.3.0"  # superseded by A.3 (I01)
+    assert CONTRACTS_VERSION == "1.4.0"  # superseded by A.3 (I01), then Q.4 (D01)
 
 
 # SHA-256 of the contract files as frozen at 1.0.0 (CONTRACTS.lock before amendment A.1),
@@ -136,7 +136,9 @@ FROZEN_1_0_0 = {
 def test_K02_existing_unchanged() -> None:
     current = lock.compute_lock(lock.PACKAGE_DIR)
     changed = sorted(rel for rel, digest in FROZEN_1_0_0.items() if current.get(rel) != digest)
-    assert changed == []
+    # Amendment Q.4 (contracts 1.4.0) adds ``FacadeConfig.max_depth_m``: only the config
+    # model and its schema may differ from 1.0.0 (checked in tests/contracts/test_contracts_q4).
+    assert changed == ["config.py", "config.schema.json"]
     # export_schemas: list update only (the 1.0.0 models first, in order, then the new ones).
     models = export_schemas.SCHEMA_MODELS
     assert models == (
@@ -347,7 +349,7 @@ BASE_REV = "3dcd970"  # spec commit of Ticket A.2, before the amendment
 
 
 def test_B01_version_schema() -> None:
-    assert CONTRACTS_VERSION == "1.3.0"  # superseded by A.3 (I01)
+    assert CONTRACTS_VERSION == "1.4.0"  # superseded by A.3 (I01), then Q.4 (D01)
     # ``pieces`` is required, so the default is read from the field (CorridorPlan() is invalid).
     assert CorridorPlan.model_fields["schema_version"].default == "ale.corridor_plan/2"
     assert plan(piece([room("R1")])).schema_version == "ale.corridor_plan/2"
@@ -691,7 +693,7 @@ def inner2(a0: list[Any], a1: list[Any]) -> PiecePlan:
 
 
 def test_I01_version_schema() -> None:
-    assert CONTRACTS_VERSION == "1.3.0"
+    assert CONTRACTS_VERSION == "1.4.0"  # superseded by Q.4 (D01)
     assert export_schemas.main(["--check"]) == 0
     assert lock.main(["--check"]) == 0
     schema = json.loads(
