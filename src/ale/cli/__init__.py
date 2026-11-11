@@ -11,7 +11,7 @@ import typer
 
 from ale import __version__
 from ale.cli.commands import critique as critique_cmd
-from ale.cli.commands import doctor, extract, generate, ingest, init, layers, review, rulebook
+from ale.cli.commands import doctor, extract, form, generate, ingest, init, layers, review, rulebook
 from ale.cli.commands import program as program_cmd
 from ale.cli.commands import score as score_cmd
 from ale.cli.commands import status as status_cmd
@@ -85,6 +85,7 @@ app.command("generate")(generate.generate)
 app.command("status")(status_cmd.status)
 app.command("critique")(critique_cmd.critique)
 app.command("score")(score_cmd.score)
+app.command("form")(form.form)
 
 
 def main() -> None:
