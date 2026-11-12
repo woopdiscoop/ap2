@@ -15,6 +15,7 @@ of ``(cell, room, seed)``.
 from __future__ import annotations
 
 import math
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 
 from ale.contracts.config import AleConfig
@@ -35,6 +36,8 @@ _W_FACADE = 0.25
 _FACADE_PENALTY = 10.0
 _W_ENTRANCE = 0.6
 _W_PARTNER = 0.08
+_W_PRIOR = 4.0
+_W_PRIOR_OTHER = 3.0
 _FRONTAGE_FACTOR = 1.6
 _QUOTA_FACTOR = 4
 _MAX_RESEEDS = 3
@@ -259,9 +262,15 @@ def grow(
     *,
     seed: int = 0,
     jitter: float = 0.0,
+    prior: Mapping[tuple[int, int], str] | None = None,
 ) -> CellDiagram:
     """The cell diagram of ``prepared`` (RD §3). ``jitter`` > 0 adds a small seeded noise to
-    the growth score (used by the seeder's later attempts); 0 is the plain algorithm."""
+    the growth score (used by the seeder's later attempts); 0 is the plain algorithm.
+
+    ``prior`` (Ticket M.3) maps diagram cells ``(cx, cy)`` to a label (the room type of
+    another floor): rooms of that type start on and grow towards the cells that carry their
+    label, so that a floor repeats the layout below it. ``None`` (or empty) leaves the output
+    byte-identical to the plain algorithm."""
     g = _Grid(prepared, rulebook, config)
     insts = prepared.instances
     ids = [iid for iid, _ in insts]
@@ -361,6 +370,17 @@ def grow(
             used[p] = True
         seed_cell[iid] = rib.cells[sorted(positions)[len(positions) // 2]] if positions else -1
 
+    prior_cells: dict[int, str] = {}
+    if prior:
+        for (px, py), label in prior.items():
+            if 0 <= px < g.width and 0 <= py < g.height and g.owner[g.idx(px, py)] != OUTSIDE:
+                prior_cells[g.idx(px, py)] = label
+    prior_ribbon: dict[str, list[int]] = {}
+    if prior_cells:
+        for pos_i, c in enumerate(rib.cells):
+            if c in prior_cells:
+                prior_ribbon.setdefault(prior_cells[c], []).append(pos_i)
+
     if npos:
         # budget the shares to the usable perimeter
         total = sum(share.values())
@@ -411,7 +431,11 @@ def grow(
                 continue
             span = []
             near = next((placed_pos[q] for q in partners[iid] if q in placed_pos), None)
-            if near is not None:
+            hint = prior_ribbon.get(str(spec_of[iid].type)) if prior_ribbon else None
+            if hint:
+                # the ribbon positions that carried this type below, in order
+                span = [p for p in hint if not used[p]][:ln]
+            elif near is not None:
                 for k in range(npos):
                     span = take_span(max(near) + 1 + k, ln) or take_span(min(near) - ln - k, ln)
                     if span:
@@ -453,6 +477,17 @@ def grow(
         return (1 if dx >= 0 else -1, 0) if abs(dx) >= abs(dy) else (0, 1 if dy >= 0 else -1)
 
     def place_rest(iid: str) -> bool:
+        if prior_cells:
+            label = str(spec_of[iid].type)
+            free_p = [c for c, v in prior_cells.items() if v == label and owner[c] == FREE]
+            if free_p:
+                xs = [g.xy(c)[0] for c in free_p]
+                ys = [g.xy(c)[1] for c in free_p]
+                mid = (sum(xs) / len(xs) + 0.5, sum(ys) / len(ys) + 0.5)
+                c = min(free_p, key=lambda c: dist_to(c, mid))
+                claim(iid, c)
+                placed_cells[iid] = c
+                return True
         if graph.nodes[iid]["service_core"] and core_set:
             nxt = sorted(
                 {j for c in core_set for j in g.nbrs(c) if owner[j] == FREE},
@@ -496,6 +531,27 @@ def grow(
             claim(iid, c)
             placed_cells[iid] = c
 
+    if prior_cells:
+        # Ticket M.3: a room first takes the cells that carried its type on the floor below,
+        # connected to its seed, before the plain growth completes it.
+        for iid in ids:
+            label = str(spec_of[iid].type)
+            if not mine[iid]:
+                continue
+            sx0, sy0 = g.xy(mine[iid][0])
+            while len(mine[iid]) < n_of[iid]:
+                around = {j for c in mine[iid] for j in g.nbrs(c)}
+                cand = [j for j in around if owner[j] == FREE and prior_cells.get(j) == label]
+                if not cand:
+                    break
+                claim(
+                    iid,
+                    min(
+                        cand,
+                        key=lambda j: (abs(g.xy(j)[0] - sx0) + abs(g.xy(j)[1] - sy0), j),
+                    ),
+                )
+
     # ------------------------------------------------------------------ growth
     sums = {iid: [0.0, 0.0] for iid in ids}
     for iid in ids:
@@ -513,6 +569,8 @@ def grow(
     quota = {iid: max(1, round(_QUOTA_FACTOR * n_of[iid] / n_max)) for iid in ids}
 
     reseeds = {iid: 0 for iid in ids}
+    label_of = {iid: str(spec_of[iid].type) for iid in ids}
+    label_set = set(label_of.values())
 
     def refresh(iid: str) -> None:
         sums[iid] = [sum(g.xy(c)[0] for c in mine[iid]), sum(g.xy(c)[1] for c in mine[iid])]
@@ -587,6 +645,12 @@ def grow(
                     s += _W_FACADE * fd[c]
                     if fd[c] + 1 > limit_cells:
                         s += _FACADE_PENALTY
+                if prior_cells:
+                    pl = prior_cells.get(c)
+                    if pl == label_of[iid]:
+                        s -= _W_PRIOR
+                    elif pl is not None and pl in label_set:
+                        s += _W_PRIOR_OTHER
                 if iid in ent_room:
                     s += _W_ENTRANCE * (abs(x - ex) + abs(y - ey))
                 for px, py in pcs:

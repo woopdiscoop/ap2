@@ -15,10 +15,12 @@ from ale.stack.building import Building
 from ale.stack.floors import (
     FloorResult,
     build_floors,
+    pair_stackability,
     skeleton_identical,
     stackability,
     write_programme_xlsx,
 )
+from ale.stack.grid import Rhythm, choose_rhythm, validate_overrides
 from ale.stack.rules import WET_TYPES, StackRules
 from ale.stack.skeleton import AREA_CELL_M2, Skeleton, build_skeleton, core_cell_rect
 
@@ -41,6 +43,9 @@ class StackResult:
     stackability: float
     skeleton_ok: bool
     misses: tuple[str, ...]
+    rhythm: Rhythm | None = None
+    typical: int = 0
+    pair_stackability: tuple[float, ...] = ()
 
     @property
     def ok(self) -> bool:
@@ -89,7 +94,16 @@ def run_stack(
         u.iid: k for u, k in zip(stacking.problem.units, stacking.assign, strict=True)
     }
     level_of.update(skeleton.level_of)
-    floors = build_floors(building, skeleton, program, level_of, seed=seed)
+    validate_overrides(rules, building.n_floors)
+    typical = rules.typical_floor if rules.typical_floor is not None else _typical(stacking)
+    floors = build_floors(building, skeleton, program, level_of, seed=seed, typical=typical)
+    rhythm = choose_rhythm(
+        skeleton,
+        [building.outline(k) for k in range(building.n_floors)],
+        [(f.diagram, f.offset) for f in floors],
+        rules,
+        typical=typical,
+    )
     ok = skeleton_identical(floors, skeleton)
     misses = [*stacking.misses(), *skeleton.misses]
     if not ok:
@@ -111,7 +125,19 @@ def run_stack(
         stackability=stackability([f.layer() for f in floors]),
         skeleton_ok=ok,
         misses=tuple(misses),
+        rhythm=rhythm,
+        typical=typical,
+        pair_stackability=pair_stackability([f.layer() for f in floors]),
     )
+
+
+def _typical(stacking: Stacking) -> int:
+    """The most loaded floor (share of its capacity; ties to the lowest level)."""
+    caps = stacking.problem.capacity
+    shares = [
+        load / cap if cap > 0 else 0.0 for load, cap in zip(stacking.loads(), caps, strict=True)
+    ]
+    return max(range(len(shares)), key=lambda k: (shares[k], -k))
 
 
 # ------------------------------------------------------------------------- markdown
