@@ -864,7 +864,8 @@ def _bay_context(
 
 def _type_area_bound(plans: Sequence[FloorPlan]) -> tuple[float, ...]:
     """Bound of the stackability of floors 1..: ``sum over types of min(area on k, area on
-    k-1) / area on k`` (rooms with a type, circulation and reserve excluded)."""
+    k-1) / area on k`` over the same rooms as :func:`ale.stack.grid.plan_stackability` (typed
+    rooms, wet rooms included; circulation and reserve excluded), so that it bounds it."""
     out: list[float] = []
     for upper, lower in zip(plans[1:], plans[:-1], strict=True):
         if upper.status != "ok" or lower.status != "ok":
@@ -873,7 +874,7 @@ def _type_area_bound(plans: Sequence[FloorPlan]) -> tuple[float, ...]:
         def area(p: FloorPlan) -> dict[str, float]:
             acc: dict[str, float] = {}
             for r in p.rooms_abs:
-                if r.type and r.kind == "room":
+                if r.type and r.kind != "circulation":
                     acc[r.type] = acc.get(r.type, 0.0) + r.rect[2] * r.rect[3]
             return acc
 

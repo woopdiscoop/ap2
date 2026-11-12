@@ -194,3 +194,37 @@ def no_shape(target: float, facade: bool, **kw: float) -> bool:
     cat = catalogue(target, facade, **kw)
     kinds = "FDT" if facade else "FDBb"
     return not any(cat[k] for k in kinds)
+
+
+def fallback(
+    target: float,
+    facade: bool,
+    *,
+    min_width: float = 1.2,
+    bay: float = 2.4,
+    df: float = 4.8,
+    c: float = 1.8,
+    plate: float = 19.2,
+    aspect: float = 2.0,
+) -> tuple[str, float]:
+    """``(tag, relative area deviation)`` of the aspect-legal shape of smallest deviation of a
+    room without admissible shape (RD 4.5: 15 -> F1.5, 80 -> D3)."""
+    band = plate - 2 * df - 2 * c
+    shapes: list[tuple[float, str]] = []
+    for n in range(1, 41):
+        k = n / 2
+        kinds = (("F", df), ("D", df + c + band), ("T", plate))
+        for kind, d in kinds:
+            if kind == "T" and not facade:
+                continue
+            w = k * bay
+            if max(w, d) / min(w, d) <= aspect + EPS and min(w, d) >= min_width - EPS:
+                shapes.append((abs(w * d - target) / target, f"{kind}{k:g}"))
+    if not facade:
+        for n in range(2, 60):
+            w = round(0.6 * n, 6)
+            for kind, d in (("B", band), ("b", band / 2)):
+                if max(w, d) / min(w, d) <= aspect + EPS and min(w, d) >= min_width - EPS:
+                    shapes.append((abs(w * d - target) / target, f"{kind}{w:g}"))
+    dev, tag = min(shapes)
+    return tag, dev

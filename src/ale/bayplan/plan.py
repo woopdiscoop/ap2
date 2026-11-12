@@ -74,6 +74,10 @@ def _sub(r0: int, r1: int, s0: int, s1: int) -> list[tuple[int, int]]:
     return out
 
 
+def _r6(d: dict[str, float]) -> dict[str, float]:
+    return {k: round(v, 6) for k, v in d.items()}
+
+
 def _merge(pieces: list[tuple[int, int, int, int]]) -> list[tuple[int, int, int, int]]:
     """Merge contiguous ``(a, b, v0, v1)`` pieces with equal v ranges (sorted by a)."""
     out: list[tuple[int, int, int, int]] = []
@@ -1121,21 +1125,23 @@ def plan_bar(
         unplaced=tuple(sorted({u.iid for u in unplaced})),
         adjust=tuple(adjust),
         reserve_ids=tuple(reserve_ids),
-        section={
-            "bay": g.bay * unit_m,
-            "df": df_ * unit_m,
-            "c": c * unit_m,
-            "band": band * unit_m,
-            "plate_depth": dp * unit_m,
-            "length": g.L * unit_m,
-            "mirror": float(g.mirror),
-            "transposed": float(g.transposed),
-            "narrowed": float(narrowed),
-            "span0": g.span0 * unit_m,
-            "span1": g.span1 * unit_m,
-            "core0": g.cu0 * unit_m,
-            "core1": g.cu1 * unit_m,
-        },
+        section=_r6(
+            {
+                "bay": g.bay * unit_m,
+                "df": df_ * unit_m,
+                "c": c * unit_m,
+                "band": band * unit_m,
+                "plate_depth": dp * unit_m,
+                "length": g.L * unit_m,
+                "mirror": float(g.mirror),
+                "transposed": float(g.transposed),
+                "narrowed": float(narrowed),
+                "span0": g.span0 * unit_m,
+                "span1": g.span1 * unit_m,
+                "core0": g.cu0 * unit_m,
+                "core1": g.cu1 * unit_m,
+            }
+        ),
         facade_bays_used=used_units * half_bay,
         facade_bays_available=avail_units * half_bay,
         band_m_available=band_total * unit_m,
