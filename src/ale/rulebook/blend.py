@@ -16,7 +16,7 @@ orientation (0.0 everywhere).
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import Any, Literal
 
 from ale.contracts.config import AleConfig
 from ale.contracts.enums import Bearing
@@ -24,6 +24,7 @@ from ale.contracts.models import Adjacency, AdjEntry, CoreOffset, Quantiles, Rul
 from ale.rulebook.stats import (
     BEARINGS,
     CoreStat,
+    FacadeStat,
     OrientationStat,
     PairStat,
     ShapeStat,
@@ -104,6 +105,19 @@ class QuantRow:
 
 
 @dataclass(frozen=True)
+class FacadeRow:
+    """R.8: learned façade statistics of a type (``None`` fields: insufficient sample)."""
+
+    type: str
+    depth: Quantiles | None
+    width: Quantiles | None
+    m_per_m2: float | None
+    n: int
+    source: Source
+    insufficient: bool = False
+
+
+@dataclass(frozen=True)
 class OrientRow:
     type: str
     values: dict[Bearing, float]
@@ -129,6 +143,7 @@ class Blended:
     pairs: list[PairRow] = field(default_factory=list)
     quantiles: list[QuantRow] = field(default_factory=list)
     orientation: list[OrientRow] = field(default_factory=list)
+    facade: list[FacadeRow] = field(default_factory=list)
     core: CoreRow | None = None
     notes: list[str] = field(default_factory=list)
 
@@ -211,9 +226,57 @@ def _aspect(st: ShapeStat, aspect_max: float) -> tuple[Quantiles, bool]:
     return clipped, True
 
 
+#: R.8: fewest façade samples for which depth / width / façade ratio are stored.
+MIN_FACADE_SAMPLES = 5
+
+
+def _facade_fields(
+    t: str, fs: FacadeStat | None, prior: TypeStats | None, k: float, out: Blended
+) -> dict[str, Any]:
+    """R.8 ``TypeStats`` kwargs of type ``t`` and its report row (blend with the seed's
+    values when it has some; < ``MIN_FACADE_SAMPLES`` samples leave the seed's, else None)."""
+    n = 0 if fs is None else fs.n
+    if fs is None or n < MIN_FACADE_SAMPLES:
+        if fs is not None:
+            out.facade.append(FacadeRow(t, None, None, None, n, "mined", True))
+            out.notes.append(
+                f"Type {t} : échantillon insuffisant pour la profondeur de façade "
+                f"({n} < {MIN_FACADE_SAMPLES} pièces avec façade)."
+            )
+        if prior is None or prior.depth_m is None:
+            return {}
+        return {
+            "depth_m": prior.depth_m,
+            "facade_width_m": prior.facade_width_m,
+            "facade_m_per_m2": prior.facade_m_per_m2,
+            "n_facade_samples": prior.n_facade_samples,
+        }
+    depth = _mined_quantiles(fs.depth, n)
+    width = _mined_quantiles(fs.width, n)
+    ratio = fs.m_per_m2
+    source: Source = "mined"
+    if prior is not None and prior.depth_m is not None:
+        source = "blended"
+        depth = blend_quantiles(prior.depth_m, depth, n, k)
+        if prior.facade_width_m is not None:
+            width = blend_quantiles(prior.facade_width_m, width, n, k)
+        if prior.facade_m_per_m2 is not None and ratio is not None:
+            ratio = blend_value(prior.facade_m_per_m2, ratio, n, k)
+    if ratio is not None:
+        ratio = sig(ratio)
+    out.facade.append(FacadeRow(t, depth, width, ratio, n, source))
+    return {
+        "depth_m": depth,
+        "facade_width_m": width,
+        "facade_m_per_m2": ratio,
+        "n_facade_samples": n,
+    }
+
+
 def _types(
     shapes: dict[str, ShapeStat],
     orient: dict[str, OrientationStat],
+    facades: dict[str, FacadeStat],
     seed: Rulebook | None,
     config: AleConfig,
     min_support: int,
@@ -248,7 +311,8 @@ def _types(
                 out.orientation.append(
                     OrientRow(t, values, "mined", n_pl, "neutre (< 3 plans orientés)")
                 )
-            result[t] = TypeStats(aspect=aspect, area_m2=area, orientation=values)
+            fac = _facade_fields(t, facades.get(t), None, k, out)
+            result[t] = TypeStats(aspect=aspect, area_m2=area, orientation=values, **fac)
             continue
         if st is not None and st.n > 0:
             m_aspect, clipped = _aspect(st, aspect_max)
@@ -276,7 +340,8 @@ def _types(
             values = {b: prior.orientation[b] for b in BEARINGS}
             n_pl = 0 if o is None else o.n_plans
             out.orientation.append(OrientRow(t, values, "seed", n_pl))
-        result[t] = TypeStats(aspect=aspect, area_m2=area, orientation=values)
+        fac = _facade_fields(t, facades.get(t), prior, k, out)
+        result[t] = TypeStats(aspect=aspect, area_m2=area, orientation=values, **fac)
     return result
 
 
@@ -311,6 +376,7 @@ def blend_rulebook(
     seed: Rulebook | None,
     config: AleConfig,
     min_support: int,
+    facades: dict[str, FacadeStat] | None = None,
 ) -> Blended:
     """Combine the mined statistics with the optional seed."""
     out = Blended(
@@ -319,7 +385,7 @@ def blend_rulebook(
         core_offset=CoreOffset(dx_norm=0.0, dy_norm=0.0),
     )
     out.adjacency = _adjacency(pairs, seed, config, min_support, out)
-    out.types = _types(shapes, orientation, seed, config, min_support, out)
+    out.types = _types(shapes, orientation, facades or {}, seed, config, min_support, out)
     out.core = _core(core, seed, config)
     out.core_offset = out.core.value
     for row in out.quantiles:

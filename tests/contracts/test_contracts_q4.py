@@ -28,7 +28,9 @@ tol_up_abs_m2 = 0
 
 
 def test_D01_contract() -> None:
-    assert CONTRACTS_VERSION == "1.8.0"  # superseded by A.4 (A401), then G.1 (N01), then M.2, then R.8
+    assert (
+        CONTRACTS_VERSION == "1.8.0"
+    )  # superseded by A.4 (A401), then G.1 (N01), then M.2, then R.8
     # Default None (rule off); old configs load unchanged.
     assert FacadeConfig().max_depth_m is None
     assert AleConfig().facade.max_depth_m is None

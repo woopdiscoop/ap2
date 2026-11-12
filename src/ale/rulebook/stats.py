@@ -374,11 +374,13 @@ def orientation_stats(plans: Sequence[PlanInput]) -> dict[str, OrientationStat]:
 def facade_stats(plans: Sequence[PlanInput]) -> dict[str, FacadeStat]:
     """Depth, façade width and façade length per m² of every allowed type (R.8).
 
-    Every plan with a metric scale contributes (the plans are metric); rooms without a façade
-    edge add their area to the type's total with a façade length of 0.
+    Plans of the shape fidelities (CAD, PDF_VECTOR) contribute, as for aspect / area; rooms
+    without a façade edge add their area to the type's total with a façade length of 0.
     """
     out: dict[str, FacadeStat] = {}
     for plan in plans:
+        if plan.topology.fidelity not in SHAPE_FIDELITIES:
+            continue
         rooms = _rooms(plan.metric)
         if not rooms:
             continue

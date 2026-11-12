@@ -142,7 +142,8 @@ def test_K02_existing_unchanged() -> None:
     # schema); amendment A.4 (contracts 1.5.0) adds the site / room anchors (models.py and the
     # Program, RoomSpec and SiteSpec schemas; checked in tests/contracts/test_contracts_a4);
     # amendment G.1 (contracts 1.6.0) adds ``ModulePolygon.holes`` (geometry.py and the Layout
-    # schema that embeds it).
+    # schema that embeds it); amendment R.8 (contracts 1.8.0) adds ``TypeStats`` façade fields
+    # (models.py and the Rulebook schema).
     assert changed == [
         "config.py",
         "config.schema.json",
@@ -151,6 +152,7 @@ def test_K02_existing_unchanged() -> None:
         "schemas/Layout.schema.json",
         "schemas/Program.schema.json",
         "schemas/RoomSpec.schema.json",
+        "schemas/Rulebook.schema.json",
         "schemas/SiteSpec.schema.json",
     ]
     # export_schemas: list update only (the 1.0.0 models first, in order, then the new ones).
