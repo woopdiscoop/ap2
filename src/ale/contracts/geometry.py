@@ -173,12 +173,19 @@ class ModulePolygon(BaseModel):
     Ticket G.1 (contracts 1.6.0): ``holes`` are optional courtyards, rectilinear clockwise
     rings strictly inside the exterior (no touching); empty by default and then left out of
     the serialised form, so hole-free polygons serialise exactly as before.
+
+    Ticket M.2 (contracts 1.7.0): ``solids`` are optional fixed volumes (core, wet stack),
+    rectilinear clockwise rings strictly inside the exterior, touching neither the exterior,
+    a hole nor another solid. Like a hole a solid is not tiled (``area_cells`` excludes it),
+    but it is not exterior: its edges never count as façade, daylight or exterior contact.
+    Empty by default and then left out of the serialised form.
     """
 
     model_config = _CONFIG
 
     exterior: tuple[ModulePoint, ...]
     holes: tuple[tuple[ModulePoint, ...], ...] = ()
+    solids: tuple[tuple[ModulePoint, ...], ...] = ()
 
     @model_validator(mode="after")
     def _valid(self) -> ModulePolygon:
@@ -205,18 +212,22 @@ class ModulePolygon(BaseModel):
             raise ValueError("module polygon is not simple")
         if self.holes:
             _check_holes(pts, self.holes)
+        if self.solids:
+            _check_solids(pts, self.holes, self.solids)
         return self
 
     @model_serializer(mode="wrap")
     def _drop_empty_holes(self, handler: Any) -> Any:
         out = handler(self)
-        if isinstance(out, dict) and not out.get("holes"):
-            out.pop("holes", None)
+        if isinstance(out, dict):
+            for key in ("holes", "solids"):
+                if not out.get(key):
+                    out.pop(key, None)
         return out
 
     def area_cells(self) -> int:
-        """Area in module² cells (exact shoelace, holes subtracted)."""
-        holes = sum(_signed_area2(h) for h in self.holes)  # clockwise rings: negative
+        """Area in module² cells (exact shoelace, holes and solids subtracted)."""
+        holes = sum(_signed_area2(h) for h in (*self.holes, *self.solids))  # clockwise: negative
         return (_signed_area2(self.exterior) + holes) // 2
 
     def edges(self) -> tuple[tuple[ModulePoint, ModulePoint], ...]:
@@ -226,26 +237,31 @@ class ModulePolygon(BaseModel):
         return tuple((pts[i], pts[i + 1 if i + 1 < n else 0]) for i in range(n))
 
 
+def _check_rings(rings: tuple[tuple[ModulePoint, ...], ...], name: str) -> None:
+    """Rectilinear, clockwise, no collinear neighbours (``name``: ``hole`` or ``solid``)."""
+    for k, ring in enumerate(rings):
+        n = len(ring)
+        if n < 4:
+            raise ValueError(f"{name} {k} needs at least 4 vertices")
+        dirs: list[bool] = []
+        for i in range(n):
+            a, b = ring[i], ring[(i + 1) % n]  # int-mod
+            if (a[0] != b[0]) == (a[1] != b[1]):
+                raise ValueError(f"{name} {k} edge {i} is not axis-parallel or has zero length")
+            dirs.append(a[1] == b[1])
+        if any(dirs[i] == dirs[i - 1] for i in range(n)):
+            raise ValueError(f"{name} {k} has collinear consecutive edges")
+        if _signed_area2(ring) >= 0:
+            raise ValueError(f"{name} {k} vertices must be clockwise")
+
+
 def _check_holes(
     exterior: tuple[ModulePoint, ...], holes: tuple[tuple[ModulePoint, ...], ...]
 ) -> None:
     """Validate courtyard rings: rectilinear, clockwise, no collinear neighbours, inside."""
     import shapely
 
-    for k, ring in enumerate(holes):
-        n = len(ring)
-        if n < 4:
-            raise ValueError(f"hole {k} needs at least 4 vertices")
-        dirs: list[bool] = []
-        for i in range(n):
-            a, b = ring[i], ring[(i + 1) % n]  # int-mod
-            if (a[0] != b[0]) == (a[1] != b[1]):
-                raise ValueError(f"hole {k} edge {i} is not axis-parallel or has zero length")
-            dirs.append(a[1] == b[1])
-        if any(dirs[i] == dirs[i - 1] for i in range(n)):
-            raise ValueError(f"hole {k} has collinear consecutive edges")
-        if _signed_area2(ring) >= 0:
-            raise ValueError(f"hole {k} vertices must be clockwise")
+    _check_rings(holes, "hole")
     geom = shapely.Polygon(exterior, holes)
     if not geom.is_valid:
         raise ValueError("module polygon with holes is not valid")
@@ -253,6 +269,29 @@ def _check_holes(
         raise ValueError(
             "holes must lie inside the exterior without overlapping"
         )  # pragma: no cover
+
+
+def _check_solids(
+    exterior: tuple[ModulePoint, ...],
+    holes: tuple[tuple[ModulePoint, ...], ...],
+    solids: tuple[tuple[ModulePoint, ...], ...],
+) -> None:
+    """Validate solid rings (Ticket M.2): like holes, and strictly inside the region, touching
+    neither the exterior, a hole nor another solid."""
+    import shapely
+
+    _check_rings(solids, "solid")
+    region = shapely.Polygon(exterior, holes)
+    boundary = region.boundary
+    polys = [shapely.Polygon(r) for r in solids]
+    for k, poly in enumerate(polys):
+        if not poly.is_valid:
+            raise ValueError(f"solid {k} is not simple")
+        if not region.contains(poly) or poly.intersects(boundary):
+            raise ValueError(f"solid {k} must lie strictly inside the footprint (no touching)")
+        for j in range(k):
+            if poly.intersects(polys[j]):
+                raise ValueError(f"solid {k} overlaps or touches solid {j}")
 
 
 def to_shapely(g: LineString | Polygon | ModulePolygon | ModuleRect) -> shapely.Geometry:
@@ -264,7 +303,7 @@ def to_shapely(g: LineString | Polygon | ModulePolygon | ModuleRect) -> shapely.
     if isinstance(g, Polygon):
         return shapely.Polygon(g.exterior, g.holes)
     if isinstance(g, ModulePolygon):
-        return shapely.Polygon(g.exterior, g.holes)
+        return shapely.Polygon(g.exterior, (*g.holes, *g.solids))
     if isinstance(g, ModuleRect):
         return shapely.box(g.x, g.y, g.x2(), g.y2())
     raise TypeError(f"unsupported geometry type: {type(g).__name__}")

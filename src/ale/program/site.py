@@ -32,6 +32,7 @@ __all__ = [
     "normalise_footprint",
     "read_site",
     "site_from_mapping",
+    "solid_labels",
     "to_module_footprint",
 ]
 
@@ -652,8 +653,15 @@ def _ceil_div(a: int, b: int) -> int:
     return -((-a) // b)
 
 
-def to_module_footprint(site: SiteSpec, grid: GridSpec) -> ModuleFootprint:
+def to_module_footprint(
+    site: SiteSpec, grid: GridSpec, *, strict_cores: bool = False
+) -> ModuleFootprint:
     """Snap a (normalised, rectilinear, CCW) site inward onto the module grid.
+
+    Ticket M.2: each core rectangle becomes a solid of the polygon, snapped outward (touching
+    cores merge into one solid). A solid that cannot be valid (it touches the outline or a
+    courtyard) is an ``E_SITE_INVALID`` error with ``strict_cores``; otherwise it is left
+    out, as cores were before M.2 (callers that only use ``SiteSpec.cores`` themselves).
 
     Grid origin = (min x, min y) of the footprint. Edge running +x takes ``CEIL`` for its
     y, -x ``FLOOR``, +y ``FLOOR`` for its x, -y ``CEIL``. Collinear vertices are then
@@ -661,7 +669,7 @@ def to_module_footprint(site: SiteSpec, grid: GridSpec) -> ModuleFootprint:
     (``E_SITE_INVALID``, ``E_SITE_TOO_SMALL``, ``E_SITE_ACCESS_EDGE``).
     """
     try:
-        return _module_footprint(site, grid)
+        return _module_footprint(site, grid, strict_cores)
     except _Fail as exc:
         raise InputError(exc.issues) from None
 
@@ -714,7 +722,104 @@ def _module_holes(
     return tuple(out)
 
 
-def _module_footprint(site: SiteSpec, grid: GridSpec) -> ModuleFootprint:
+def _core_rects(site: SiteSpec, x0: int, y0: int, module: int) -> list[tuple[int, int, int, int]]:
+    """Core rectangles snapped outward onto the module grid: ``(x0, y0, x1, y1)`` in modules."""
+    out: list[tuple[int, int, int, int]] = []
+    for core in site.cores:
+        x, y, w, h = core.rect
+        out.append(
+            (
+                _floor_div(m_to_mm(x) - x0, module),
+                _floor_div(m_to_mm(y) - y0, module),
+                _ceil_div(m_to_mm(x + w) - x0, module),
+                _ceil_div(m_to_mm(y + h) - y0, module),
+            )
+        )
+    return out
+
+
+def _module_solids(
+    site: SiteSpec, x0: int, y0: int, module: int
+) -> tuple[tuple[MmPoint, ...], ...]:
+    """Cores as solids (Ticket M.2): each rectangle snapped outward onto the module grid.
+
+    Cores that touch (a stair core and the wet stack beside it) merge into one solid, so the
+    solids never touch each other. Rings are clockwise, starting at the lowest-leftmost vertex.
+    """
+    if not site.cores:
+        return ()
+    import shapely
+
+    union: Any = shapely.union_all([shapely.box(*r) for r in _core_rects(site, x0, y0, module)])
+    parts: list[Any] = list(union.geoms) if union.geom_type == "MultiPolygon" else [union]
+    out: list[tuple[MmPoint, ...]] = []
+    for part in parts:
+        if part.interiors:
+            raise _fail("E_SITE_INVALID", "Des noyaux accolés entourent une cour : non géré.")
+        pts = [(round(x), round(y)) for x, y in part.exterior.coords][:-1]
+        if _twice_area(pts) > 0:
+            pts.reverse()  # clockwise
+        edges = _rotate_to_start(_simplify(_ring_edges(pts)))
+        out.append(tuple(e.a for e in edges))
+    return tuple(sorted(out, key=lambda r: (r[0][1], r[0][0])))
+
+
+def _solid_fits(
+    exterior: Sequence[MmPoint], holes: Sequence[Sequence[MmPoint]], ring: Sequence[MmPoint]
+) -> bool:
+    """Whether a solid ring lies strictly inside the region (no touching)."""
+    try:
+        ModulePolygon(
+            exterior=tuple(exterior),
+            holes=tuple(tuple(h) for h in holes),
+            solids=(tuple(ring),),
+        )
+    except ValidationError:
+        return False
+    return True
+
+
+def _cores_in_solids(
+    site: SiteSpec, polygon: ModulePolygon, x0: int, y0: int, module: int
+) -> list[CoreSpec]:
+    """The cores that ended up inside one of the polygon's solids."""
+    if not polygon.solids:
+        return []
+    import shapely
+
+    rings = [shapely.Polygon(r) for r in polygon.solids]
+    rects = _core_rects(site, x0, y0, module)
+    return [
+        c
+        for c, r in zip(site.cores, rects, strict=True)
+        if any(g.contains(shapely.box(*r).representative_point()) for g in rings)
+    ]
+
+
+def solid_labels(site: SiteSpec, footprint: ModuleFootprint, grid: GridSpec) -> tuple[str, ...]:
+    """Label of every solid of ``footprint.polygon``: the ids of the cores it merges, joined
+    by ``+`` (Ticket M.2; used by the DXF / SVG exports)."""
+    if not footprint.polygon.solids:
+        return ()
+    import shapely
+
+    module = check_module_mm(grid.module_mm)
+    x0 = min(m_to_mm(p[0]) for p in site.footprint.exterior)
+    y0 = min(m_to_mm(p[1]) for p in site.footprint.exterior)
+    rects = _core_rects(site, x0, y0, module)
+    out: list[str] = []
+    for ring in footprint.polygon.solids:
+        poly = shapely.Polygon(ring)
+        ids = [
+            c.id
+            for c, r in zip(site.cores, rects, strict=True)
+            if poly.contains(shapely.box(*r).representative_point())
+        ]
+        out.append("+".join(ids))
+    return tuple(out)
+
+
+def _module_footprint(site: SiteSpec, grid: GridSpec, strict_cores: bool) -> ModuleFootprint:
     module = check_module_mm(grid.module_mm)
     ext = [(m_to_mm(x), m_to_mm(y)) for x, y in site.footprint.exterior]
     if _twice_area(ext) <= 0:
@@ -731,11 +836,20 @@ def _module_footprint(site: SiteSpec, grid: GridSpec) -> ModuleFootprint:
     if len(edges) < 4:
         raise too_small
     edges = _rotate_to_start(edges)
+    solids = _module_solids(site, x0, y0, module)
+    holes = _module_holes(holes_mm, x0, y0, module)
+    ring = tuple(e.a for e in edges)
+    if solids and not strict_cores:
+        solids = tuple(s_ for s_ in solids if _solid_fits(ring, holes, s_))
     try:
-        polygon = ModulePolygon(
-            exterior=tuple(e.a for e in edges), holes=_module_holes(holes_mm, x0, y0, module)
-        )
+        polygon = ModulePolygon(exterior=ring, holes=holes, solids=solids)
     except ValidationError as exc:
+        if solids:
+            raise _fail(
+                "E_SITE_INVALID",
+                "Noyau (cores) invalide une fois calé sur la trame (au contact du contour, "
+                f"d'une cour ou d'un autre noyau) : {exc.errors()[0]['msg']}.",
+            ) from None
         if holes_mm:
             raise _fail(
                 "E_SITE_INVALID",
@@ -752,7 +866,12 @@ def _module_footprint(site: SiteSpec, grid: GridSpec) -> ModuleFootprint:
             f"Le côté d'accès {site.access_edge} disparaît une fois l'emprise calée sur la trame.",
             site.access_edge,
         )
-    metric_mm2 = Fraction(_twice_area(ext) + sum(_twice_area(h) for h in holes_mm), 2)
+    core_mm2 = sum(
+        Fraction(m_to_mm(c.rect[2] + c.rect[0]) - m_to_mm(c.rect[0]))
+        * Fraction(m_to_mm(c.rect[3] + c.rect[1]) - m_to_mm(c.rect[1]))
+        for c in _cores_in_solids(site, polygon, x0, y0, module)
+    )
+    metric_mm2 = Fraction(_twice_area(ext) + sum(_twice_area(h) for h in holes_mm), 2) - core_mm2
     module_mm2 = polygon.area_cells() * module * module
     sliver = (metric_mm2 - module_mm2) / _MM2_PER_M2
     return ModuleFootprint(

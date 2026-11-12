@@ -25,13 +25,14 @@ from ale.contracts.orientation import bearing_bin, compass_bearing_deg
 from ale.contracts.taxonomy import load_taxonomy
 from ale.contracts.units import to_decimal
 from ale.geometry.blocks import Consts, aspect_ok
-from ale.geometry.checks import exterior_contacts, share_length
+from ale.geometry.checks import exterior_contacts, share_length, solid_contact
 from ale.program.models import PreparedInput
 
 __all__ = [
     "DEPTH_COST",
     "FACADE_CODES",
     "SOFT_ASPECT_CODE",
+    "SOLID_CODES",
     "WEIGHT_NAMES",
     "core_target",
     "evaluate",
@@ -87,10 +88,15 @@ def core_target(layout: Layout, prepared: PreparedInput, rulebook: Rulebook) -> 
     )
 
 
+SOLID_CODES: frozenset[str] = frozenset({"SOLID_NO_ACCESS"})
+"""M.2: violation codes that are always hard, whatever ``base`` says (a solid enclosed by rooms)."""
+
+
 def hard_codes_of(metrics: LayoutMetrics, base: frozenset[str]) -> frozenset[str]:
     """Q.4: ``base`` without ``FACADE_DEPTH`` when ``metrics`` come from the soft depth rule
-    (:data:`DEPTH_COST` in the cost breakdown), else ``base``."""
-    return base - {"FACADE_DEPTH"} if DEPTH_COST in metrics.cost_breakdown else base
+    (:data:`DEPTH_COST` in the cost breakdown), else ``base``; M.2: plus :data:`SOLID_CODES`."""
+    hard = base - {"FACADE_DEPTH"} if DEPTH_COST in metrics.cost_breakdown else base
+    return hard | SOLID_CODES
 
 
 def facade_depth(rect: ModuleRect, poly: ModulePolygon) -> tuple[int, bool] | None:
@@ -230,6 +236,22 @@ class _Eval:
                 elif k.dmax is not None:
                     self.depth_rule(iid, r, k.dmax)
 
+    def solid_rule(self) -> None:
+        """M.2: every solid (core, wet stack) is touched by circulation along >= 1 module."""
+        circ = self.layout.circulation
+        for k, ring in enumerate(self.layout.footprint.solids):
+            if any(solid_contact(c.rect, ring) >= 1 for c in circ):
+                continue
+            around = tuple(
+                sorted(p.instance_id for p in self.layout.rooms if solid_contact(p.rect, ring) >= 1)
+            )
+            self.flag(
+                "SOLID_NO_ACCESS",
+                around,
+                f"Noyau {k} : aucune circulation ne longe son contour (escalier ou gaine "
+                "inaccessible, entouré de pièces).",
+            )
+
     def depth_rule(self, iid: str, rect: ModuleRect, dmax: int) -> None:
         """Q.4: ``FACADE_DEPTH`` when the room is deeper than its limit (``2 · dmax``
         for a through room)."""
@@ -290,6 +312,7 @@ def evaluate(
     area_term, overshoot = ev.area()
     circ_term, circ_area = ev.circulation()
     ev.room_rules()
+    ev.solid_rule()
     terms = {
         "required_adjacency": required,
         "rulebook_adjacency": prior,

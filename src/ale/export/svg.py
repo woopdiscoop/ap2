@@ -14,6 +14,7 @@ from ale.contracts.enums import MacroZone
 from ale.contracts.models import Layout
 from ale.export.report import MetricFrame, fr_num, room_infos
 from ale.program.models import PreparedInput
+from ale.program.site import solid_labels
 
 __all__ = ["CIRC_FILL", "CIRC_STROKE", "ZONE_COLOURS", "render_svg", "svg_num"]
 
@@ -76,6 +77,7 @@ def render_svg(layout: Layout, prepared: PreparedInput) -> str:
             f'fill="{CIRC_FILL}" stroke="{CIRC_STROKE}" stroke-width="{thin}"/>'
         )
     out.append("</g>")
+    out.extend(_solids_svg(layout, prepared, frame, thin))
     pts = " ".join(
         f"{svg_num(x)},{svg_num(-y)}"
         for x, y in (frame.point(p) for p in layout.footprint.exterior)
@@ -101,6 +103,49 @@ def render_svg(layout: Layout, prepared: PreparedInput) -> str:
     out.append(_north_arrow(bx1, by1, size, prepared.site.north_angle_deg, thick))
     out.append("</svg>")
     return "\n".join(out) + "\n"
+
+
+def _solids_svg(
+    layout: Layout, prepared: PreparedInput, frame: MetricFrame, thin: str
+) -> list[str]:
+    """Hatched solids with the core id, and the fixed rooms (Ticket M.2); empty without solids."""
+    if not layout.footprint.solids:
+        return []
+    names = solid_labels(prepared.site, prepared.footprint, prepared.grid)
+    out = [
+        "<defs>",
+        '<pattern id="solid-hatch" width="0.3" height="0.3" patternUnits="userSpaceOnUse" '
+        'patternTransform="rotate(45)">'
+        f'<line x1="0" y1="0" x2="0" y2="0.3" stroke="#555555" stroke-width="{thin}"/></pattern>',
+        "</defs>",
+        '<g id="solids">',
+    ]
+    for k, ring in enumerate(layout.footprint.solids):
+        pts = [frame.point(p) for p in ring]
+        coords = " ".join(f"{svg_num(x)},{svg_num(-y)}" for x, y in pts)
+        label = names[k] if k < len(names) else f"solid_{k}"
+        cx = sum(q[0] for q in pts) / len(pts)
+        cy = sum(q[1] for q in pts) / len(pts)
+        out.append(
+            f'<polygon id={quoteattr("solid-" + label)} class="solid" points="{coords}" '
+            f'fill="url(#solid-hatch)" stroke="#333333" stroke-width="{thin}"/>'
+        )
+        out.append(
+            f'<text class="solid-label" x="{svg_num(cx)}" y="{svg_num(-cy)}" '
+            f'font-family="sans-serif" font-size="{svg_num(_FONT_SIZE)}" '
+            f'text-anchor="middle">{escape(label)}</text>'
+        )
+    out.append("</g>")
+    out.append('<g id="fixed">')
+    for room in layout.fixed:
+        x0, y0 = frame.x(room.rect.x), frame.y(room.rect.y)
+        x1, y1 = frame.x(room.rect.x2()), frame.y(room.rect.y2())
+        out.append(
+            f'<rect id={quoteattr("fixed-" + room.instance_id)} class="fixed" '
+            f'{_rect(x0, y0, x1, y1)} fill="#d9c7e8" stroke="#333333" stroke-width="{thin}"/>'
+        )
+    out.append("</g>")
+    return out
 
 
 def _north_arrow(x1: float, y1: float, size: float, angle_deg: float, stroke: str) -> str:

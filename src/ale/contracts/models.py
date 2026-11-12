@@ -24,6 +24,7 @@ from pydantic import (
     StrictStr,
     StringConstraints,
     field_validator,
+    model_serializer,
     model_validator,
 )
 
@@ -239,7 +240,12 @@ class SiteSpec(BaseModel):
     ``core_hint`` is deprecated (kept for compatibility): use ``cores``. ``mode`` is
     ``"footprint"`` (the polygon is the building outline, today's behaviour) or ``"plot"``
     (the polygon is the plot and ``setbacks`` apply). ``party_edges`` lists exterior edges on a
-    party wall. None of the A.4 fields is used by the v1 engines.
+    party wall. The other A.4 fields are not used by the v1 engines.
+
+    Ticket M.2 (contracts 1.7.0): ``cores`` are now used. ``to_module_footprint`` turns each
+    core rectangle into a solid of the module footprint (snapped **outward** to the grid, like
+    courtyards), around which the engine lays out the floor. Sites without ``cores`` are
+    unchanged (byte-identical outputs).
     """
 
     model_config = _CONFIG
@@ -393,9 +399,17 @@ class LayoutMetrics(BaseModel):
 
 
 class Layout(BaseModel):
-    """Output of Phase 3: placed rooms on the module grid (+y up, 1 unit = 1 module)."""
+    """Output of Phase 3: placed rooms on the module grid (+y up, 1 unit = 1 module).
 
-    model_config = _CONFIG
+    Ticket M.2 (contracts 1.7.0): ``fixed`` holds the rooms the vertical skeleton places
+    inside the footprint's ``solids`` (core, wet rooms, ``reserve_technique``), sorted by
+    ``instance_id``; empty by default and then left out of the serialised form. They are not
+    part of the tiling invariant: each lies inside a solid and none overlaps another.
+    """
+
+    # ``constants``: the wrap serializer below would otherwise turn a NaN metric into ``null``
+    # instead of letting ``canonical_json`` reject it.
+    model_config = ConfigDict(extra="forbid", frozen=True, ser_json_inf_nan="constants")
 
     schema_version: Literal["ale.layout/1"] = "ale.layout/1"
     grid: GridSpec
@@ -406,14 +420,22 @@ class Layout(BaseModel):
     seed: StrictInt
     rulebook_version: StrictStr
     metrics: LayoutMetrics
+    fixed: tuple[PlacedRoom, ...] = ()
+
+    @model_serializer(mode="wrap")
+    def _drop_empty_fixed(self, handler: Any) -> Any:
+        out = handler(self)
+        if isinstance(out, dict) and not out.get("fixed"):
+            out.pop("fixed", None)
+        return out
 
     @model_validator(mode="after")
     def _cheap_checks(self) -> Layout:
-        ids = [p.instance_id for p in (*self.rooms, *self.circulation)]
+        ids = [p.instance_id for p in (*self.rooms, *self.circulation, *self.fixed)]
         dups = _duplicates(ids)
         if dups:
             raise ValueError(f"duplicate instance ids: {dups}")
-        for name in ("rooms", "circulation"):
+        for name in ("rooms", "circulation", "fixed"):
             seq: tuple[PlacedRoom, ...] = getattr(self, name)
             keys = [p.instance_id for p in seq]
             if keys != sorted(keys):
@@ -421,7 +443,25 @@ class Layout(BaseModel):
         for p in self.circulation:
             if p.spec_id is not None:
                 raise ValueError(f"circulation entry {p.instance_id!r} must have spec_id None")
+        if self.fixed:
+            self._check_fixed()
         return self
+
+    def _check_fixed(self) -> None:
+        from shapely import Polygon as ShapelyPolygon
+        from shapely import box
+
+        solids = [ShapelyPolygon(r) for r in self.footprint.solids]
+        boxes: list[Any] = []
+        for p in self.fixed:
+            r = p.rect
+            b = box(r.x, r.y, r.x2(), r.y2())
+            if not any(s.covers(b) for s in solids):
+                raise ValueError(f"fixed room {p.instance_id!r} does not lie inside a solid")
+            for q, other in zip(self.fixed, boxes, strict=False):
+                if b.intersection(other).area > 0:
+                    raise ValueError(f"fixed rooms {q.instance_id!r} and {p.instance_id!r} overlap")
+            boxes.append(b)
 
 
 # --------------------------------------------------------------------------- 9.3 Slicing tree

@@ -19,6 +19,7 @@ __all__ = [
     "exterior_contacts",
     "rect_in_polygon_cells",
     "share_length",
+    "solid_contact",
 ]
 
 
@@ -65,6 +66,24 @@ def exterior_contacts(rect: ModuleRect, poly: ModulePolygon) -> list[tuple[int, 
     return out
 
 
+def solid_contact(rect: ModuleRect, ring: Sequence[tuple[int, int]]) -> int:
+    """Length (modules) of the boundary of a solid ring that ``rect`` lies along (Ticket M.2).
+
+    ``rect`` is outside the solid (the tiling never overlaps it), so a coinciding side is a
+    contact. Ring edges are summed in ring order.
+    """
+    total = 0
+    n = len(ring)
+    for i in range(n):
+        (ax, ay), (bx, by) = ring[i], ring[(i + 1) % n]  # int-mod
+        if ay == by:
+            if ay in (rect.y, rect.y2()):
+                total += max(0, min(rect.x2(), max(ax, bx)) - max(rect.x, min(ax, bx)))
+        elif ax in (rect.x, rect.x2()):
+            total += max(0, min(rect.y2(), max(ay, by)) - max(rect.y, min(ay, by)))
+    return total
+
+
 def _clip(
     pts: list[tuple[Fraction, Fraction]], axis: int, bound: int, keep_le: bool
 ) -> list[tuple[Fraction, Fraction]]:
@@ -86,8 +105,10 @@ def _clip(
 
 
 def rect_in_polygon_cells(rect: ModuleRect, poly: ModulePolygon) -> int:
-    """Exact area of ``rect ∩ poly`` in cells (courtyards subtracted)."""
-    return _clipped_cells(rect, poly.exterior) - sum(_clipped_cells(rect, h) for h in poly.holes)
+    """Exact area of ``rect ∩ poly`` in cells (courtyards and solids subtracted)."""
+    return _clipped_cells(rect, poly.exterior) - sum(
+        _clipped_cells(rect, h) for h in (*poly.holes, *poly.solids)
+    )
 
 
 def _clipped_cells(rect: ModuleRect, ring: tuple[tuple[int, int], ...]) -> int:
@@ -159,6 +180,13 @@ def check_layout(layout: Layout, prepared: PreparedInput, config: AleConfig) -> 
             out.append(f"{room.instance_id}: circulation contact {best} < {k.c}")
     if not _connected([c.rect for c in circ]):
         out.append("circulation is not connected")
+    flagged_solids = {v.code for v in layout.metrics.violations}
+    for n_solid, ring in enumerate(poly.solids):
+        if (
+            not any(solid_contact(c.rect, ring) >= 1 for c in circ)
+            and "SOLID_NO_ACCESS" not in flagged_solids
+        ):
+            out.append(f"solid {n_solid}: no circulation along its boundary")
     flagged = {(v.code, iid) for v in layout.metrics.violations for iid in v.instance_ids}
     specs = dict(prepared.instances)
     for room in rooms:

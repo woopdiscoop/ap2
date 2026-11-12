@@ -136,7 +136,7 @@
     }
   },
   "additionalProperties": false,
-  "description": "Buildable site (metres, y-up).\n\n``core_hint`` is deprecated (kept for compatibility): use ``cores``. ``mode`` is\n``\"footprint\"`` (the polygon is the building outline, today's behaviour) or ``\"plot\"``\n(the polygon is the plot and ``setbacks`` apply). ``party_edges`` lists exterior edges on a\nparty wall. None of the A.4 fields is used by the v1 engines.",
+  "description": "Buildable site (metres, y-up).\n\n``core_hint`` is deprecated (kept for compatibility): use ``cores``. ``mode`` is\n``\"footprint\"`` (the polygon is the building outline, today's behaviour) or ``\"plot\"``\n(the polygon is the plot and ``setbacks`` apply). ``party_edges`` lists exterior edges on a\nparty wall. The other A.4 fields are not used by the v1 engines.\n\nTicket M.2 (contracts 1.7.0): ``cores`` are now used. ``to_module_footprint`` turns each\ncore rectangle into a solid of the module footprint (snapped **outward** to the grid, like\ncourtyards), around which the engine lays out the floor. Sites without ``cores`` are\nunchanged (byte-identical outputs).",
   "properties": {
     "access_edge": {
       "title": "Access Edge",
