@@ -162,6 +162,7 @@ def generate(
             rulebook_version=prepared.rulebook_version,
             run_id=f"{out.name}-v{index}",
             config=config,
+            rulebook=rb,
         )
         key = canonical_json(res.plan).decode("utf-8")
         metrics = res.layout.metrics

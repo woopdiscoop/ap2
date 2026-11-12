@@ -185,3 +185,31 @@ def test_R804_fast_cache_matches_realize_and_guards_rulebook() -> None:
     assert canonical_json(real.layout) == canonical_json(fast.layout)
     with pytest.raises(ValueError, match="learned depth"):
         cache.realize(one_piece([rb("a")], [rb("b")]), BASE)
+
+
+def test_R806_plan_report_compares_with_built_plans() -> None:
+    from ale.export.report import render_report
+
+    cfg = config()
+    learned = with_depth(BASE, "office", 5.4)
+    prep, real = _case(learned, cfg)
+    assert real.layout is not None
+
+    def text(rulebook: Rulebook | None) -> str:
+        return render_report(
+            real.layout,
+            prep,
+            rulebook_version="v",
+            run_id="r8",
+            config=cfg,
+            dxf_note=None,
+            rulebook=rulebook,
+        )
+
+    report = text(learned)
+    assert "## Profondeur : votre plan / plans construits" in report
+    # the office is 10 modules = 6,0 m deep; built plans p50 4,8 / p90 5,4 -> deeper
+    assert "| Bureau | 1 | 6,00 | 4,80 / 5,40 | plus profond |" in report
+    # no learned depth (or no rulebook): the report is unchanged
+    assert "votre plan" not in text(BASE)
+    assert text(None) == text(BASE)
