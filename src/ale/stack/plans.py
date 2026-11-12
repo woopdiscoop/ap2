@@ -333,7 +333,7 @@ def _generate_floor(
         left = SEED_SHARE * total - spent
         if attempt > 0 and left < 0.5:
             break
-        slot = min(left, max(2.0, 0.2 * total))
+        slot = min(left, max(1.5, 0.12 * total))
         seeded = seed_plan(
             prepared, rb, config, seed=seed + 1000 * attempt, time_budget_s=max(slot, 0.5)
         )
