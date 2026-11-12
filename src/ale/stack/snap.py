@@ -107,7 +107,7 @@ def snap_layout(
     rooms stay valid, and the counts."""
     m = layout.grid.module_mm / 1000
     ox, oy = prepared.footprint.origin_m
-    k = Consts.from_config(config)
+    k = Consts.from_config(config, rulebook)
     specs = dict(prepared.instances)
     ext = shapely.LineString(
         [(p[0], p[1]) for p in layout.footprint.exterior] + [layout.footprint.exterior[0]]

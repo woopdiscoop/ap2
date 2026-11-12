@@ -9,6 +9,11 @@ whose aspect above ``shape.aspect_max`` is imposed by that limit (``ASPECT_DEPTH
 listed in a section "Proportion > amax imposée par la règle de profondeur" (only when there is
 one). With the soft rule (``facade.max_depth_hard`` false, the default) the ``FACADE_DEPTH``
 findings are listed in a section "Profondeur depuis la façade dépassée (non bloquant)".
+
+Ticket R.8: when the rulebook holds learned depths (``TypeStats.depth_m``) for types of the plan,
+the section "Profondeur : votre plan / plans construits" compares, per type, the median depth
+from the façade of the plan's rooms with the p50 / p90 of the built plans. Without learned
+depths the report is unchanged.
 """
 
 from __future__ import annotations
@@ -22,7 +27,7 @@ from ale.analysis import RoomSyntax, SyntaxAnalysis, analyse
 from ale.contracts.config import AleConfig
 from ale.contracts.enums import MacroZone
 from ale.contracts.geometry import ModulePolygon, ModuleRect, Point2
-from ale.contracts.models import Layout, PlacedRoom, RoomSpec, Violation
+from ale.contracts.models import Layout, PlacedRoom, RoomSpec, Rulebook, Violation
 from ale.contracts.taxonomy import load_taxonomy
 from ale.contracts.units import cells_to_m2, to_decimal
 from ale.contracts.version import CONTRACTS_VERSION
@@ -291,6 +296,66 @@ def _soft_depth_section(violations: tuple[Violation, ...], config: AleConfig) ->
     return lines
 
 
+def _built_plans_section(
+    layout: Layout, prepared: PreparedInput, rulebook: Rulebook | None
+) -> list[str]:
+    """R.8: per type, the plan's median façade depth against the built plans' p50 / p90."""
+    if rulebook is None:
+        return []
+    from ale.geometry.evaluate import facade_depth
+
+    specs = {r.id: r for r in prepared.program.rooms}
+    depths: dict[str, list[int]] = {}
+    for p in layout.rooms:
+        spec = specs.get(p.spec_id) if p.spec_id is not None else None
+        stats = rulebook.types.get(str(spec.type)) if spec is not None else None
+        if spec is None or stats is None or stats.depth_m is None:
+            continue
+        got = facade_depth(p.rect, layout.footprint)
+        if got is not None:
+            depths.setdefault(str(spec.type), []).append(got[0])
+    if not depths:
+        return []
+    tax = load_taxonomy()
+    module = Decimal(layout.grid.module_mm) / 1000
+    lines = [
+        "",
+        "## Profondeur : votre plan / plans construits",
+        "",
+        "Profondeur depuis la façade (médiane des pièces du plan qui ont une façade) "
+        "comparée aux plans construits du corpus.",
+        "",
+        _row(["Type", "Pièces", "Votre plan p50 (m)", "Plans construits p50 / p90 (m)", "Écart"]),
+        "|" + "---|" * 5,
+    ]
+    for key in sorted(depths):
+        values = sorted(depths[key])
+        mid = len(values) // 2
+        med = (
+            Fraction(values[mid]) if len(values) % 2 else Fraction(values[mid - 1] + values[mid], 2)
+        )
+        mine = Decimal(med.numerator) / Decimal(med.denominator) * module
+        built = rulebook.types[key].depth_m
+        assert built is not None
+        gap = (
+            "dans la plage"
+            if built.p10 <= float(mine) <= built.p90
+            else ("plus profond" if float(mine) > built.p90 else "moins profond")
+        )
+        lines.append(
+            _row(
+                [
+                    tax.get(key).label_fr,
+                    str(len(values)),
+                    fr_num(mine),
+                    f"{fr_num(built.p50)} / {fr_num(built.p90)}",
+                    gap,
+                ]
+            )
+        )
+    return lines
+
+
 def _fr_frac(x: Fraction) -> str:
     return fr_num(Decimal(x.numerator) / Decimal(x.denominator))
 
@@ -376,6 +441,7 @@ def render_report(
     run_id: str,
     config: AleConfig,
     dxf_note: str | None,
+    rulebook: Rulebook | None = None,
 ) -> str:
     """Markdown text of ``report.md`` (``dxf_note`` = reason the DXF was skipped, or None)."""
     grid = layout.grid
@@ -476,6 +542,7 @@ def render_report(
 
     lines += _depth_aspect_section(infos, m.violations, config)
     lines += _soft_depth_section(m.violations, config)
+    lines += _built_plans_section(layout, prepared, rulebook)
 
     lines += ["", "## Coût", ""]
     lines.append(_row(["Terme", "Valeur", "Poids", "Valeur pondérée"]))

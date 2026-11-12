@@ -208,12 +208,12 @@ def _depth_penalty(
     """Q.4: ``penalty`` plus the façade penalty for every ``needs_facade`` room that would be
     a room bay of an outer block (no penalty yet) deeper than ``dmax``; ``penalty`` itself
     when the rule is off."""
-    dmax = ctx.k.dmax
-    if dmax is None:
+    if not ctx.k.depth_on:
         return penalty
     out = dict(penalty)
     for r, req in ctx.reqs.items():
-        if not req.facade:
+        dmax = req.limit(ctx.k)
+        if not req.facade or dmax is None:
             continue
         for sl in slots:
             if depths[sl] <= dmax or (r, sl) in penalty:

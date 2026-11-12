@@ -7,7 +7,7 @@ from pathlib import Path
 from pydantic import BaseModel, ConfigDict
 
 from ale.contracts.config import AleConfig
-from ale.contracts.models import Layout
+from ale.contracts.models import Layout, Rulebook
 from ale.contracts.serialization import canonical_json
 from ale.export import dxf as _dxf
 from ale.export.report import DXF_NAME, JSON_NAME, REPORT_NAME, SVG_NAME, render_report
@@ -45,12 +45,14 @@ def export_run(
     run_id: str,
     dxf: bool = True,
     config: AleConfig | None = None,
+    rulebook: Rulebook | None = None,
 ) -> RunFiles:
     """Write the four run files into ``out_dir`` (created if missing).
 
     Raises ``FileExistsError`` (writing nothing) when ``out_dir`` already holds any of the
     four files. With ``dxf=False`` or without ezdxf, no DXF is written and the report says so.
-    ``config`` supplies the cost weights shown in the report (defaults: ``AleConfig()``).
+    ``config`` supplies the cost weights shown in the report (defaults: ``AleConfig()``);
+    ``rulebook`` (R.8) adds the comparison with the built plans' depths when it holds some.
     """
     cfg = config if config is not None else AleConfig()
     out = Path(out_dir)
@@ -81,6 +83,7 @@ def export_run(
             run_id=run_id,
             config=cfg,
             dxf_note=dxf_note,
+            rulebook=rulebook,
         ),
     )
     return RunFiles(

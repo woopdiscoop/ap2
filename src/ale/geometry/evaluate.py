@@ -141,7 +141,7 @@ class _Eval:
         self.prepared = prepared
         self.rulebook = rulebook
         self.config = config
-        self.k = Consts.from_config(config)
+        self.k = Consts.from_config(config, rulebook)
         self.m = layout.grid.module_mm
         specs = dict(prepared.instances)
         self.rooms: list[tuple[PlacedRoom, RoomSpec]] = [
@@ -238,8 +238,8 @@ class _Eval:
                 facade = sum(n for n, _ in exterior_contacts(r, self.layout.footprint))
                 if facade < k.f:
                     self.flag("NO_FACADE", (iid,), f"{iid}: facade {facade} < {k.f}")
-                elif k.dmax is not None:
-                    self.depth_rule(iid, r, k.dmax)
+                elif (limit := req.limit(k)) is not None:
+                    self.depth_rule(iid, r, limit)
 
     def solid_rule(self) -> None:
         """M.2: every solid (core, wet stack) is touched by circulation along >= 1 module."""
@@ -336,7 +336,7 @@ def evaluate(
             ev.flag("ZONE_SPLIT", (), f"room {exc.args[0]} is not in the program")
     weights = config.optimizer.weights
     total = sum(getattr(weights, name) * terms[name] for name in WEIGHT_NAMES)
-    if ev.k.dmax is not None and not ev.k.depth_hard:
+    if ev.k.depth_on and not ev.k.depth_hard:
         # Q.4 soft depth rule: Σ max(0, depth - limit) / limit over the rooms, per room.
         terms[DEPTH_COST] = ev.per_room(float(ev.depth_excess))
         total += weights.facade_depth * terms[DEPTH_COST]

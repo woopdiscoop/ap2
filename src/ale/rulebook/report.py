@@ -131,6 +131,25 @@ def render_report(inp: ReportInputs) -> str:
     else:
         out.append("Aucun type.")
 
+    out += ["", "## Profondeur et largeur de façade", ""]
+    if bl.facade:
+        out += [
+            "| Type | profondeur p50 / p90 (m) | largeur p50 / p90 (m) | façade (m/m²) "
+            "| n pièces | source |",
+            "|---|---|---|---|---|---|",
+        ]
+        for f in bl.facade:
+            if f.insufficient or f.depth is None or f.width is None:
+                out.append(f"| {f.type} | échantillon insuffisant | — | — | {f.n} | — |")
+                continue
+            out.append(
+                f"| {f.type} | {_n(f.depth.p50)} / {_n(f.depth.p90)} "
+                f"| {_n(f.width.p50)} / {_n(f.width.p90)} | {_n(f.m_per_m2)} "
+                f"| {f.n} | {_SOURCE_FR[f.source]} |"
+            )
+    else:
+        out.append("Aucun type.")
+
     out += ["", "## Décalage du noyau", ""]
     out += ["| dx_norm | dy_norm | plans | miné (dx / dy) | source |", "|---|---|---|---|---|"]
     core = bl.core

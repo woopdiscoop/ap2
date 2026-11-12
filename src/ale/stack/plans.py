@@ -404,6 +404,7 @@ def _generate_floor(
         rulebook_version=prepared.rulebook_version,
         run_id=f"plan-{f.level:02d}",
         config=config,
+        rulebook=rb,
     )
     origin = prepared.footprint.origin_m
     rects = {p.instance_id: (p.rect.x, p.rect.y, p.rect.w, p.rect.h) for p in layout.fixed}

@@ -42,6 +42,7 @@ from ale.rulebook.stats import (
     PlanInput,
     adjacency_stats,
     core_offset_stats,
+    facade_stats,
     orientation_stats,
     room_aspect,
     room_facades,
@@ -161,6 +162,7 @@ def build_rulebook(
         seed=seed,
         config=config,
         min_support=support_min,
+        facades=facade_stats(plans),
     )
     day = today if today is not None else _dt.datetime.now(_dt.UTC).date()
     digest = _inputs_hash(plans, seed, config, support_min)

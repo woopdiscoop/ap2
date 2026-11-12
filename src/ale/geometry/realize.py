@@ -958,7 +958,7 @@ def _realize(
     problems = plan.check_against([iid for iid, _ in prepared.instances], fp)
     if problems:
         return _fail("PLAN_INVALID", "; ".join(problems))
-    consts = Consts.from_config(config)
+    consts = Consts.from_config(config, rulebook)
     for i, piece in enumerate(fp.pieces):
         if frame(piece)[1] < consts.s:
             return _fail("PIECE_TOO_SMALL", f"piece {i} is narrower than the spine width")

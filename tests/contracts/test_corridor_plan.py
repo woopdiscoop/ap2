@@ -90,8 +90,8 @@ def fp(pts: tuple[tuple[int, int], ...]) -> FootprintPieces:
 
 def test_K01_version() -> None:
     assert (
-        CONTRACTS_VERSION == "1.7.0"
-    )  # superseded by A.3 (I01), Q.4 (D01), A.4 (A401), G.1 (N01), then M.2 (M201)
+        CONTRACTS_VERSION == "1.8.0"
+    )  # superseded by A.3 (I01), Q.4 (D01), A.4 (A401), G.1 (N01), then M.2 (M201), then R.8
 
 
 # SHA-256 of the contract files as frozen at 1.0.0 (CONTRACTS.lock before amendment A.1),
@@ -142,7 +142,8 @@ def test_K02_existing_unchanged() -> None:
     # schema); amendment A.4 (contracts 1.5.0) adds the site / room anchors (models.py and the
     # Program, RoomSpec and SiteSpec schemas; checked in tests/contracts/test_contracts_a4);
     # amendment G.1 (contracts 1.6.0) adds ``ModulePolygon.holes`` (geometry.py and the Layout
-    # schema that embeds it).
+    # schema that embeds it); amendment R.8 (contracts 1.8.0) adds ``TypeStats`` façade fields
+    # (models.py and the Rulebook schema).
     assert changed == [
         "config.py",
         "config.schema.json",
@@ -151,6 +152,7 @@ def test_K02_existing_unchanged() -> None:
         "schemas/Layout.schema.json",
         "schemas/Program.schema.json",
         "schemas/RoomSpec.schema.json",
+        "schemas/Rulebook.schema.json",
         "schemas/SiteSpec.schema.json",
     ]
     # export_schemas: list update only (the 1.0.0 models first, in order, then the new ones).
@@ -364,8 +366,8 @@ BASE_REV = "3dcd970"  # spec commit of Ticket A.2, before the amendment
 
 def test_B01_version_schema() -> None:
     assert (
-        CONTRACTS_VERSION == "1.7.0"
-    )  # superseded by A.3 (I01), Q.4 (D01), A.4 (A401), G.1 (N01), then M.2 (M201)
+        CONTRACTS_VERSION == "1.8.0"
+    )  # superseded by A.3 (I01), Q.4 (D01), A.4 (A401), G.1 (N01), then M.2 (M201), then R.8
     # ``pieces`` is required, so the default is read from the field (CorridorPlan() is invalid).
     assert CorridorPlan.model_fields["schema_version"].default == "ale.corridor_plan/2"
     assert plan(piece([room("R1")])).schema_version == "ale.corridor_plan/2"
@@ -787,8 +789,8 @@ def inner2(a0: list[Any], a1: list[Any]) -> PiecePlan:
 
 def test_I01_version_schema() -> None:
     assert (
-        CONTRACTS_VERSION == "1.7.0"
-    )  # superseded by Q.4 (D01), A.4 (A401), then G.1 (N01), then M.2
+        CONTRACTS_VERSION == "1.8.0"
+    )  # superseded by Q.4 (D01), A.4 (A401), then G.1 (N01), then M.2, then R.8
     assert export_schemas.main(["--check"]) == 0
     assert lock.main(["--check"]) == 0
     schema = json.loads(

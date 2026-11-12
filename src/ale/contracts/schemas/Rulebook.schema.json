@@ -148,6 +148,46 @@
         "aspect": {
           "$ref": "#/$defs/Quantiles"
         },
+        "depth_m": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Quantiles"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "facade_m_per_m2": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Facade M Per M2"
+        },
+        "facade_width_m": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Quantiles"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "n_facade_samples": {
+          "default": 0,
+          "minimum": 0,
+          "title": "N Facade Samples",
+          "type": "integer"
+        },
         "orientation": {
           "additionalProperties": {
             "ge": -1.0,
