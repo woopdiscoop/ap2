@@ -365,7 +365,7 @@ def _contact(a: ModuleRect, b: ModuleRect) -> tuple[ModulePoint, ModulePoint] | 
     return None
 
 
-def _decompose_tree(fp: ModulePolygon) -> FootprintPieces:
+def _decompose_tree(fp: ModulePolygon, solid_aware: bool = False) -> FootprintPieces:
     """Cut at the reflex vertices into rectangles and build the piece tree (G.1).
 
     Every reflex vertex is resolved by extending one of its two edges through the region
@@ -380,8 +380,7 @@ def _decompose_tree(fp: ModulePolygon) -> FootprintPieces:
     reflex.sort(key=lambda v: (v[1], v[0]))
     if len(reflex) > MAX_PIECES:
         raise ValueError(UNSUPPORTED_MESSAGE)
-    best_key: tuple[int, int, Fraction, tuple[tuple[int, int, int, int], ...]] | None = None
-    best: FootprintPieces | None = None
+    cands: list[tuple[tuple[object, ...], FootprintPieces]] = []
     for choice in product((True, False), repeat=len(reflex)):
         hcut, vcut = _cuts(grid, reflex, choice)
         rects0 = _as_rects(grid, _faces(grid, hcut, vcut))
@@ -390,21 +389,24 @@ def _decompose_tree(fp: ModulePolygon) -> FootprintPieces:
         rects = _merge(rects0)
         if len(rects) > MAX_PIECES:
             continue
-        got = _tree(rects)
-        key = (
-            len(rects),
-            sum(j.kind == "J2" for j in got.junctions),
-            max(_aspect(r) for r in rects),
-            tuple(sorted(_order(r) for r in rects)),
-        )
-        if best_key is None or key < best_key:
-            best_key, best = key, got
-    if best is None:
+        for flip in (False, True) if solid_aware else (False,):
+            got = _tree(rects, flip)
+            n_j2 = sum(j.kind == "J2" for j in got.junctions)
+            asp = max(_aspect(r) for r in rects)
+            order = tuple(sorted(_order(r) for r in rects))
+            key = (
+                (len(rects), -got.pieces[0].rect.area_cells(), not flip, -n_j2, asp, order)
+                if solid_aware
+                else (len(rects), n_j2, asp, order)
+            )
+            cands.append((key, got))
+    if not cands:
         raise ValueError(UNSUPPORTED_MESSAGE)
-    return best
+    cands.sort(key=lambda t: t[0])
+    return cands[0][1]
 
 
-def _tree(rects: list[ModuleRect]) -> FootprintPieces:
+def _tree(rects: list[ModuleRect], flip_root: bool = False) -> FootprintPieces:
     """Spanning tree of the contact graph rooted at the largest piece (BFS), pre-order."""
     n = len(rects)
     contact: dict[tuple[int, int], tuple[ModulePoint, ModulePoint]] = {}
@@ -437,7 +439,10 @@ def _tree(rects: list[ModuleRect]) -> FootprintPieces:
         pre.append(cur)
         stack.extend(reversed(kids[cur]))
     index = {old: new for new, old in enumerate(pre)}
-    axis: dict[int, SpineAxis] = {root: _long_axis(rects[root])}
+    root_axis = _long_axis(rects[root])
+    if flip_root:
+        root_axis = "Y" if root_axis == "X" else "X"
+    axis: dict[int, SpineAxis] = {root: root_axis}
     junctions: list[Junction] = []
     for old in pre[1:]:
         p = parent[old]
@@ -494,6 +499,7 @@ def decompose_footprint(fp: ModulePolygon) -> FootprintPieces:
     :data:`MAX_PIECES` pieces are needed. Ticket M.2 (contracts 1.7.0): ``solids`` are treated
     as holes (a ring of pieces around a central core is the expected figure).
     """
+    solid_aware = bool(fp.solids)
     if fp.solids:
         fp = ModulePolygon(exterior=fp.exterior, holes=(*fp.holes, *fp.solids))
     pts = fp.exterior
@@ -509,4 +515,4 @@ def decompose_footprint(fp: ModulePolygon) -> FootprintPieces:
         )
     if len(pts) == 6 and not fp.holes:
         return _decompose_l(pts)
-    return _decompose_tree(fp)
+    return _decompose_tree(fp, solid_aware)
