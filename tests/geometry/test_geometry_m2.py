@@ -260,7 +260,8 @@ def evaluate_stub() -> Any:
 
 
 def test_M205_solid_enclosed_by_rooms_is_a_hard_violation() -> None:
-    from ale.optimize.anneal import HARD_CODES
+    from ale.geometry.evaluate import hard_codes_of
+    from ale.optimize.anneal import HARD_CODES, hard_count
     from ale.topology.seed import HARD_CODES as SEED_HARD
 
     layout, prepared = _enclosed(touch=False)
@@ -268,7 +269,10 @@ def test_M205_solid_enclosed_by_rooms_is_a_hard_violation() -> None:
     assert len(codes) == 1
     assert "Noyau 0" in codes[0].detail and "circulation" in codes[0].detail
     assert codes[0].instance_ids == ("A", "B", "C", "D")
-    assert "SOLID_NO_ACCESS" in HARD_CODES and "SOLID_NO_ACCESS" in SEED_HARD
+    # hard for the seeder and the annealer (their literal code sets are unchanged)
+    assert "SOLID_NO_ACCESS" in hard_codes_of(layout.metrics, HARD_CODES)
+    assert "SOLID_NO_ACCESS" in hard_codes_of(layout.metrics, SEED_HARD)
+    assert hard_count(layout) >= 1
     # the invariant checker names it too when the violation was not flagged
     unflagged = layout.model_copy(
         update={

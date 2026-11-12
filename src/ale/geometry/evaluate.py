@@ -32,6 +32,7 @@ __all__ = [
     "DEPTH_COST",
     "FACADE_CODES",
     "SOFT_ASPECT_CODE",
+    "SOLID_CODES",
     "WEIGHT_NAMES",
     "core_target",
     "evaluate",
@@ -87,10 +88,15 @@ def core_target(layout: Layout, prepared: PreparedInput, rulebook: Rulebook) -> 
     )
 
 
+SOLID_CODES: frozenset[str] = frozenset({"SOLID_NO_ACCESS"})
+"""M.2: violation codes that are always hard, whatever ``base`` says (a solid enclosed by rooms)."""
+
+
 def hard_codes_of(metrics: LayoutMetrics, base: frozenset[str]) -> frozenset[str]:
     """Q.4: ``base`` without ``FACADE_DEPTH`` when ``metrics`` come from the soft depth rule
-    (:data:`DEPTH_COST` in the cost breakdown), else ``base``."""
-    return base - {"FACADE_DEPTH"} if DEPTH_COST in metrics.cost_breakdown else base
+    (:data:`DEPTH_COST` in the cost breakdown), else ``base``; M.2: plus :data:`SOLID_CODES`."""
+    hard = base - {"FACADE_DEPTH"} if DEPTH_COST in metrics.cost_breakdown else base
+    return hard | SOLID_CODES
 
 
 def facade_depth(rect: ModuleRect, poly: ModulePolygon) -> tuple[int, bool] | None:

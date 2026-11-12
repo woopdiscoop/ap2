@@ -112,7 +112,6 @@ HARD_CODES: frozenset[str] = frozenset(
         "REQUIRED_ADJ",
         "AVOID_ADJ",
         "NO_CIRCULATION_ACCESS",
-        "SOLID_NO_ACCESS",
     }
 )
 """The hard violation codes of RD 3.4 §3 (``n_hard``), used to rank seeded plans (Q.2)."""
