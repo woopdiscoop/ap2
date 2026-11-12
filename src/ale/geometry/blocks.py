@@ -34,6 +34,12 @@ stack room taller than ``dmax``) also counts in :attr:`BlockOut.no_facade` — o
 at a depth ``<= dmax`` with no compliant width, its room bay takes the area rule's width with
 ``aspect > amax`` (depth wins; :mod:`ale.geometry.evaluate` reports it as a soft
 ``ASPECT_DEPTH``). With the rule off (``dmax is None``) nothing changes.
+
+Ticket R.8 (contracts 1.8.0): a rulebook type with a learned ``depth_m`` gives a per-type soft
+limit ``floor(depth_m.p90 / module)`` (:attr:`Consts.type_dmax`, :attr:`RoomReq.dmax`) that
+replaces ``dmax`` for the ``needs_facade`` rooms of that type; other types keep ``dmax``. The
+hard rule (``max_depth_hard``) keeps the configured value only. Without learned depths
+``type_dmax`` is empty and every result is unchanged.
 """
 
 from __future__ import annotations
@@ -47,7 +53,7 @@ from typing import Literal, Protocol
 from ale.contracts.area_rule import AreaTolerance, area_bounds_mm2
 from ale.contracts.config import AleConfig
 from ale.contracts.corridor_plan import ConnectorBay, FingerBay, RoomBay
-from ale.contracts.models import RoomSpec
+from ale.contracts.models import RoomSpec, Rulebook
 from ale.contracts.units import to_decimal
 from ale.geometry.bay import BlockLattice
 from ale.guards import bounded
@@ -110,6 +116,21 @@ def aspect_ok(a: int, b: int, amax: Fraction) -> bool:
     return max(a, b) * amax.denominator <= amax.numerator * min(a, b)
 
 
+def type_dmax_of(config: AleConfig, rulebook: Rulebook | None) -> tuple[tuple[str, int], ...]:
+    """R.8: ``floor(depth_m.p90 / module)`` per rulebook type with a learned depth (at least
+    one module); empty without a rulebook, without learned depths, or under the hard rule
+    (which applies to the configured value only)."""
+    if rulebook is None or (config.facade.max_depth_m is not None and config.facade.max_depth_hard):
+        return ()
+    m = config.grid.module_mm
+    out: list[tuple[str, int]] = []
+    for key in sorted(rulebook.types):
+        depth = rulebook.types[key].depth_m
+        if depth is not None:
+            out.append((key, max(1, math.floor(Fraction(to_decimal(depth.p90)) * 1000 / m))))
+    return tuple(out)
+
+
 @dataclass(frozen=True)
 class Consts:
     """Grammar constants in modules (RD section 4)."""
@@ -125,9 +146,11 @@ class Consts:
     depth_hard: bool = False
     """Q.4: ``facade.max_depth_hard`` — the depth limit is absolute (``FACADE_DEPTH`` hard,
     depth beats aspect). ``False``: the limit is soft (a cost term, aspect stays hard)."""
+    type_dmax: tuple[tuple[str, int], ...] = ()
+    """R.8: learned soft depth limit in modules per room type (sorted; empty: none)."""
 
     @classmethod
-    def from_config(cls, config: AleConfig) -> Consts:
+    def from_config(cls, config: AleConfig, rulebook: Rulebook | None = None) -> Consts:
         m = config.grid.module_mm
 
         def modules(length_m: float) -> int:
@@ -149,7 +172,13 @@ class Consts:
             ),
             dmax=dmax,
             depth_hard=dmax is not None and config.facade.max_depth_hard,
+            type_dmax=type_dmax_of(config, rulebook),
         )
+
+    @property
+    def depth_on(self) -> bool:
+        """Q.4 / R.8: some depth limit applies (the configured one or a learned one)."""
+        return self.dmax is not None or bool(self.type_dmax)
 
     @property
     def cell_mm2(self) -> int:
@@ -174,6 +203,7 @@ class Consts:
             wmin=self.wmin(spec),
             facade=spec.needs_facade,
             deep=self.deep(spec.needs_facade, target),
+            dmax=dict(self.type_dmax).get(str(spec.type)) if spec.needs_facade else None,
         )
 
     def deep(self, facade: bool, target: Fraction) -> bool:
@@ -196,17 +226,23 @@ class RoomReq:
     """``needs_facade`` (Q.3: façade-aware width in exterior blocks)."""
     deep: bool = False
     """Q.4: ``needs_facade`` and ``T > amax · dmax²`` (see :meth:`Consts.deep`)."""
+    dmax: int | None = None
+    """R.8: learned soft depth limit of the room's type in modules (``None``: ``Consts.dmax``)."""
     _hash: int = field(init=False, repr=False, compare=False, default=0)
 
     def __post_init__(self) -> None:
         object.__setattr__(
             self,
             "_hash",
-            hash((self.target, self.lo, self.hi, self.wmin, self.facade, self.deep)),
+            hash((self.target, self.lo, self.hi, self.wmin, self.facade, self.deep, self.dmax)),
         )
 
     def __hash__(self) -> int:  # cached: requirements key every solver memo
         return self._hash
+
+    def limit(self, k: Consts) -> int | None:
+        """Depth limit in modules of this room: its type's learned one (R.8), else ``k.dmax``."""
+        return self.dmax if self.dmax is not None else k.dmax
 
     def ceil_div(self, side: int) -> int:
         """``ceil(target / side)`` in integer arithmetic."""
@@ -623,7 +659,7 @@ class Solver:
 
         def misses(sol: StackSol) -> tuple[int, int]:
             lit = exterior and sol.rest == 0 and sol.w >= self.k.f
-            dmax = self.k.dmax
+            dmax = reqs[-1].limit(self.k)
             deep = int(lit and dmax is not None and reqs[-1].facade and sol.heights[-1] > dmax)
             return int(reqs[-1].facade and not lit), deep
 
@@ -863,8 +899,8 @@ class Solver:
                 w = max(req.wmin, req.ceil_div(depth)) if found is None else found
                 if req.facade and not (exterior and w >= self.k.f):
                     out.no_facade += 1
-                elif req.facade and self.k.dmax is not None and depth > self.k.dmax:
-                    self._too_deep(out, depth - self.k.dmax, w)
+                elif req.facade and (lim := req.limit(self.k)) is not None and depth > lim:
+                    self._too_deep(out, depth - lim, w)
                 self._room(out, bay.room, req, u, 0, w, depth)
                 u += w
                 continue
@@ -923,7 +959,7 @@ class Solver:
         sol = self.stack(reqs, depth) if width is None else self.stack_options(reqs, depth)[width]
         lit = exterior and sol is not None and sol.rest == 0 and sol.w >= self.k.f
         out.no_facade += sum(r.facade for r in reqs[:-1]) + (reqs[-1].facade and not lit)
-        dmax = self.k.dmax
+        dmax = reqs[-1].limit(self.k)
         deep = lit and dmax is not None and reqs[-1].facade and sol is not None
         if deep and sol is not None and dmax is not None and sol.heights[-1] > dmax:
             self._too_deep(out, sol.heights[-1] - dmax, sol.w)

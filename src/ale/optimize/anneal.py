@@ -192,7 +192,7 @@ class Scorer:
     ) -> None:
         self.rulebook = rulebook
         self.seed = seed
-        self.realizer = RealizeCache(prepared, config)
+        self.realizer = RealizeCache(prepared, config, rulebook)
         self._cache: dict[CorridorPlan, tuple[int, float, Layout | None]] = {}
 
     def __call__(self, plan: CorridorPlan) -> tuple[int, float, Layout | None]:

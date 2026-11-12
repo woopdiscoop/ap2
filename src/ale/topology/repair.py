@@ -90,7 +90,7 @@ class Ctx:
     def build(
         cls, prepared: PreparedInput, rulebook: Rulebook, config: AleConfig, fp: FootprintPieces
     ) -> Ctx:
-        k = Consts.from_config(config)
+        k = Consts.from_config(config, rulebook)
         return cls(
             prepared=prepared,
             rulebook=rulebook,

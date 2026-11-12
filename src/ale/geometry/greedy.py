@@ -90,9 +90,8 @@ def _connectors(fp: FootprintPieces, counts: list[int]) -> list[Connector]:
 
 
 def greedy_plan(prepared: PreparedInput, rulebook: Rulebook, config: AleConfig) -> CorridorPlan:
-    """A simple deterministic plan for ``prepared`` (``rulebook`` is not used)."""
-    del rulebook
-    k = Consts.from_config(config)
+    """A simple deterministic plan for ``prepared`` (``rulebook`` only gives R.8 depth limits)."""
+    k = Consts.from_config(config, rulebook)
     fp = decompose_footprint(prepared.footprint.polygon)
     if len(fp.pieces) > 2:  # G.1: trees of pieces are planned by ``ale.topology.seed_plan``
         raise ValueError("greedy_plan supports footprints of one or two pieces only")

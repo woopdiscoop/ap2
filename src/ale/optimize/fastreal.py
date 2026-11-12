@@ -22,7 +22,7 @@ from ale.contracts.config import AleConfig
 from ale.contracts.corridor_plan import CorridorPlan
 from ale.contracts.footprint import FootprintPieces, decompose_footprint
 from ale.contracts.models import Rulebook
-from ale.geometry.blocks import BlockOut, Consts, Solver
+from ale.geometry.blocks import BlockOut, Consts, Solver, type_dmax_of
 from ale.geometry.evaluate import evaluate
 from ale.geometry.junction import frame
 from ale.geometry.realize import (
@@ -221,10 +221,12 @@ class _CachedRealizer(_Realizer):
 class RealizeCache:
     """Cross-call memo of the realisation of plans on one ``prepared`` / ``config``."""
 
-    def __init__(self, prepared: PreparedInput, config: AleConfig) -> None:
+    def __init__(
+        self, prepared: PreparedInput, config: AleConfig, rulebook: Rulebook | None = None
+    ) -> None:
         self.prepared = prepared
         self.config = config
-        self.consts = Consts.from_config(config)
+        self.consts = Consts.from_config(config, rulebook)
         reqs = {iid: self.consts.req(spec) for iid, spec in prepared.instances}
         self.solver = Solver(self.consts, reqs)
         self.scale = math.lcm(1, *(Fraction(r.target).denominator for r in reqs.values()))
@@ -247,6 +249,8 @@ class RealizeCache:
         if problems:
             return _fail("PLAN_INVALID", "; ".join(problems))
         consts = self.consts
+        if type_dmax_of(self.config, rulebook) != consts.type_dmax:
+            raise ValueError("RealizeCache was built for another rulebook's learned depth limits")
         for i, piece in enumerate(fp.pieces):
             if frame(piece)[1] < consts.s:
                 return _fail("PIECE_TOO_SMALL", f"piece {i} is narrower than the spine width")
