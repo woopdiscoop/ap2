@@ -21,6 +21,7 @@ from dataclasses import dataclass, field
 from ale.contracts.config import AleConfig
 from ale.contracts.models import RoomSpec, Rulebook
 from ale.program.models import PreparedInput
+from ale.topology.cellprior import Prior
 from ale.topology.graph import REQUIRED, build_graph, edges_of_kind
 
 __all__ = ["CellDiagram", "DiagramChecks", "grow"]
@@ -36,8 +37,6 @@ _W_FACADE = 0.25
 _FACADE_PENALTY = 10.0
 _W_ENTRANCE = 0.6
 _W_PARTNER = 0.08
-_W_PRIOR = 4.0
-_W_PRIOR_OTHER = 3.0
 _FRONTAGE_FACTOR = 1.6
 _QUOTA_FACTOR = 4
 _MAX_RESEEDS = 3
@@ -370,16 +369,7 @@ def grow(
             used[p] = True
         seed_cell[iid] = rib.cells[sorted(positions)[len(positions) // 2]] if positions else -1
 
-    prior_cells: dict[int, str] = {}
-    if prior:
-        for (px, py), label in prior.items():
-            if 0 <= px < g.width and 0 <= py < g.height and g.owner[g.idx(px, py)] != OUTSIDE:
-                prior_cells[g.idx(px, py)] = label
-    prior_ribbon: dict[str, list[int]] = {}
-    if prior_cells:
-        for pos_i, c in enumerate(rib.cells):
-            if c in prior_cells:
-                prior_ribbon.setdefault(prior_cells[c], []).append(pos_i)
+    pr = Prior.build(prior, g, rib.cells)
 
     if npos:
         # budget the shares to the usable perimeter
@@ -431,11 +421,8 @@ def grow(
                 continue
             span = []
             near = next((placed_pos[q] for q in partners[iid] if q in placed_pos), None)
-            hint = prior_ribbon.get(str(spec_of[iid].type)) if prior_ribbon else None
-            if hint:
-                # the ribbon positions that carried this type below, in order
-                span = [p for p in hint if not used[p]][:ln]
-            elif near is not None:
+            span = pr.ribbon_span(str(spec_of[iid].type), used, ln)
+            if not span and near is not None:
                 for k in range(npos):
                     span = take_span(max(near) + 1 + k, ln) or take_span(min(near) - ln - k, ln)
                     if span:
@@ -476,18 +463,18 @@ def grow(
         dx, dy = centre[0] - x, centre[1] - y
         return (1 if dx >= 0 else -1, 0) if abs(dx) >= abs(dy) else (0, 1 if dy >= 0 else -1)
 
+    def place_prior(iid: str) -> bool:
+        """Ticket M.3: seed on the free prior cell of the room's type."""
+        c = pr.seed(g, str(spec_of[iid].type), dist_to)
+        if c is not None:
+            claim(iid, c)
+            placed_cells[iid] = c
+        return c is not None
+
     def place_rest(iid: str) -> bool:
-        if prior_cells:
-            label = str(spec_of[iid].type)
-            free_p = [c for c, v in prior_cells.items() if v == label and owner[c] == FREE]
-            if free_p:
-                xs = [g.xy(c)[0] for c in free_p]
-                ys = [g.xy(c)[1] for c in free_p]
-                mid = (sum(xs) / len(xs) + 0.5, sum(ys) / len(ys) + 0.5)
-                c = min(free_p, key=lambda c: dist_to(c, mid))
-                claim(iid, c)
-                placed_cells[iid] = c
-                return True
+        return place_prior(iid) or place_plain(iid)
+
+    def place_plain(iid: str) -> bool:
         if graph.nodes[iid]["service_core"] and core_set:
             nxt = sorted(
                 {j for c in core_set for j in g.nbrs(c) if owner[j] == FREE},
@@ -531,26 +518,8 @@ def grow(
             claim(iid, c)
             placed_cells[iid] = c
 
-    if prior_cells:
-        # Ticket M.3: a room first takes the cells that carried its type on the floor below,
-        # connected to its seed, before the plain growth completes it.
-        for iid in ids:
-            label = str(spec_of[iid].type)
-            if not mine[iid]:
-                continue
-            sx0, sy0 = g.xy(mine[iid][0])
-            while len(mine[iid]) < n_of[iid]:
-                around = {j for c in mine[iid] for j in g.nbrs(c)}
-                cand = [j for j in around if owner[j] == FREE and prior_cells.get(j) == label]
-                if not cand:
-                    break
-                claim(
-                    iid,
-                    min(
-                        cand,
-                        key=lambda j: (abs(g.xy(j)[0] - sx0) + abs(g.xy(j)[1] - sy0), j),
-                    ),
-                )
+    # Ticket M.3: a room first takes the prior cells of its type connected to its seed
+    pr.prefill(g, {iid: str(spec_of[iid].type) for iid in ids}, mine, n_of, claim)
 
     # ------------------------------------------------------------------ growth
     sums = {iid: [0.0, 0.0] for iid in ids}
@@ -569,8 +538,8 @@ def grow(
     quota = {iid: max(1, round(_QUOTA_FACTOR * n_of[iid] / n_max)) for iid in ids}
 
     reseeds = {iid: 0 for iid in ids}
-    label_of = {iid: str(spec_of[iid].type) for iid in ids}
-    label_set = set(label_of.values())
+    present = {str(spec_of[iid].type) for iid in ids}
+    prior_bonus = {iid: pr.bonus(str(spec_of[iid].type), present) for iid in ids}
 
     def refresh(iid: str) -> None:
         sums[iid] = [sum(g.xy(c)[0] for c in mine[iid]), sum(g.xy(c)[1] for c in mine[iid])]
@@ -638,6 +607,7 @@ def grow(
                 cx0: float = cx0,
                 cy0: float = cy0,
                 pcs: list[tuple[float, float]] = pcs,
+                bonus: dict[int, float] = prior_bonus[iid],
             ) -> float:
                 x, y = g.xy(c)
                 s = _W_CENTROID * math.hypot(x - cx0, y - cy0)
@@ -645,12 +615,7 @@ def grow(
                     s += _W_FACADE * fd[c]
                     if fd[c] + 1 > limit_cells:
                         s += _FACADE_PENALTY
-                if prior_cells:
-                    pl = prior_cells.get(c)
-                    if pl == label_of[iid]:
-                        s -= _W_PRIOR
-                    elif pl is not None and pl in label_set:
-                        s += _W_PRIOR_OTHER
+                s += bonus.get(c, 0.0)
                 if iid in ent_room:
                     s += _W_ENTRANCE * (abs(x - ex) + abs(y - ey))
                 for px, py in pcs:

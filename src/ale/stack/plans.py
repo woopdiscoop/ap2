@@ -21,6 +21,7 @@ one cell (0.60 m) from the outline: :func:`build_skeleton_strict` places it so, 
 
 from __future__ import annotations
 
+import math
 import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -28,7 +29,15 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ale.config import AleConfig
-from ale.contracts.models import GridSpec, Layout, PlacedRoom, RoomSpec, SiteSpec, Violation
+from ale.contracts.models import (
+    GridSpec,
+    Layout,
+    PlacedRoom,
+    RoomSpec,
+    Rulebook,
+    SiteSpec,
+    Violation,
+)
 from ale.contracts.serialization import dump_yaml
 from ale.stack.building import Building
 from ale.stack.floors import FloorResult, _core_spec, write_programme_xlsx
@@ -364,7 +373,7 @@ def _generate_floor(
     rb, _ = load_rulebook(rulebook)
     assert rb is not None  # prepare_input validated it
     total = config.optimizer.time_budget_s
-    prior = _prior_positions(prepared, below)
+    prior = _prior_positions(prepared, rb, below, seed)
     seeded = None
     why = ""
     spent = 0.0
@@ -383,7 +392,7 @@ def _generate_floor(
             seed=seed + 1000 * attempt,
             time_budget_s=max(total, 1.0),
             max_attempts=TRY_ATTEMPTS,
-            prior=prior,
+            prior=prior if attempt % 2 == 0 else None,
         )
         spent += seeded.elapsed_s
         attempt += 1
@@ -488,36 +497,40 @@ def _generate_floor(
 
 
 def _prior_positions(
-    prepared: PreparedInput, below: FloorPlan | None
+    prepared: PreparedInput, rulebook: Rulebook, below: FloorPlan | None, seed: int
 ) -> Mapping[str, tuple[float, float]] | None:
     """Positions (footprint metres) of this floor's rooms taken from the rooms of the same spec
-    (then the same type) on ``below``: the k-th room of a spec takes the k-th room of that spec
-    below (ordered by position), so that the floor repeats the room order of its neighbour."""
+    (then the same type) on ``below``, so that the floor repeats the room order of its
+    neighbour. Each room takes the unused room below that is nearest to its own position in
+    the spring embedding (greedy by increasing distance): rooms move to where their type was,
+    not all to the same corner, so the seeding stays feasible."""
     if below is None or not below.rooms_abs:
         return None
+    from ale.topology.embed import embed
+    from ale.topology.graph import build_graph
+
     ox, oy = prepared.footprint.origin_m
     specs = dict(prepared.instances)
+    spring = embed(build_graph(prepared, rulebook), prepared, rulebook, seed=seed)
     old = [r for r in below.rooms_abs if r.kind == "room" and r.spec_id]
-    by_spec: dict[str, list[PlanRoom]] = {}
-    by_type: dict[str, list[PlanRoom]] = {}
-    for r in sorted(old, key=lambda r: (r.rect[0], r.rect[1], r.iid)):
-        by_spec.setdefault(str(r.spec_id), []).append(r)
-        by_type.setdefault(str(r.type), []).append(r)
+    centre = {r.iid: (r.rect[0] + r.rect[2] / 2 - ox, r.rect[1] + r.rect[3] / 2 - oy) for r in old}
     taken: set[str] = set()
     out: dict[str, tuple[float, float]] = {}
-    new_ids = sorted(specs)
     for use_spec in (True, False):
-        for iid in new_ids:
-            if iid in out:
+        pairs = []
+        for iid, spec in specs.items():
+            if iid in out or iid not in spring:
                 continue
-            spec = specs[iid]
-            pool = by_spec.get(spec.id, []) if use_spec else by_type.get(str(spec.type), [])
-            cand = [r for r in pool if r.iid not in taken]
-            if cand:
-                r = cand[0]
-                taken.add(r.iid)
-                x, y, w, h = r.rect
-                out[iid] = (x + w / 2 - ox, y + h / 2 - oy)
+            for r in old:
+                same = r.spec_id == spec.id if use_spec else r.type == str(spec.type)
+                if same and r.iid not in taken:
+                    d = math.dist(spring[iid], centre[r.iid])
+                    pairs.append((d, iid, r.iid))
+        for _, iid, oid in sorted(pairs):
+            if iid in out or oid in taken:
+                continue
+            out[iid] = centre[oid]
+            taken.add(oid)
     return out or None
 
 

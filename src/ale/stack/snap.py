@@ -29,6 +29,7 @@ from ale.stack.grid import Rhythm
 
 __all__ = ["SnapStats", "snap_layout"]
 
+WHY: list[str] = []
 MAX_SHIFT_M = 1.2
 """A wall is never moved farther than this."""
 
@@ -207,6 +208,7 @@ def _shift(
                 else ModuleRect(x=r.x, y=r.y + delta, w=r.w, h=r.h - delta)
             )
         if nr.w < 1 or nr.h < 1:
+            WHY.append("size")
             return None
         spec = specs.get(p.instance_id)
         if spec is not None:
@@ -217,10 +219,13 @@ def _shift(
             if not req.lo <= cells <= req.hi and not (
                 (cells >= was and cells <= req.hi) or (cells <= was and cells >= req.lo)
             ):
+                WHY.append(f"area {p.instance_id} {was}->{cells} [{req.lo},{req.hi}]")
                 return None
             if min(nr.w, nr.h) < req.wmin and min(nr.w, nr.h) < min(r.w, r.h):
+                WHY.append("wmin")
                 return None
         if not aspect_ok(nr.w, nr.h, k.amax) and aspect_ok(r.w, r.h, k.amax):
+            WHY.append("aspect")
             return None
         rooms[i] = PlacedRoom(
             instance_id=p.instance_id, spec_id=p.spec_id, rect=nr, target_area_m2=p.target_area_m2
