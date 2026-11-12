@@ -59,6 +59,8 @@ from ale.stack.skeleton import (
 )
 
 if TYPE_CHECKING:
+    from ale.geometry.bay import BayHint
+    from ale.optimize.anneal import AnnealResult
     from ale.program.models import PreparedInput
     from ale.stack.report import StackResult
 
@@ -186,6 +188,9 @@ class FloorPlan:
     origin: tuple[float, float] = (0.0, 0.0)
     snapped: tuple[int, int, int] = (0, 0, 0)
     """Façade walls found, already on a bay line, moved onto one (:mod:`ale.stack.snap`)."""
+    lattice: tuple[int, int, int] = (0, 0, 0)
+    """M.3b: ``(1 if the annealing ran on the lattice else 0, realisations of
+    :func:`ale.geometry.realize` on it, fallbacks to a lattice-free run)``."""
 
     @property
     def passes(self) -> bool:
@@ -353,10 +358,8 @@ def _generate_floor(
     from ale.export import export_run
     from ale.geometry.checks import check_layout
     from ale.geometry.evaluate import FACADE_CODES
-    from ale.optimize.anneal import anneal
     from ale.program import load_rulebook, prepare_input
     from ale.program.models import InputError
-    from ale.topology import seed_plan
 
     if f.program_cells is None:
         return FloorPlan(f.level, "empty", "aucune pièce hors colonne humide à ce niveau")
@@ -372,48 +375,19 @@ def _generate_floor(
         return FloorPlan(f.level, "failed", f"entrées refusées : {errors}")
     rb, _ = load_rulebook(rulebook)
     assert rb is not None  # prepare_input validated it
-    total = config.optimizer.time_budget_s
     prior = _prior_positions(prepared, rb, below, seed)
-    seeded = None
-    why = ""
-    spent = 0.0
-    attempt = 0
-    # The seeder is chancy on rings around a solid (about one seed in two succeeds): try other
-    # seeds, each bounded by a number of attempts (not by time, so that the result does not
-    # depend on the speed of the machine): at least SEED_TRIES_MIN tries, then more while the
-    # seeding share of the budget lasts, at most SEED_TRIES_MAX.
-    while seeded is None or seeded.realization.layout is None:
-        if attempt >= SEED_TRIES_MAX or (attempt >= SEED_TRIES_MIN and spent >= SEED_SHARE * total):
-            break
-        seeded = seed_plan(
-            prepared,
-            rb,
-            config,
-            seed=seed + 1000 * attempt,
-            time_budget_s=max(total, 1.0),
-            max_attempts=TRY_ATTEMPTS,
-            prior=prior if attempt % 2 == 0 else None,
-        )
-        spent += seeded.elapsed_s
-        attempt += 1
-        if seeded.realization.layout is None:
-            why = "; ".join(f"{x.code}: {x.detail}" for x in seeded.realization.failures)
-    assert seeded is not None
-    if seeded.realization.layout is None:
+    hint = None if rhythm is None else rhythm.hint()
+    res, attempt, why = _seed_and_anneal(prepared, rb, config, prior, seed, hint)
+    if res is None:
         return FloorPlan(
             f.level, "failed", f"aucune réalisation exacte après {attempt} essai(s) ({why})"
         )
-    anneal_config = config.model_copy(
-        update={
-            "optimizer": config.optimizer.model_copy(
-                update={"time_budget_s": max(1.0, total - spent)}
-            )
-        }
-    )
-    res = anneal(prepared, rb, anneal_config, seeded.plan, seed=seed)
     base = res.layout
     snapped = (0, 0, 0)
+    lattice = (0, 0, 0)
     if rhythm is not None:
+        assert hint is not None
+        lattice = (int(hint.stats.fallbacks == 0), hint.stats.realisations, hint.stats.fallbacks)
         from ale.stack.snap import snap_layout
 
         base, st = snap_layout(base, prepared, rb, config, rhythm)
@@ -493,7 +467,69 @@ def _generate_floor(
         outline=ring,
         origin=origin,
         snapped=snapped,
+        lattice=lattice,
     )
+
+
+def _seed_and_anneal(
+    prepared: PreparedInput,
+    rb: Rulebook,
+    config: AleConfig,
+    prior: Mapping[str, tuple[float, float]] | None,
+    seed: int,
+    hint: BayHint | None,
+) -> tuple[AnnealResult | None, int, str]:
+    """Seed (several tries) then anneal one floor; ``(None, tries, why)`` when no seeding
+    realises. With ``hint`` (M.3b) the annealing realises with widths and depths chosen for the
+    bay lines and column lines of the building and its cost gains the lattice term; the seeding
+    (a lattice-free arrangement of the rooms) is as before."""
+    from ale.geometry.bay import use_bay_hint
+    from ale.optimize.anneal import anneal
+    from ale.topology import seed_plan
+
+    total = config.optimizer.time_budget_s
+    seeded = None
+    why = ""
+    spent = 0.0
+    attempt = 0
+    # The seeder is chancy on rings around a solid (about one seed in two succeeds): try
+    # other seeds, each bounded by a number of attempts (not by time, so that the result
+    # does not depend on the speed of the machine): at least SEED_TRIES_MIN tries, then
+    # more while the seeding share of the budget lasts, at most SEED_TRIES_MAX.
+    while seeded is None or seeded.realization.layout is None:
+        if attempt >= SEED_TRIES_MAX or (attempt >= SEED_TRIES_MIN and spent >= SEED_SHARE * total):
+            break
+        seeded = seed_plan(
+            prepared,
+            rb,
+            config,
+            seed=seed + 1000 * attempt,
+            time_budget_s=max(total, 1.0),
+            max_attempts=TRY_ATTEMPTS,
+            prior=prior if attempt % 2 == 0 else None,
+        )
+        spent += seeded.elapsed_s
+        attempt += 1
+        if seeded.realization.layout is None:
+            why = "; ".join(f"{x.code}: {x.detail}" for x in seeded.realization.failures)
+    assert seeded is not None
+    if seeded.realization.layout is None:
+        return None, attempt, why
+    anneal_config = config.model_copy(
+        update={
+            "optimizer": config.optimizer.model_copy(
+                update={"time_budget_s": max(1.0, total - spent)}
+            )
+        }
+    )
+    try:
+        with use_bay_hint(hint):
+            return anneal(prepared, rb, anneal_config, seeded.plan, seed=seed), attempt, why
+    except ValueError:  # the start plan does not realise on the lattice: as without it
+        if hint is None:
+            raise
+        hint.stats.fallbacks += 1
+        return anneal(prepared, rb, anneal_config, seeded.plan, seed=seed), attempt, why
 
 
 def _prior_positions(
@@ -707,6 +743,11 @@ def _trame_lines(res: PlansResult) -> list[str]:
         ),
         f"- Cloisons de façade sur une ligne de travée (à 0,30 m près) : {on_bay} sur {parts}"
         + (f" ({on_bay / parts:.1%})." if parts else "."),
+        (
+            "- Réalisation sur la trame : largeurs des pièces et profondeurs des blocs choisies "
+            "pour les lignes de travée et de poteaux (coût « lattice » de l'optimisation) "
+            f"sur {sum(1 for p in res.floors if p.lattice[0])} niveau(x)."
+        ),
         "",
         "| Niveau | Cloisons de façade | Sur la travée | Poteaux | Poteaux en pièce < 30 m² | "
         "Parois déplacées |",

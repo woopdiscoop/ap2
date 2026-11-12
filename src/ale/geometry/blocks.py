@@ -42,13 +42,14 @@ import math
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field, replace
 from fractions import Fraction
-from typing import Literal
+from typing import Literal, Protocol
 
 from ale.contracts.area_rule import AreaTolerance, area_bounds_mm2
 from ale.contracts.config import AleConfig
 from ale.contracts.corridor_plan import ConnectorBay, FingerBay, RoomBay
 from ale.contracts.models import RoomSpec
 from ale.contracts.units import to_decimal
+from ale.geometry.bay import BlockLattice
 from ale.guards import bounded
 
 __all__ = [
@@ -65,9 +66,30 @@ __all__ = [
 
 _MM2_PER_M2 = 1_000_000
 _LOOP_BUDGET_S = 5.0
+BAY_UNIT = 10_000
+"""M.3b: area-deviation cells charged per unit of lattice cost (large against any block's
+deviation, so the lattice is ranked ahead of the deviation and behind failures / façade)."""
+BAY_COST = 100
+"""M.3b: lattice cost of one partition off a bay line, or of one column line inside a small
+room; a partition within the tolerance but off the line costs its distance in modules."""
+_MAX_PLANS = 200_000
+_BEAM = 3
+"""M.3b: the bay-plan search keeps the states within this many lattice cost units of the best."""
 
 ItemKind = Literal["room", "finger", "stack_strip", "end_strip", "filler"]
 AnyBay = RoomBay | FingerBay | ConnectorBay
+
+
+class LatticeSource(Protocol):
+    """M.3b: what the realiser bound to a :class:`Solver` tells it about a block."""
+
+    def lattice_for(self, where: str, depth: int) -> BlockLattice | None: ...
+
+    def end_cost_for(self, where: str, depth: int, out: BlockOut) -> int: ...
+
+
+BayPlan = tuple[dict[tuple[int, str], int], int]
+"""M.3b: ``({(bay index, "R" room | "L" / "R" stack side): width}, lattice cost)``."""
 
 
 def _ceil_div(a: int, b: int) -> int:
@@ -236,6 +258,8 @@ class BlockOut:
     """G.1: ``junction_to`` → ``(finger u, after the marker)`` of every junction finger."""
     no_facade: int = 0
     """``needs_facade`` rooms predicted to end with façade ``< f`` (Q.3 depth key)."""
+    bay_cost: int | None = None
+    """M.3b: lattice cost of the layout (``None``: laid out without the lattice objective)."""
     _dev: Fraction | None = field(default=None, repr=False, compare=False)
 
     def dev(self) -> Fraction:
@@ -293,6 +317,14 @@ class Solver:
         self.reqs = reqs
         self._bay_cache: dict[tuple[RoomReq, int, bool], int | None] = {}
         self._stack_cache: dict[tuple[tuple[RoomReq, ...], int], StackSol | None] = {}
+        self.owner: LatticeSource | None = None
+        self._choice_cache: dict[
+            tuple[tuple[str, ...], int, bool], tuple[tuple[int, StackSol], ...] | None
+        ] = {}
+        self._option_cache: dict[tuple[tuple[RoomReq, ...], int], dict[int, StackSol]] = {}
+        self._bay_plans: dict[
+            tuple[tuple[AnyBay, ...], int, int, bool, BlockLattice], BayPlan | None
+        ] = {}
 
     # ------------------------------------------------------------------ 5.2 room bay
     def room_bay_width(self, req: RoomReq, depth: int, exterior: bool = False) -> int | None:
@@ -462,6 +494,281 @@ class Solver:
                 best, best_key = StackSol(w=w, heights=tuple(heights), rest=rest), key
         return best
 
+    # ------------------------------------------------------------------ M.3b bay plan
+    def width_window(self, req: RoomReq, depth: int, narrow: bool) -> range:
+        """Every width ``w`` with ``lo <= w·D <= hi``, ``aspect <= amax`` and ``w >= wmin``
+        (``w >= f`` too for a façade room in an exterior block when ``f`` still complies):
+        the widths :meth:`room_bay_width` chooses among. Empty when none."""
+        if depth < req.wmin:
+            return range(0)
+        an, ad = self.k.amax.numerator, self.k.amax.denominator
+        lo = max(req.wmin, _ceil_div(req.lo, depth), _ceil_div(depth * ad, an))
+        hi = min(req.hi // depth, (depth * an) // ad)
+        if narrow and self.k.f <= hi:
+            lo = max(lo, self.k.f)
+        return range(lo, hi + 1)
+
+    def stack_options(self, reqs: tuple[RoomReq, ...], depth: int) -> dict[int, StackSol]:
+        """M.3b: every stack width ``w`` that admits a compliant stack, with its solution (the
+        exact one when every room reaches its target, else the one that keeps every room inside
+        its area window); :meth:`stack` returns one of them."""
+        key = (reqs, depth)
+        if key not in self._option_cache:
+            out: dict[int, StackSol] = {}
+            if depth > 0:
+                wmin_s = max(r.wmin for r in reqs)
+                start = max(wmin_s, _ceil_div(sum(r.lo for r in reqs), depth))
+                for w in range(start, 2 * depth + 1):
+                    sol = self._exact_at(reqs, depth, w) or self._under_at(reqs, depth, w)
+                    if sol is not None:
+                        out[w] = sol
+            self._option_cache[key] = out
+        return self._option_cache[key]
+
+    def _exact_at(self, reqs: tuple[RoomReq, ...], depth: int, w: int) -> StackSol | None:
+        """:meth:`_stack_exact` for one width."""
+        an, ad = self.k.amax.numerator, self.k.amax.denominator
+        k = len(reqs)
+        need = -((-w * ad) // an)
+        if k * need > depth or any(w * need > r.hi for r in reqs):
+            return None
+        heights: list[int] = []
+        for r in reqs:
+            h = max(r.wmin, r.ceil_div(w))
+            if h < need:
+                h = max(h, min(need, r.hi // w))
+            if h < need or h * ad > an * w or w * h > r.hi:
+                return None
+            heights.append(h)
+        rest = depth - sum(heights)
+        if rest < 0:
+            return None
+        for i in range(k - 1, -1, -1):
+            hmax = min(reqs[i].hi // w, (w * an) // ad)
+            add = min(rest, max(0, hmax - heights[i]))
+            heights[i] += add
+            rest -= add
+        return StackSol(w=w, heights=tuple(heights), rest=rest)
+
+    def _under_at(self, reqs: tuple[RoomReq, ...], depth: int, w: int) -> StackSol | None:
+        """:meth:`_stack_under` for one width."""
+        an, ad = self.k.amax.numerator, self.k.amax.denominator
+        k = len(reqs)
+        need = -((-w * ad) // an)
+        if k * need > depth:
+            return None
+        cap = (w * an) // ad
+        lows = [max(r.wmin, need, _ceil_div(r.lo, w)) for r in reqs]
+        highs = [min(r.hi // w, cap) for r in reqs]
+        if sum(lows) > depth or any(lo > hi for lo, hi in zip(lows, highs, strict=True)):
+            return None
+        prefs = [
+            min(max(r.ceil_div(w), lo), hi) for r, lo, hi in zip(reqs, lows, highs, strict=True)
+        ]
+        heights = list(lows)
+        rest = depth - sum(heights)
+        for limits in (prefs, highs):
+            for i in range(k - 1, -1, -1):
+                add = min(rest, limits[i] - heights[i])
+                heights[i] += add
+                rest -= add
+        return StackSol(w=w, heights=tuple(heights), rest=rest)
+
+    def bay_plan(
+        self,
+        bays: tuple[AnyBay, ...],
+        depth: int,
+        length: int,
+        exterior: bool,
+        lat: BlockLattice,
+    ) -> BayPlan | None:
+        """M.3b: the widths of the room bays and stacks of a block laid out at ``depth`` that
+        minimise the lattice cost, or ``None`` when the block is laid out as without a
+        lattice (a connector marker, a room or stack with no compliant width).
+
+        Dynamic programme over the items in order (room bay, stack, finger strip), state =
+        running position ``u`` along the spine; each room takes a width inside
+        :meth:`width_window`, each stack a width of :meth:`stack_options` that lights its
+        outer room as the default does. Cost, minimised in this order: the lattice cost (in an
+        exterior block each room side strictly inside the block that is off a bay line by more
+        than ``tol`` costs 100, within ``tol`` its distance; in any block each column line
+        inside a room of less than ``small_mm2``, times the column lines across it, costs
+        100), then the area deviation (with stack-end strips).
+        """
+        key = (bays, depth, length, exterior, lat)
+        if key not in self._bay_plans:
+            if len(self._bay_plans) >= _MAX_PLANS:
+                self._bay_plans.clear()
+            self._bay_plans[key] = self._bay_plan(bays, depth, length, exterior, lat)
+        return self._bay_plans[key]
+
+    def _stack_choices(
+        self, rooms: tuple[str, ...], depth: int, exterior: bool
+    ) -> tuple[tuple[int, StackSol], ...] | None:
+        """Stack widths :meth:`bay_plan` may pick: those whose solution has no more predicted
+        façade / depth misses than the default one (``None``: no compliant stack)."""
+        key = (rooms, depth, exterior)
+        if key not in self._choice_cache:
+            self._choice_cache[key] = self._stack_choices_uncached(rooms, depth, exterior)
+        return self._choice_cache[key]
+
+    def _stack_choices_uncached(
+        self, rooms: tuple[str, ...], depth: int, exterior: bool
+    ) -> tuple[tuple[int, StackSol], ...] | None:
+        reqs = tuple(self.reqs[r] for r in rooms)
+        default = self.stack(reqs, depth)
+        if default is None:
+            return None
+        options = self.stack_options(reqs, depth)
+
+        def misses(sol: StackSol) -> tuple[int, int]:
+            lit = exterior and sol.rest == 0 and sol.w >= self.k.f
+            dmax = self.k.dmax
+            deep = int(lit and dmax is not None and reqs[-1].facade and sol.heights[-1] > dmax)
+            return int(reqs[-1].facade and not lit), deep
+
+        base = misses(default)
+        keep = [
+            (w, sol)
+            for w, sol in options.items()
+            if all(a <= b for a, b in zip(misses(sol), base, strict=True))
+        ]
+        if not any(w == default.w for w, _ in keep):
+            keep.append((default.w, default))
+            keep.sort(key=lambda t: t[0])
+        return tuple(keep)
+
+    def _bay_plan(
+        self,
+        bays: tuple[AnyBay, ...],
+        depth: int,
+        length: int,
+        exterior: bool,
+        lat: BlockLattice,
+    ) -> BayPlan | None:
+        s = self.k.s
+        # item: (slot, widths, solutions | None, req | None, start side, end side)
+        Slot = tuple[int, str]
+        items: list[
+            tuple[
+                Slot,
+                tuple[int, ...],
+                dict[int, StackSol] | None,
+                RoomReq | None,
+                bool,
+                bool,
+            ]
+        ] = []
+        defaults: list[tuple[Slot, int]] = []  # the width RD 3.3 §5.2 gives each item
+        for b, bay in enumerate(bays):
+            if isinstance(bay, ConnectorBay):
+                return None
+            if isinstance(bay, RoomBay):
+                req = self.reqs[bay.room]
+                found = self.room_bay_width(req, depth, exterior)
+                if found is None:
+                    return None
+                defaults.append(((b, "B"), found))
+                win = tuple(self.width_window(req, depth, exterior and req.facade))
+                items.append(((b, "B"), win if found in win else (found,), None, req, True, True))
+                continue
+            for tag, rooms in (("L", bay.left), ("S", ()), ("R", bay.right)):
+                if tag == "S":
+                    items.append(((b, "S"), (s,), None, None, False, False))
+                    continue
+                if not rooms:
+                    continue
+                choices = self._stack_choices(rooms, depth, exterior)
+                if choices is None:
+                    return None
+                sols = dict(choices)
+                dflt = self.stack(tuple(self.reqs[r] for r in rooms), depth)
+                assert dflt is not None  # _stack_choices returned choices
+                defaults.append(((b, tag), dflt.w))
+                items.append(((b, tag), tuple(sols), sols, None, True, True))
+        default_w = {slot: w0 for slot, w0 in defaults}
+        n = len(items)
+        rest = [0] * (n + 1)  # least total width of items i..n-1
+        for i in range(n - 1, -1, -1):
+            rest[i] = rest[i + 1] + items[i][1][0]
+        if rest[0] > length:
+            return None
+        cell = self.k.cell_mm2
+        bay_p, bay_r, tol = lat.bay, lat.bay_res, lat.tol
+        col, col_res, edge = lat.col, lat.col_res, lat.edge
+        use_cols = col > 0 and bool(lat.cross_t)
+
+        def side(pos: int) -> int:
+            """Cost of a room side at ``pos`` (exterior blocks, strictly inside the block)."""
+            if not exterior or bay_p == 0 or pos <= 0 or pos >= length:
+                return 0
+            r = (pos - bay_r) % bay_p
+            d = min(r, bay_p - r)
+            return BAY_COST if d > tol else d
+
+        def across(t0: int, t1: int) -> int:
+            return sum(1 for t in lat.cross_t if t0 + edge <= t <= t1 - edge)
+
+        cur: dict[int, tuple[int, float]] = {0: (0, 0.0)}
+        back: list[dict[int, tuple[int, int]]] = []
+        for i, (slot, win, i_sols, i_req, _start, end_side) in enumerate(items):
+            # per width: distance to the default width (it breaks the ties of the lattice
+            # cost, so that an indifferent lattice keeps today's widths) and, for the small
+            # rooms, the column lines across them
+            prep: list[tuple[int, float, int]] = []
+            for w in win:
+                dev_w = float(abs(w - default_w[slot])) if slot in default_w else 0.0
+                cross = 0
+                if i_req is not None:
+                    if use_cols and w * depth * cell < lat.small_mm2:
+                        cross = across(0, depth)
+                elif i_sols is not None:
+                    sol = i_sols[w]
+                    t = 0
+                    for h in sol.heights:
+                        if use_cols and w * h * cell < lat.small_mm2:
+                            cross += across(t, t + h)
+                        t += h
+                prep.append((w, dev_w, cross))
+            nxt: dict[int, tuple[int, float]] = {}
+            how: dict[int, tuple[int, int]] = {}
+            start_side = items[i][4]
+            prev_end = items[i - 1][5] if i else False
+            room_after = rest[i + 1]
+            limit = min(c for c, _ in cur.values()) + _BEAM * BAY_COST
+            for pos, (cost, dev) in cur.items():
+                if cost > limit:
+                    continue
+                base = cost + (side(pos) if start_side and not prev_end else 0)
+                for w, dev_w, cross in prep:
+                    end = pos + w
+                    if end + room_after > length:
+                        break
+                    c = base + side(end) if end_side else base
+                    if cross:
+                        first = -((col_res - (pos + edge)) // col)  # ceil((x0 - res) / col)
+                        last = (end - edge - col_res) // col
+                        if last >= first:
+                            c += BAY_COST * (last - first + 1) * cross
+                    d = dev + dev_w
+                    old = nxt.get(end)
+                    if old is None or (c, d) < old:
+                        nxt[end] = (c, d)
+                        how[end] = (pos, w)
+            if not nxt:
+                return None
+            back.append(how)
+            cur = nxt
+        pos = min(cur, key=lambda e: (cur[e], e))
+        total = cur[pos][0]
+        widths_out: dict[tuple[int, str], int] = {}
+        for i in range(n - 1, -1, -1):
+            prev, w = back[i][pos]
+            if items[i][0][1] != "S":
+                widths_out[items[i][0]] = w
+            pos = prev
+        return widths_out, total
+
     # ------------------------------------------------------------------ 5.4 block
     def block(
         self,
@@ -470,13 +777,49 @@ class Solver:
         length: int,
         where: str,
         exterior: bool = False,
+        lattice: BlockLattice | None = None,
     ) -> BlockOut:
         """Lay out ``bays`` in a block of ``depth`` x ``length``; ``where`` names it.
 
         A :class:`ConnectorBay` marker takes ``s`` along the spine right after the bays
         before it (the piece moves it to its connector, see :meth:`BlockOut.placed`).
         ``exterior``: the block's outer long side lies on the footprint exterior (Q.3).
+        ``lattice`` (M.3b, or the one the bound realiser gives for ``where``): when the block
+        lays out without failure, choose the widths of its room bays and stacks inside their
+        windows for the lattice (:meth:`bay_plan`) and lay it out again with them; its
+        ``area_dev`` gains the lattice cost ahead of the area deviation. ``None`` and no bound
+        realiser: the widths of RD 3.3 §5.2, unchanged.
         """
+        out = self._lay(bays, depth, length, where, exterior, {})
+        own = self.owner if lattice is None else None
+        if own is not None:
+            lattice = own.lattice_for(where, depth)
+        if lattice is None or out.failures or out.depth <= 0:
+            return out
+        if lattice.bay == 0 and lattice.col == 0:  # nothing to aim at
+            return out
+        plan = self.bay_plan(bays, depth, length, exterior, lattice)
+        if plan is None:
+            return out
+        if plan[0]:
+            again = self._lay(bays, depth, length, where, exterior, plan[0])
+            if again.failures or again.no_facade > out.no_facade:  # pragma: no cover - guarded
+                return out
+            out = again
+        extra = 0 if own is None else own.end_cost_for(where, depth, out)
+        out.bay_cost = plan[1] + extra
+        out.area_dev += BAY_UNIT * out.bay_cost
+        return out
+
+    def _lay(
+        self,
+        bays: tuple[AnyBay, ...],
+        depth: int,
+        length: int,
+        where: str,
+        exterior: bool,
+        chosen: dict[tuple[int, str], int],
+    ) -> BlockOut:
         out = BlockOut(depth=depth)
         s = self.k.s
         has_marker = any(isinstance(bay, ConnectorBay) for bay in bays)
@@ -507,7 +850,9 @@ class Solver:
                 continue
             if isinstance(bay, RoomBay):
                 req = self.reqs[bay.room]
-                found = self.room_bay_width(req, depth, exterior)
+                found = chosen.get((b, "B"))
+                if found is None:
+                    found = self.room_bay_width(req, depth, exterior)
                 if found is None:
                     out.failures.append(
                         (
@@ -523,7 +868,9 @@ class Solver:
                 self._room(out, bay.room, req, u, 0, w, depth)
                 u += w
                 continue
-            w_left = self._stack_items(out, bay.left, u, depth, f"{where} bay {b} left", exterior)
+            w_left = self._stack_items(
+                out, bay.left, u, depth, f"{where} bay {b} left", exterior, chosen.get((b, "L"))
+            )
             finger_u = u + w_left
             out.items.append(Item("finger", None, finger_u, 0, s, depth))
             if bay.junction:
@@ -531,7 +878,13 @@ class Solver:
                 out.junction_post = out.marker is not None
                 out.fingers[bay.junction_to] = (finger_u, out.marker is not None)
             w_right = self._stack_items(
-                out, bay.right, finger_u + s, depth, f"{where} bay {b} right", exterior
+                out,
+                bay.right,
+                finger_u + s,
+                depth,
+                f"{where} bay {b} right",
+                exterior,
+                chosen.get((b, "R")),
             )
             u = finger_u + s + w_right
         if out.marker is not None:
@@ -560,12 +913,14 @@ class Solver:
         depth: int,
         where: str,
         exterior: bool = False,
+        width: int | None = None,
     ) -> int:
-        """Append a stack's rooms (and stack-end strip) at ``u``; return its width."""
+        """Append a stack's rooms (and stack-end strip) at ``u``; return its width. ``width``
+        (M.3b): the stack width chosen by :meth:`bay_plan`."""
         if not rooms:
             return 0
         reqs = tuple(self.reqs[r] for r in rooms)
-        sol = self.stack(reqs, depth)
+        sol = self.stack(reqs, depth) if width is None else self.stack_options(reqs, depth)[width]
         lit = exterior and sol is not None and sol.rest == 0 and sol.w >= self.k.f
         out.no_facade += sum(r.facade for r in reqs[:-1]) + (reqs[-1].facade and not lit)
         dmax = self.k.dmax

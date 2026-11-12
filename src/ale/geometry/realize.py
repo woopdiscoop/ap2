@@ -38,6 +38,7 @@ never exceptions.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from fractions import Fraction
@@ -49,7 +50,23 @@ from ale.contracts.config import AleConfig
 from ale.contracts.corridor_plan import BandPlan, ConnectorBay, CorridorPlan, FingerBay, RoomBay
 from ale.contracts.footprint import FootprintPieces, Junction, Piece, decompose_footprint
 from ale.contracts.models import Layout, LayoutMetrics, PlacedRoom, RoomSpec, Rulebook
-from ale.geometry.blocks import AnyBay, BlockOut, Consts, Item, RoomReq, Solver
+from ale.geometry.bay import (
+    WALL_MM,
+    BlockLattice,
+    axis_lattice,
+    current_bay_hint,
+    lines_in,
+    use_bay_hint,
+)
+from ale.geometry.blocks import (
+    BAY_COST,
+    AnyBay,
+    BlockOut,
+    Consts,
+    Item,
+    RoomReq,
+    Solver,
+)
 from ale.geometry.checks import exterior_contacts
 from ale.geometry.evaluate import evaluate
 from ale.geometry.junction import (
@@ -190,6 +207,7 @@ class _PieceOut:
 
 _SOLVERS: dict[tuple[Consts, tuple[tuple[str, RoomReq], ...]], Solver] = {}
 _MAX_SOLVERS = 8
+_WHERE = re.compile(r"piece (\d+) band (\d+) block ([AB])")
 
 
 def shared_solver(consts: Consts, reqs: dict[str, RoomReq]) -> Solver:
@@ -226,6 +244,12 @@ class _Realizer:
         self._fixed: dict[tuple[int, int], _PieceOut] = {}
         self._exterior: dict[tuple[int, int, str], bool] = {}
         self._poly = prepared.footprint.polygon
+        self.hint = current_bay_hint()
+        self.solver.owner = None
+        if self.hint is not None:
+            ox, oy = prepared.footprint.origin_m
+            self._origin_mm = (round(ox * 1000), round(oy * 1000))
+            self.solver.owner = self
 
     # ------------------------------------------------------------------ frames
     def region(self, p: int) -> tuple[int, int]:
@@ -267,6 +291,103 @@ class _Realizer:
             hit = self.solver.block(bays, depth, length, where, self.exterior(p, k, side))
             self._blocks[key] = hit
         return hit
+
+    def lattice(self, p: int, k: int, side: str, depth: int) -> BlockLattice:
+        """The hint seen from block ``side`` of band ``k`` of piece ``p`` at ``depth``."""
+        piece = self.fp.pieces[p]
+        h = self.hint
+        assert h is not None
+        mod = self.k.module_mm
+        along_x = piece.spine_axis == "X"
+        u0, _ = self.region(p)
+        a, c = (0, 1) if along_x else (1, 0)  # axis index along / across the spine
+        start = self._origin_mm[a] + (along_origin(piece) + u0) * mod
+        bay_mm = (h.bay_x_mm, h.bay_y_mm)[a]
+        line_mm = (h.line_x_mm, h.line_y_mm)[a]
+        col_mm = (h.col_x_mm, h.col_y_mm)[a]
+        colline_mm = (h.colline_x_mm, h.colline_y_mm)[a]
+        bay, bay_res = axis_lattice(line_mm, bay_mm, start, mod)
+        col, col_res = axis_lattice(colline_mm, col_mm, start, mod)
+        edge = WALL_MM // mod + 1
+        across_mm = (h.col_x_mm, h.col_y_mm)[c]
+        across_line = (h.colline_x_mm, h.colline_y_mm)[c]
+        origin = self._origin_mm[c] + across_origin(piece) * mod
+        cross_t: tuple[int, ...] = ()
+        if len(self.plan.pieces[p].bands) == 1:  # v0 = 0: the block's place across is known
+            full = frame(piece)[1]
+            v_lo = 0 if side == "A" else full - depth
+            lines = lines_in(
+                across_line, across_mm, origin + v_lo * mod, origin + (v_lo + depth) * mod
+            )
+            ts = []
+            for ln in lines:
+                if (ln - origin) % mod:
+                    continue
+                v = (ln - origin) // mod
+                ts.append(depth - v if side == "A" else v - v_lo)
+            cross_t = tuple(sorted(ts))
+        return BlockLattice(
+            bay=bay,
+            bay_res=bay_res,
+            col=col,
+            col_res=col_res,
+            tol=h.tol_mm // mod,
+            edge=edge,
+            cross_t=cross_t,
+            small_mm2=h.small_mm2,
+        )
+
+    def end_cost(self, p: int, side: str, depth: int, out: BlockOut) -> int:
+        """Lattice cost of the room sides on the end walls of a block (single-band piece): a
+        room that touches an exterior end wall has a side on that wall at the block's inner
+        edge, whose position across the piece is fixed by the depth."""
+        piece = self.fp.pieces[p]
+        h = self.hint
+        assert h is not None
+        mod = self.k.module_mm
+        along_x = piece.spine_axis == "X"
+        c = 1 if along_x else 0
+        bay_mm = (h.bay_x_mm, h.bay_y_mm)[c]
+        line_mm = (h.line_x_mm, h.line_y_mm)[c]
+        if bay_mm <= 0:
+            return 0
+        u0, length = self.region(p)
+        full = frame(piece)[1]
+        v_lo = 0 if side == "A" else full - depth
+        inner = depth if side == "A" else full - depth  # v of the block's inner edge
+        rooms = [it for it in out.items if it.kind == "room"]
+        total = 0
+        for end in (0, length):
+            if not any(
+                (it.u == 0 if end == 0 else it.u + it.du == length) and it.t == 0 for it in rooms
+            ):
+                continue
+            wall = to_abs(piece, u0 + (0 if end == 0 else length - 1), v_lo, 1, depth)
+            contact = sum(ln for ln, _ in exterior_contacts(wall, self._poly))
+            if 2 * contact < depth:
+                continue
+            r = (self._origin_mm[c] + (across_origin(piece) + inner) * mod - line_mm) % bay_mm
+            d = min(r, bay_mm - r)
+            total += BAY_COST if d > h.tol_mm else d // mod
+        return total
+
+    def lattice_for(self, where: str, depth: int) -> BlockLattice | None:
+        """M.3b: the lattice of the block named by ``where`` (``"piece p band k block S"``)
+        at ``depth``; ``None`` without a hint or for an unknown name. Called by
+        :meth:`Solver.block` for the realiser that is bound to it."""
+        if self.hint is None:
+            return None
+        m = _WHERE.fullmatch(where)
+        if m is None:
+            return None
+        return self.lattice(int(m.group(1)), int(m.group(2)), m.group(3), depth)
+
+    def end_cost_for(self, where: str, depth: int, out: BlockOut) -> int:
+        """M.3b: :meth:`end_cost` of the block named by ``where`` (single-band pieces only)."""
+        m = _WHERE.fullmatch(where)
+        if self.hint is None or m is None or len(self.plan.pieces[int(m.group(1))].bands) != 1:
+            return 0
+        return self.end_cost(int(m.group(1)), m.group(3), depth, out)
 
     # ------------------------------------------------------------------ depths
     def min_depth(self, bays: Bays) -> int:
@@ -806,7 +927,30 @@ def realize(
     *,
     seed: int = 0,
 ) -> Realization:
-    """Realise ``plan`` on ``prepared``'s footprint and score it with :func:`evaluate`."""
+    """Realise ``plan`` on ``prepared``'s footprint and score it with :func:`evaluate`.
+
+    With a :class:`ale.geometry.bay.BayHint` active (:func:`ale.geometry.bay.use_bay_hint`,
+    M.3b) widths and depths are chosen for the lattice; a plan that then fails is realised
+    again without it (counted in ``hint.stats.fallbacks``). Without a hint: unchanged.
+    """
+    hint = current_bay_hint()
+    got = _realize(prepared, plan, rulebook, config, seed)
+    if hint is not None:
+        if got.layout is None:
+            hint.stats.fallbacks += 1
+            with use_bay_hint(None):
+                return _realize(prepared, plan, rulebook, config, seed)
+        hint.stats.realisations += 1
+    return got
+
+
+def _realize(
+    prepared: PreparedInput,
+    plan: CorridorPlan,
+    rulebook: Rulebook,
+    config: AleConfig,
+    seed: int,
+) -> Realization:
     try:
         fp = decompose_footprint(prepared.footprint.polygon)
     except ValueError as exc:

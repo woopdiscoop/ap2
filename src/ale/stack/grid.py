@@ -29,6 +29,7 @@ from typing import TYPE_CHECKING
 import shapely
 from shapely import Polygon as ShPolygon
 
+from ale.geometry.bay import BayHint
 from ale.stack.rules import RhythmInputError, StackRules
 from ale.stack.skeleton import AREA_CELL_M2, CELL_M, CellRect, Skeleton
 from ale.topology.cellgrow import OUTSIDE, CellDiagram
@@ -141,6 +142,23 @@ class Rhythm:
 
     def off_bay_y(self, y: float) -> float:
         return _off(y - self.oy, self.phase_y, self.bay)
+
+    def hint(self) -> BayHint:
+        """The lattice for the realiser (M.3b): bay lines and column lines in millimetres."""
+
+        def mm(metres: float) -> int:
+            return round(metres * 1000)
+
+        return BayHint(
+            bay_x_mm=mm(self.bay * CELL_M),
+            bay_y_mm=mm(self.bay * CELL_M),
+            line_x_mm=mm(self.ox + self.phase_x * CELL_M),
+            line_y_mm=mm(self.oy + self.phase_y * CELL_M),
+            col_x_mm=mm(self.span_x * CELL_M),
+            col_y_mm=mm(self.span_y * CELL_M),
+            colline_x_mm=mm(self.ox + self.phase_x * CELL_M),
+            colline_y_mm=mm(self.oy + self.phase_y * CELL_M),
+        )
 
     def core_on_grid(self, core: CellRect) -> bool:
         """The west and south sides of the core lie on grid lines."""
