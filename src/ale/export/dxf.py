@@ -16,6 +16,7 @@ from typing import Any
 from ale.contracts.models import Layout
 from ale.export.report import MetricFrame, area_label, room_infos
 from ale.program.models import PreparedInput
+from ale.program.site import solid_labels
 
 __all__ = [
     "GRID_SPACING_MM",
@@ -62,7 +63,7 @@ def _mtext_escape(text: str) -> str:
 
 def _draw_solids(msp: Any, layout: Layout, prepared: PreparedInput, frame: MetricFrame) -> None:
     """Solids (outline, hatch, core id) and the fixed rooms placed inside them (Ticket M.2)."""
-    names = [c.id for c in prepared.site.cores]
+    names = solid_labels(prepared.site, prepared.footprint, prepared.grid)
     for k, ring in enumerate(layout.footprint.solids):
         pts = [frame.point(p) for p in ring]
         msp.add_lwpolyline(pts, close=True, dxfattribs={"layer": "ALE_SOLID"})

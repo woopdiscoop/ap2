@@ -14,6 +14,7 @@ from ale.contracts.enums import MacroZone
 from ale.contracts.models import Layout
 from ale.export.report import MetricFrame, fr_num, room_infos
 from ale.program.models import PreparedInput
+from ale.program.site import solid_labels
 
 __all__ = ["CIRC_FILL", "CIRC_STROKE", "ZONE_COLOURS", "render_svg", "svg_num"]
 
@@ -110,7 +111,7 @@ def _solids_svg(
     """Hatched solids with the core id, and the fixed rooms (Ticket M.2); empty without solids."""
     if not layout.footprint.solids:
         return []
-    names = [c.id for c in prepared.site.cores]
+    names = solid_labels(prepared.site, prepared.footprint, prepared.grid)
     out = [
         "<defs>",
         '<pattern id="solid-hatch" width="0.3" height="0.3" patternUnits="userSpaceOnUse" '

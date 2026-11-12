@@ -32,6 +32,7 @@ __all__ = [
     "normalise_footprint",
     "read_site",
     "site_from_mapping",
+    "solid_labels",
     "to_module_footprint",
 ]
 
@@ -716,19 +717,68 @@ def _module_holes(
     return tuple(out)
 
 
+def _core_rects(site: SiteSpec, x0: int, y0: int, module: int) -> list[tuple[int, int, int, int]]:
+    """Core rectangles snapped outward onto the module grid: ``(x0, y0, x1, y1)`` in modules."""
+    out: list[tuple[int, int, int, int]] = []
+    for core in site.cores:
+        x, y, w, h = core.rect
+        out.append(
+            (
+                _floor_div(m_to_mm(x) - x0, module),
+                _floor_div(m_to_mm(y) - y0, module),
+                _ceil_div(m_to_mm(x + w) - x0, module),
+                _ceil_div(m_to_mm(y + h) - y0, module),
+            )
+        )
+    return out
+
+
 def _module_solids(
     site: SiteSpec, x0: int, y0: int, module: int
 ) -> tuple[tuple[MmPoint, ...], ...]:
-    """Cores as solids (Ticket M.2): each rectangle snapped outward onto the module grid,
-    clockwise from its lower-left corner."""
+    """Cores as solids (Ticket M.2): each rectangle snapped outward onto the module grid.
+
+    Cores that touch (a stair core and the wet stack beside it) merge into one solid, so the
+    solids never touch each other. Rings are clockwise, starting at the lowest-leftmost vertex.
+    """
+    if not site.cores:
+        return ()
+    import shapely
+
+    union: Any = shapely.union_all([shapely.box(*r) for r in _core_rects(site, x0, y0, module)])
+    parts: list[Any] = list(union.geoms) if union.geom_type == "MultiPolygon" else [union]
     out: list[tuple[MmPoint, ...]] = []
-    for core in site.cores:
-        x, y, w, h = core.rect
-        xl = _floor_div(m_to_mm(x) - x0, module)
-        yl = _floor_div(m_to_mm(y) - y0, module)
-        xh = _ceil_div(m_to_mm(x + w) - x0, module)
-        yh = _ceil_div(m_to_mm(y + h) - y0, module)
-        out.append(((xl, yl), (xl, yh), (xh, yh), (xh, yl)))
+    for part in parts:
+        if part.interiors:
+            raise _fail("E_SITE_INVALID", "Des noyaux accolés entourent une cour : non géré.")
+        pts = [(round(x), round(y)) for x, y in part.exterior.coords][:-1]
+        if _twice_area(pts) > 0:
+            pts.reverse()  # clockwise
+        edges = _rotate_to_start(_simplify(_ring_edges(pts)))
+        out.append(tuple(e.a for e in edges))
+    return tuple(sorted(out, key=lambda r: (r[0][1], r[0][0])))
+
+
+def solid_labels(site: SiteSpec, footprint: ModuleFootprint, grid: GridSpec) -> tuple[str, ...]:
+    """Label of every solid of ``footprint.polygon``: the ids of the cores it merges, joined
+    by ``+`` (Ticket M.2; used by the DXF / SVG exports)."""
+    if not footprint.polygon.solids:
+        return ()
+    import shapely
+
+    module = check_module_mm(grid.module_mm)
+    x0 = min(m_to_mm(p[0]) for p in site.footprint.exterior)
+    y0 = min(m_to_mm(p[1]) for p in site.footprint.exterior)
+    rects = _core_rects(site, x0, y0, module)
+    out: list[str] = []
+    for ring in footprint.polygon.solids:
+        poly = shapely.Polygon(ring)
+        ids = [
+            c.id
+            for c, r in zip(site.cores, rects, strict=True)
+            if poly.contains(shapely.box(*r).representative_point())
+        ]
+        out.append("+".join(ids))
     return tuple(out)
 
 
