@@ -64,6 +64,9 @@ __all__ = [
 PLANS_NAME = "plans.md"
 GAP_PREFIX = "reserve_technique_g"
 SEED_SHARE = 0.6
+SEED_TRIES_MIN = 8
+SEED_TRIES_MAX = 12
+TRY_ATTEMPTS = 12
 DEFAULT_BUDGET_S = 20.0
 MARGINS_CELLS = (6, 4, 2, 1)
 """Cells (0.60 m) kept between the wet stack and the outline of the top floor, tried in order:
@@ -327,15 +330,20 @@ def _generate_floor(
     why = ""
     spent = 0.0
     attempt = 0
-    # The seeder is chancy on rings around a solid: retry other seeds while the seeding share
-    # (60 %) of the budget lasts, then anneal with what is left.
+    # The seeder is chancy on rings around a solid (about one seed in two succeeds): try other
+    # seeds, each bounded by a number of attempts (not by time, so that the result does not
+    # depend on the speed of the machine): at least SEED_TRIES_MIN tries, then more while the
+    # seeding share of the budget lasts, at most SEED_TRIES_MAX.
     while seeded is None or seeded.realization.layout is None:
-        left = SEED_SHARE * total - spent
-        if attempt > 0 and left < 0.5:
+        if attempt >= SEED_TRIES_MAX or (attempt >= SEED_TRIES_MIN and spent >= SEED_SHARE * total):
             break
-        slot = min(left, max(1.5, 0.12 * total))
         seeded = seed_plan(
-            prepared, rb, config, seed=seed + 1000 * attempt, time_budget_s=max(slot, 0.5)
+            prepared,
+            rb,
+            config,
+            seed=seed + 1000 * attempt,
+            time_budget_s=max(total, 1.0),
+            max_attempts=TRY_ATTEMPTS,
         )
         spent += seeded.elapsed_s
         attempt += 1

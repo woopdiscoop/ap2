@@ -39,7 +39,7 @@ from ale.stack.plans import (
 )
 from ale.stack.skeleton import CELL_M, rect_cells
 
-BUDGET = 12.0
+BUDGET = 10.0
 
 
 def run_cli(args: list[str]) -> Any:
