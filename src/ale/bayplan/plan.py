@@ -203,6 +203,10 @@ class _Geom:
     BL: list[int]
     minw: int
     solid: Rect  # (su0, sv0, dsu, dsv)
+    col_u: list[int] = field(default_factory=list)
+    col_v: list[int] = field(default_factory=list)
+    small_m2: float = 30.0
+    unit_m: float = 0.1
     span0: int = 0
     span1: int = 0
     cu0: int = 0
@@ -216,6 +220,18 @@ class _Geom:
         if self.transposed:
             return (self.x0 + v, self.y0 + u, dv, du)
         return (self.x0 + u, self.y0 + v, du, dv)
+
+    def col_inside(self, u0: int, u1: int, v0: int, v1: int) -> bool:
+        """A column of the grid stands inside the rectangle (farther than 0.15 m from its sides)."""
+        m = 0.15 / self.unit_m
+        return any(u0 + m < x < u1 - m for x in self.col_u) and any(
+            v0 + m < y < v1 - m for y in self.col_v
+        )
+
+    def small_with_column(self, u0: int, u1: int, v0: int, v1: int) -> bool:
+        """The rectangle is a room under 30 m2 with a column inside (to avoid)."""
+        area = (u1 - u0) * (v1 - v0) * self.unit_m * self.unit_m
+        return area < self.small_m2 and self.col_inside(u0, u1, v0, v1)
 
     def pidx(self, u: int) -> int:
         return self.P.index(u)
@@ -286,6 +302,21 @@ def _read_geometry(
         k.s,
         (su0, sv0, su1 - su0, sv1 - sv0),
     )
+    g.unit_m = mm / 1000
+    u_len = L * mm / 1000
+    v_abs0 = origin[0 if transposed else 1] + (x0 if transposed else y0) * mm / 1000
+    cu = (
+        rhythm.grid_lines_y(u_abs0, u_abs0 + u_len)
+        if transposed
+        else rhythm.grid_lines_x(u_abs0, u_abs0 + u_len)
+    )
+    cv = (
+        rhythm.grid_lines_x(v_abs0, v_abs0 + dp * mm / 1000)
+        if transposed
+        else rhythm.grid_lines_y(v_abs0, v_abs0 + dp * mm / 1000)
+    )
+    g.col_u = [round((a - u_abs0) * 1000 / mm) for a in cu]
+    g.col_v = [round((a - v_abs0) * 1000 / mm) for a in cv]
     return g
 
 
@@ -504,6 +535,7 @@ def plan_bar(
         raise NotEligible("le volume plein barre les deux couloirs : contournement hors M.4")
     if not pass_n:
         g.mirror = True
+        g.col_v = [dp - y for y in g.col_v]
         g.solid = (su0, dp - sv0 - dsv, dsu, dsv)
         su0, sv0, dsu, dsv = g.solid
         parts = parts_for(sv0, sv0 + dsv)
@@ -700,14 +732,16 @@ def plan_bar(
     groups = sorted({it.group for it in regular}, key=lambda gname: gname)
 
     def place_f(it: _Item) -> bool:
-        best: tuple[tuple[int, int, int, bool], _Run, Shape] | None = None
+        best: tuple[tuple[bool, int, bool, int, int, bool], _Run, Shape] | None = None
         for ri, r in enumerate(runs):
             for sh in it.f_options(r.depth):
                 new_cur = r.cur + sh.n
                 if new_cur > r.b or r.b - new_cur == 1:
                     continue
                 rank = (
+                    g.small_with_column(P[r.cur], P[new_cur], r.v0, r.v1),
                     round(deviation(k, it.spec, sh.w, sh.d) * 1000),
+                    sh.n % 2 == 1 and (r.cur - r.a) % 2 == 0,
                     P[r.cur],
                     ri,
                     r.side != "N",
@@ -737,6 +771,9 @@ def plan_bar(
             return True
         return False
 
+    def band_u(bd: _Band, t0: int, t1: int) -> tuple[int, int]:
+        return (bd.u1 - t1, bd.u1 - t0) if bd.core_at_u1 else (bd.u0 + t0, bd.u0 + t1)
+
     def place_band(it: _Item) -> bool:
         opts = it.band_options()
         if not opts:
@@ -749,25 +786,35 @@ def plan_bar(
                 bd.side,
             ),
         )
-        for sh in opts:
-            for bd in order:
+        best: tuple[tuple[bool, int, int], _Band, Shape, int, int] | None = None
+        for oi, sh in enumerate(opts):
+            for bi, bd in enumerate(order):
                 if sh.kind == "B":
-                    t0 = max(bd.cur)
-                    if t0 + sh.w <= bd.length:
-                        bd.placed.append((it, sh, -1, t0, t0 + sh.w))
-                        bd.cur = [t0 + sh.w, t0 + sh.w]
-                        bd.occ[0].append((t0, t0 + sh.w))
-                        bd.occ[1].append((t0, t0 + sh.w))
-                        return True
+                    lane, t0 = -1, max(bd.cur)
+                    v0, v1 = df_ + c, mE
                 else:
                     lane = 0 if bd.cur[0] <= bd.cur[1] else 1
                     t0 = bd.cur[lane]
-                    if t0 + sh.w <= bd.length:
-                        bd.placed.append((it, sh, lane, t0, t0 + sh.w))
-                        bd.cur[lane] = t0 + sh.w
-                        bd.occ[lane].append((t0, t0 + sh.w))
-                        return True
-        return False
+                    v0 = df_ + c if lane == 0 else mE - sh.d
+                    v1 = v0 + sh.d
+                if t0 + sh.w > bd.length:
+                    continue
+                ua, ub = band_u(bd, t0, t0 + sh.w)
+                key = (g.small_with_column(ua, ub, v0, v1), oi, bi)
+                if best is None or key < best[0]:
+                    best = (key, bd, sh, lane, t0)
+        if best is None:
+            return False
+        _, bd, sh, lane, t0 = best
+        bd.placed.append((it, sh, lane, t0, t0 + sh.w))
+        if lane < 0:
+            bd.cur = [t0 + sh.w, t0 + sh.w]
+            bd.occ[0].append((t0, t0 + sh.w))
+            bd.occ[1].append((t0, t0 + sh.w))
+        else:
+            bd.cur[lane] = t0 + sh.w
+            bd.occ[lane].append((t0, t0 + sh.w))
+        return True
 
     def place(it: _Item) -> bool:
         if not it.facade and place_band(it):
@@ -868,21 +915,79 @@ def plan_bar(
         reserve_ids.append(name)
         rooms.append((name, None, rect, "", None))
 
+    def layout_run(r: _Run) -> tuple[list[tuple[_Item, Shape, int, int]], list[tuple[int, int]]]:
+        """Positions of the rooms of a run and its reserve pieces (unit indices), chosen to
+        keep columns out of rooms under 30 m2 (reserve pieces may be placed between rooms;
+        a piece is 2 to 8 half-bays wide, within the aspect limit)."""
+        total = r.b - r.a
+        items = r.placed
+        widths = [b - a for _, _, a, b in items]
+        INF = 10**9
+
+        def small(pos0: int, units: int) -> int:
+            return int(g.small_with_column(P[r.a + pos0], P[r.a + pos0 + units], r.v0, r.v1))
+
+        best: dict[tuple[int, int], tuple[int, tuple[int, int, str, int]]] = {
+            (0, 0): (0, (0, 0, "", 0))
+        }
+        for pos in range(total + 1):
+            for i in range(len(items) + 1):
+                cur = best.get((i, pos))
+                if cur is None:
+                    continue
+                if i < len(items) and pos + widths[i] <= total:
+                    key = (i + 1, pos + widths[i])
+                    cost = cur[0] + 1000 * small(pos, widths[i])
+                    if cost < best.get(key, (INF, ()))[0]:  # type: ignore[arg-type]
+                        best[key] = (cost, (i, pos, "item", 0))
+                for gw in range(2, 9):
+                    if pos + gw > total:
+                        break
+                    wd = P[r.a + pos + gw] - P[r.a + pos]
+                    if not legal_aspect(k, wd, r.depth):
+                        continue
+                    key = (i, pos + gw)
+                    cost = cur[0] + 1000 * small(pos, gw) + 1
+                    if cost < best.get(key, (INF, ()))[0]:  # type: ignore[arg-type]
+                        best[key] = (cost, (i, pos, "res", gw))
+        end = (len(items), total)
+        if end not in best:
+            placed_ = list(items)
+            tail: list[tuple[int, int]] = []
+            a0 = r.cur
+            while a0 < r.b:
+                n_ = r.b - a0
+                step = 3 if n_ == 3 else min(n_, 2)
+                if n_ > 3 and n_ % 2:
+                    step = 2
+                tail.append((a0, a0 + step))
+                a0 += step
+            return placed_, tail
+        out_items: list[tuple[_Item, Shape, int, int]] = []
+        out_res: list[tuple[int, int]] = []
+        state = end
+        while state != (0, 0):
+            _, (pi, ppos, kind, gw) = best[state]
+            if kind == "item":
+                it, sh, _a, _b = items[pi]
+                out_items.append((it, sh, r.a + ppos, r.a + ppos + widths[pi]))
+            else:
+                out_res.append((r.a + ppos, r.a + ppos + gw))
+            state = (pi, ppos)
+        out_items.reverse()
+        out_res.reverse()
+        return out_items, out_res
+
     used_units = 0
     avail_units = 0
     for r in runs:
         avail_units += r.b - r.a
-        for it, sh, a, b in r.placed:
+        run_items, run_res = layout_run(r)
+        for it, sh, a, b in run_items:
             add_room(it, sh, (P[a], r.v0, P[b] - P[a], r.depth))
             used_units += b - a
-        a = r.cur
-        while a < r.b:
-            n = r.b - a
-            step = 3 if n == 3 else min(n, 2)
-            if n > 3 and n % 2:
-                step = 2
-            new_reserve((P[a], r.v0, P[a + step] - P[a], r.depth))
-            a += step
+        for a, b in run_res:
+            new_reserve((P[a], r.v0, P[b] - P[a], r.depth))
     band_total = 0
     for bd in bands:
         band_total += bd.length
