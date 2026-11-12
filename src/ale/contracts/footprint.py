@@ -395,7 +395,16 @@ def _decompose_tree(fp: ModulePolygon, solid_aware: bool = False) -> FootprintPi
             asp = max(_aspect(r) for r in rects)
             order = tuple(sorted(_order(r) for r in rects))
             key = (
-                (len(rects), not _spans_short_side(got.pieces[0].rect, fp), -got.pieces[0].rect.area_cells(), sum(j.kind == "J2" and j.parent == 0 for j in got.junctions), not flip, -n_j2, asp, order)
+                (
+                    len(rects),
+                    not _spans_short_side(got.pieces[0].rect, fp),
+                    -got.pieces[0].rect.area_cells(),
+                    sum(j.kind == "J2" and j.parent == 0 for j in got.junctions),
+                    not flip,
+                    -n_j2,
+                    asp,
+                    order,
+                )
                 if solid_aware
                 else (len(rects), n_j2, asp, order)
             )
@@ -424,7 +433,9 @@ def _level(parent: dict[int, int], i: int) -> int:
     return d
 
 
-def _tree(rects: list[ModuleRect], flip_root: bool = False, deep_parents: bool = False) -> FootprintPieces:
+def _tree(
+    rects: list[ModuleRect], flip_root: bool = False, deep_parents: bool = False
+) -> FootprintPieces:
     """Spanning tree of the contact graph rooted at the largest piece (BFS), pre-order."""
     n = len(rects)
     contact: dict[tuple[int, int], tuple[ModulePoint, ModulePoint]] = {}
