@@ -63,7 +63,7 @@
     },
     "ModulePolygon": {
       "additionalProperties": false,
-      "description": "Rectilinear polygon in modules.\n\nEvery edge is axis-parallel; vertices are counter-clockwise; the polygon is simple;\n\u2265 4 vertices; no two consecutive edges are collinear. Stored open (first vertex not\nrepeated).\n\nTicket G.1 (contracts 1.6.0): ``holes`` are optional courtyards, rectilinear clockwise\nrings strictly inside the exterior (no touching); empty by default and then left out of\nthe serialised form, so hole-free polygons serialise exactly as before.",
+      "description": "Rectilinear polygon in modules.\n\nEvery edge is axis-parallel; vertices are counter-clockwise; the polygon is simple;\n\u2265 4 vertices; no two consecutive edges are collinear. Stored open (first vertex not\nrepeated).\n\nTicket G.1 (contracts 1.6.0): ``holes`` are optional courtyards, rectilinear clockwise\nrings strictly inside the exterior (no touching); empty by default and then left out of\nthe serialised form, so hole-free polygons serialise exactly as before.\n\nTicket M.2 (contracts 1.7.0): ``solids`` are optional fixed volumes (core, wet stack),\nrectilinear clockwise rings strictly inside the exterior, touching neither the exterior,\na hole nor another solid. Like a hole a solid is not tiled (``area_cells`` excludes it),\nbut it is not exterior: its edges never count as fa\u00e7ade, daylight or exterior contact.\nEmpty by default and then left out of the serialised form.",
       "properties": {
         "exterior": {
           "items": {
@@ -101,6 +101,27 @@
             "type": "array"
           },
           "title": "Holes",
+          "type": "array"
+        },
+        "solids": {
+          "default": [],
+          "items": {
+            "items": {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "integer"
+                }
+              ],
+              "type": "array"
+            },
+            "type": "array"
+          },
+          "title": "Solids",
           "type": "array"
         }
       },
@@ -215,13 +236,21 @@
     }
   },
   "additionalProperties": false,
-  "description": "Output of Phase 3: placed rooms on the module grid (+y up, 1 unit = 1 module).",
+  "description": "Output of Phase 3: placed rooms on the module grid (+y up, 1 unit = 1 module).\n\nTicket M.2 (contracts 1.7.0): ``fixed`` holds the rooms the vertical skeleton places\ninside the footprint's ``solids`` (core, wet rooms, ``reserve_technique``), sorted by\n``instance_id``; empty by default and then left out of the serialised form. They are not\npart of the tiling invariant: each lies inside a solid and none overlaps another.",
   "properties": {
     "circulation": {
       "items": {
         "$ref": "#/$defs/PlacedRoom"
       },
       "title": "Circulation",
+      "type": "array"
+    },
+    "fixed": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/PlacedRoom"
+      },
+      "title": "Fixed",
       "type": "array"
     },
     "footprint": {

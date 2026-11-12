@@ -655,6 +655,8 @@ def _ceil_div(a: int, b: int) -> int:
 def to_module_footprint(site: SiteSpec, grid: GridSpec) -> ModuleFootprint:
     """Snap a (normalised, rectilinear, CCW) site inward onto the module grid.
 
+    Ticket M.2: each core rectangle becomes a solid of the polygon, snapped outward.
+
     Grid origin = (min x, min y) of the footprint. Edge running +x takes ``CEIL`` for its
     y, -x ``FLOOR``, +y ``FLOOR`` for its x, -y ``CEIL``. Collinear vertices are then
     dropped and the ring starts at its lowest-then-leftmost vertex. Raises ``InputError``
@@ -714,6 +716,22 @@ def _module_holes(
     return tuple(out)
 
 
+def _module_solids(
+    site: SiteSpec, x0: int, y0: int, module: int
+) -> tuple[tuple[MmPoint, ...], ...]:
+    """Cores as solids (Ticket M.2): each rectangle snapped outward onto the module grid,
+    clockwise from its lower-left corner."""
+    out: list[tuple[MmPoint, ...]] = []
+    for core in site.cores:
+        x, y, w, h = core.rect
+        xl = _floor_div(m_to_mm(x) - x0, module)
+        yl = _floor_div(m_to_mm(y) - y0, module)
+        xh = _ceil_div(m_to_mm(x + w) - x0, module)
+        yh = _ceil_div(m_to_mm(y + h) - y0, module)
+        out.append(((xl, yl), (xl, yh), (xh, yh), (xh, yl)))
+    return tuple(out)
+
+
 def _module_footprint(site: SiteSpec, grid: GridSpec) -> ModuleFootprint:
     module = check_module_mm(grid.module_mm)
     ext = [(m_to_mm(x), m_to_mm(y)) for x, y in site.footprint.exterior]
@@ -731,11 +749,20 @@ def _module_footprint(site: SiteSpec, grid: GridSpec) -> ModuleFootprint:
     if len(edges) < 4:
         raise too_small
     edges = _rotate_to_start(edges)
+    solids = _module_solids(site, x0, y0, module)
     try:
         polygon = ModulePolygon(
-            exterior=tuple(e.a for e in edges), holes=_module_holes(holes_mm, x0, y0, module)
+            exterior=tuple(e.a for e in edges),
+            holes=_module_holes(holes_mm, x0, y0, module),
+            solids=solids,
         )
     except ValidationError as exc:
+        if solids:
+            raise _fail(
+                "E_SITE_INVALID",
+                "Noyau (cores) invalide une fois calé sur la trame (au contact du contour, "
+                f"d'une cour ou d'un autre noyau) : {exc.errors()[0]['msg']}.",
+            ) from None
         if holes_mm:
             raise _fail(
                 "E_SITE_INVALID",
@@ -752,7 +779,13 @@ def _module_footprint(site: SiteSpec, grid: GridSpec) -> ModuleFootprint:
             f"Le côté d'accès {site.access_edge} disparaît une fois l'emprise calée sur la trame.",
             site.access_edge,
         )
-    metric_mm2 = Fraction(_twice_area(ext) + sum(_twice_area(h) for h in holes_mm), 2)
+    core_mm2 = sum(
+        Fraction(m_to_mm(c.rect[2] + c.rect[0]) - m_to_mm(c.rect[0])) * Fraction(
+            m_to_mm(c.rect[3] + c.rect[1]) - m_to_mm(c.rect[1])
+        )
+        for c in site.cores
+    )
+    metric_mm2 = Fraction(_twice_area(ext) + sum(_twice_area(h) for h in holes_mm), 2) - core_mm2
     module_mm2 = polygon.area_cells() * module * module
     sliver = (metric_mm2 - module_mm2) / _MM2_PER_M2
     return ModuleFootprint(

@@ -491,8 +491,11 @@ def decompose_footprint(fp: ModulePolygon) -> FootprintPieces:
     tree edge is a :class:`Junction` classified as for an L (cut parallel to the parent's
     spine: J1, perpendicular: J2) and a child's spine is perpendicular to its cut. Contacts
     outside the tree are ``open_contacts``. Raises ``ValueError`` when more than
-    :data:`MAX_PIECES` pieces are needed.
+    :data:`MAX_PIECES` pieces are needed. Ticket M.2 (contracts 1.7.0): ``solids`` are treated
+    as holes (a ring of pieces around a central core is the expected figure).
     """
+    if fp.solids:
+        fp = ModulePolygon(exterior=fp.exterior, holes=(*fp.holes, *fp.solids))
     pts = fp.exterior
     if len(pts) == 4 and not fp.holes:
         xs = [p[0] for p in pts]

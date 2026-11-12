@@ -62,6 +62,7 @@ HARD_CODES: frozenset[str] = frozenset(
         "REQUIRED_ADJ",
         "AVOID_ADJ",
         "NO_CIRCULATION_ACCESS",
+        "SOLID_NO_ACCESS",
     }
 )
 """Violation codes counted as hard (user decisions D1/U-2). ``FACADE_DEPTH`` (Q.4) is hard
