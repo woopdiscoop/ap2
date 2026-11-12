@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import NamedTuple
 
 import pytest
 
@@ -13,19 +12,7 @@ if str(_HERE) not in sys.path:
     sys.path.insert(0, str(_HERE))
 
 import bay_cases as bc  # noqa: E402
-
-from ale.contracts.models import Program  # noqa: E402
-from ale.stack import StackResult  # noqa: E402
-from ale.stack.plans import PlansResult  # noqa: E402
-
-
-class CaseRun(NamedTuple):
-    name: str
-    plans: PlansResult
-    stack: StackResult
-    rulebook: Path
-    program: Program
-    out: Path
+from bay_cases import CaseRun  # noqa: E402
 
 
 @pytest.fixture(scope="session")

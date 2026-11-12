@@ -942,7 +942,7 @@ def plan_bar(
                 if i < len(items) and pos + widths[i] <= total:
                     key = (i + 1, pos + widths[i])
                     cost = cur[0] + 1000 * small(pos, widths[i])
-                    if cost < best.get(key, (INF, ()))[0]:  # type: ignore[arg-type]
+                    if cost < best.get(key, (INF, ()))[0]:
                         best[key] = (cost, (i, pos, "item", 0))
                 for gw in range(2, 9):
                     if pos + gw > total:
@@ -952,7 +952,7 @@ def plan_bar(
                         continue
                     key = (i, pos + gw)
                     cost = cur[0] + 1000 * small(pos, gw) + 1
-                    if cost < best.get(key, (INF, ()))[0]:  # type: ignore[arg-type]
+                    if cost < best.get(key, (INF, ()))[0]:
                         best[key] = (cost, (i, pos, "res", gw))
         end = (len(items), total)
         if end not in best:

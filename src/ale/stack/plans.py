@@ -442,6 +442,7 @@ def _generate_floor(
                 f.level,
                 "failed",
                 f"aucune réalisation exacte après {attempt} essai(s) ({why_seed})",
+                why=why,
             )
         base = res.layout
         snapped = (0, 0, 0)
@@ -1168,7 +1169,7 @@ def render_plans_markdown(res: PlansResult) -> str:
         lines.append(
             f"| {p.level} | plan produit | {len(p.hard)} | {len(p.facade_missing)} | "
             f"{p.target_m2:.1f} | {p.placed_m2:.1f} | {p.circulation_m2:.1f} | "
-            f"{p.elapsed_s:.1f} |"
+            f"{'—' if p.planner == 'bay' else format(p.elapsed_s, '.1f')} |"
         )
     detail = [p for p in res.floors if p.status == "ok" and (p.hard or p.problems)]
     if detail:

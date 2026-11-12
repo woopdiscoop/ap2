@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 _TESTS = Path(__file__).resolve().parent.parent
 for sub in ("stack", "program"):
@@ -35,6 +35,17 @@ GROUND = AleConfig()
 SKETCH = GROUND.model_copy(
     update={"area": GROUND.area.model_copy(update={"tol_down_pct": 10.0, "tol_up_pct": 10.0})}
 )
+
+
+class CaseRun(NamedTuple):
+    """A case stacked and planned bay-first (fixture ``runs`` of ``conftest``)."""
+
+    name: str
+    plans: PlansResult
+    stack: StackResult
+    rulebook: Path
+    program: Program
+    out: Path
 
 
 # ------------------------------------------------------------------------------ A, B, C

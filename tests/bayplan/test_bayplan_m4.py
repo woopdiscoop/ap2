@@ -16,7 +16,7 @@ from typing import Any
 
 import bay_cases as bc
 import pytest
-from conftest import CaseRun
+from bay_cases import CaseRun
 
 from ale.bayplan import NotEligible, choose_facade_depth, plan_bar
 from ale.contracts.geometry import ModuleRect
@@ -185,7 +185,7 @@ def test_M403_no_degenerate_reserve(runs: dict[str, CaseRun], name: str) -> None
                 continue
             for kind, (tag, w, d, _a) in options:
                 runs_ = facade_free if kind == "F" else band_free
-                for x, y, rw, rh in runs_:
+                for _x, _y, rw, rh in runs_:
                     if kind == "B" and abs(rh / 10 - d) > 1e-6:
                         continue
                     legal = BAY if kind == "F" else d / 2
@@ -272,10 +272,10 @@ def test_M406_facade_and_band(runs: dict[str, CaseRun], name: str) -> None:
             if s.needs_facade:
                 contacts = exterior_contacts(r.rect, p.layout.footprint)
                 assert sum(c[0] for c in contacts) >= 24, (name, p.level, r.instance_id)
-            elif not (66 <= r.rect.y and r.rect.y2() <= 66 + band):
+            elif not (r.rect.y >= 66 and r.rect.y2() <= 66 + band):
                 cat = bc.catalogue(s.target_area_m2, False, **shapes_kw(prep))
                 for tag, w, d, _a in cat["B"] + cat["b"]:
-                    for x, y, rw, rh in free_band:
+                    for _x, _y, rw, rh in free_band:
                         if abs(rh / 10 - d) < 1e-6:
                             assert not _fits(rw / 10, w, d / 2), (name, p.level, r.instance_id, tag)
 
@@ -447,8 +447,8 @@ def test_M411_facade_depth_for_case_b(runs: dict[str, CaseRun]) -> None:
 
 
 def test_M411_depth_tie_is_broken_by_the_learned_depth(tmp_path: Path) -> None:
-    from ale.parti.evaluate import neutral_rulebook
     from ale.contracts.models import Program
+    from ale.parti.evaluate import neutral_rulebook
 
     k = Consts.from_config(bc.SKETCH)
     specs = _specs(11.5)
@@ -585,7 +585,7 @@ def test_E_F_valid_complete_and_compact(ef: dict[str, tuple[Any, Any]], key: str
 
 
 def test_F_is_E_transposed(ef: dict[str, tuple[Any, Any]]) -> None:
-    (pe, re_), (pf, rf) = ef["E"], ef["F"]
+    (_pe, re_), (_pf, rf) = ef["E"], ef["F"]
     areas_e = {r.instance_id: r.rect.w * r.rect.h for r in re_.layout.rooms if r.spec_id}
     areas_f = {r.instance_id: r.rect.w * r.rect.h for r in rf.layout.rooms if r.spec_id}
     assert areas_e == areas_f
