@@ -49,9 +49,21 @@ class StackResult:
 
 
 def run_stack(
-    program: Program, building: Building, rules: StackRules, *, seed: int = 0
+    program: Program,
+    building: Building,
+    rules: StackRules,
+    *,
+    seed: int = 0,
+    strict_solids: bool = False,
 ) -> StackResult:
-    """Stack the programme, size the skeleton and lay out every floor (deterministic)."""
+    """Stack the programme, size the skeleton and lay out every floor (deterministic).
+
+    ``strict_solids`` (Ticket M.2): keep the wet stack one cell away from the top outline so
+    that core + stack are a valid solid of the exact-plan engine (needed by ``--plans``)."""
+    if strict_solids:
+        from ale.stack.plans import build_skeleton_strict as make_skeleton
+    else:
+        make_skeleton = build_skeleton
     instances = program.instances()
     wet = [(i, s) for i, s in instances if s.type in WET_TYPES]
     others = [(i, s) for i, s in instances if s.type not in WET_TYPES]
@@ -68,7 +80,7 @@ def run_stack(
             max(0.0, (a - core_m2 - wet_m2) * (1.0 - rules.circulation_share)) for a in outlines
         ]
         stacking = solve(build_problem(others, rules, capacity))
-        skeleton = build_skeleton(building, wet, stacking.loads())
+        skeleton = make_skeleton(building, wet, stacking.loads())
         if abs(skeleton.wet_area_m2 - wet_m2) < 1e-6:
             break
         wet_m2 = skeleton.wet_area_m2
