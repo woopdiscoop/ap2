@@ -189,8 +189,8 @@ class FloorPlan:
     snapped: tuple[int, int, int] = (0, 0, 0)
     """Façade walls found, already on a bay line, moved onto one (:mod:`ale.stack.snap`)."""
     lattice: tuple[int, int, int] = (0, 0, 0)
-    """M.3b: ``(1 if the plan was realised on the lattice else 0, blocks laid out on it, blocks
-    laid out as without)``; ``(0, 0, 0)`` when the lattice realisation was not kept."""
+    """M.3b: ``(1 if the annealing ran on the lattice else 0, realisations of
+    :func:`ale.geometry.realize` on it, fallbacks to a lattice-free run)``."""
 
     @property
     def passes(self) -> bool:
@@ -387,7 +387,7 @@ def _generate_floor(
     lattice = (0, 0, 0)
     if rhythm is not None:
         assert hint is not None
-        lattice = (1, hint.stats.realisations, hint.stats.fallbacks)
+        lattice = (int(hint.stats.fallbacks == 0), hint.stats.realisations, hint.stats.fallbacks)
         from ale.stack.snap import snap_layout
 
         base, st = snap_layout(base, prepared, rb, config, rhythm)
@@ -743,6 +743,11 @@ def _trame_lines(res: PlansResult) -> list[str]:
         ),
         f"- Cloisons de façade sur une ligne de travée (à 0,30 m près) : {on_bay} sur {parts}"
         + (f" ({on_bay / parts:.1%})." if parts else "."),
+        (
+            "- Réalisation sur la trame : largeurs des pièces et profondeurs des blocs choisies "
+            "pour les lignes de travée et de poteaux (coût « lattice » de l'optimisation) "
+            f"sur {sum(1 for p in res.floors if p.lattice[0])} niveau(x)."
+        ),
         "",
         "| Niveau | Cloisons de façade | Sur la travée | Poteaux | Poteaux en pièce < 30 m² | "
         "Parois déplacées |",

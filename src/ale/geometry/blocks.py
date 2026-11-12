@@ -647,7 +647,7 @@ class Solver:
         lat: BlockLattice,
     ) -> BayPlan | None:
         s = self.k.s
-        # item: (slot, widths, solutions | None, req | None, start side, end side, stack reqs)
+        # item: (slot, widths, solutions | None, req | None, start side, end side)
         Slot = tuple[int, str]
         items: list[
             tuple[
@@ -657,9 +657,9 @@ class Solver:
                 RoomReq | None,
                 bool,
                 bool,
-                tuple[RoomReq, ...],
             ]
         ] = []
+        defaults: list[tuple[Slot, int]] = []  # the width RD 3.3 §5.2 gives each item
         for b, bay in enumerate(bays):
             if isinstance(bay, ConnectorBay):
                 return None
@@ -668,14 +668,13 @@ class Solver:
                 found = self.room_bay_width(req, depth, exterior)
                 if found is None:
                     return None
+                defaults.append(((b, "B"), found))
                 win = tuple(self.width_window(req, depth, exterior and req.facade))
-                items.append(
-                    ((b, "B"), win if found in win else (found,), None, req, True, True, ())
-                )
+                items.append(((b, "B"), win if found in win else (found,), None, req, True, True))
                 continue
             for tag, rooms in (("L", bay.left), ("S", ()), ("R", bay.right)):
                 if tag == "S":
-                    items.append(((b, "S"), (s,), None, None, False, False, ()))
+                    items.append(((b, "S"), (s,), None, None, False, False))
                     continue
                 if not rooms:
                     continue
@@ -683,17 +682,11 @@ class Solver:
                 if choices is None:
                     return None
                 sols = dict(choices)
-                items.append(
-                    (
-                        (b, tag),
-                        tuple(sols),
-                        sols,
-                        None,
-                        True,
-                        True,
-                        tuple(self.reqs[r] for r in rooms),
-                    )
-                )
+                dflt = self.stack(tuple(self.reqs[r] for r in rooms), depth)
+                assert dflt is not None  # _stack_choices returned choices
+                defaults.append(((b, tag), dflt.w))
+                items.append(((b, tag), tuple(sols), sols, None, True, True))
+        default_w = {slot: w0 for slot, w0 in defaults}
         n = len(items)
         rest = [0] * (n + 1)  # least total width of items i..n-1
         for i in range(n - 1, -1, -1):
@@ -718,28 +711,24 @@ class Solver:
 
         cur: dict[int, tuple[int, float]] = {0: (0, 0.0)}
         back: list[dict[int, tuple[int, int]]] = []
-        for i, (_, win, i_sols, i_req, _start, end_side, sreqs) in enumerate(items):
-            # per width: area deviation (float: it only breaks ties) and, for the small rooms,
-            # the column lines across them
+        for i, (slot, win, i_sols, i_req, _start, end_side) in enumerate(items):
+            # per width: distance to the default width (it breaks the ties of the lattice
+            # cost, so that an indifferent lattice keeps today's widths) and, for the small
+            # rooms, the column lines across them
             prep: list[tuple[int, float, int]] = []
             for w in win:
+                dev_w = float(abs(w - default_w[slot])) if slot in default_w else 0.0
+                cross = 0
                 if i_req is not None:
-                    dev_w = abs(w * depth - float(i_req.target))
-                    cross = 0
                     if use_cols and w * depth * cell < lat.small_mm2:
                         cross = across(0, depth)
                 elif i_sols is not None:
                     sol = i_sols[w]
-                    dev_w = float(w * sol.rest)
-                    cross = 0
                     t = 0
-                    for r, h in zip(sreqs, sol.heights, strict=True):
-                        dev_w += abs(w * h - float(r.target))
+                    for h in sol.heights:
                         if use_cols and w * h * cell < lat.small_mm2:
                             cross += across(t, t + h)
                         t += h
-                else:
-                    dev_w, cross = 0.0, 0
                 prep.append((w, dev_w, cross))
             nxt: dict[int, tuple[int, float]] = {}
             how: dict[int, tuple[int, int]] = {}
@@ -806,6 +795,8 @@ class Solver:
         if own is not None:
             lattice = own.lattice_for(where, depth)
         if lattice is None or out.failures or out.depth <= 0:
+            return out
+        if lattice.bay == 0 and lattice.col == 0:  # nothing to aim at
             return out
         plan = self.bay_plan(bays, depth, length, exterior, lattice)
         if plan is None:
