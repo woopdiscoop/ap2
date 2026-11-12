@@ -2,7 +2,8 @@
 
 Exit codes: 0 = stacking produced without hard miss; 1 = input error (nothing written) or a
 hard miss (over-capacity floor, skeleton miss, floor without diagram): the outputs are still
-written and the misses listed in ``stacking.md``; 2 = usage error.
+written and the misses listed in ``stacking.md``; 2 = usage error (also Ticket M.3: an invalid
+``bay_m``, ``grid_m`` or ``typical_floor`` in the rules, with a French message).
 
 Ticket M.2, ``--plans [--rulebook R] [--budget S]``: after the stacking every floor gets an exact
 plan (``floor_NN/plan/``, ``plans.md``). Exit 1 also when a floor cannot be generated, a plan
@@ -17,7 +18,7 @@ from typing import Annotated
 
 import typer
 
-from ale.cli.commands._common import EXIT_OK, EXIT_RUNTIME
+from ale.cli.commands._common import EXIT_OK, EXIT_RUNTIME, EXIT_USAGE
 
 __all__ = ["stack"]
 
@@ -45,6 +46,7 @@ def stack(
     from ale.cli.commands.program import _issue_line
     from ale.program import read_program
     from ale.stack import StackInputError, load_building, load_rules, run_stack, write_outputs
+    from ale.stack.rules import RhythmInputError
 
     if plans and rulebook is None:
         raise typer.BadParameter("--plans demande --rulebook.", param_hint="--rulebook")
@@ -57,11 +59,17 @@ def stack(
     try:
         bld = load_building(building)
         rl = load_rules(rules)
+    except RhythmInputError as exc:
+        typer.echo("\n".join([*exc.lines, "ÉCHEC : trame ou module de travée invalide."]), err=True)
+        raise typer.Exit(EXIT_USAGE) from exc
     except StackInputError as exc:
         typer.echo("\n".join([*exc.lines, "ÉCHEC : corrigez les erreurs ci-dessus."]), err=True)
         raise typer.Exit(EXIT_RUNTIME) from exc
     try:
         result = run_stack(prog, bld, rl, seed=seed, strict_solids=plans)
+    except RhythmInputError as exc:
+        typer.echo("\n".join([*exc.lines, "ÉCHEC : trame ou module de travée invalide."]), err=True)
+        raise typer.Exit(EXIT_USAGE) from exc
     except StackInputError as exc:
         typer.echo("\n".join([*exc.lines, "ÉCHEC : entrée inutilisable."]), err=True)
         raise typer.Exit(EXIT_RUNTIME) from exc

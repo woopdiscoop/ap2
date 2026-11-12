@@ -260,7 +260,9 @@ def _metrics(d: CellDiagram, needs: Mapping[str, bool]) -> tuple[tuple[str, ...]
     return tuple(nofac), tuple(off), short, frag
 
 
-def _diagram(prog: Program, site: SiteSpec, seed: int) -> tuple[CellDiagram, dict[str, bool]]:
+def _diagram(
+    prog: Program, site: SiteSpec, seed: int, prior: Mapping[Cell, str] | None = None
+) -> tuple[CellDiagram, dict[str, bool]]:
     from ale.parti.evaluate import neutral_rulebook
     from ale.program.feasibility import check_feasibility
     from ale.program.models import PreparedInput
@@ -282,7 +284,7 @@ def _diagram(prog: Program, site: SiteSpec, seed: int) -> tuple[CellDiagram, dic
         warnings=(),
     )
     needs = {iid: spec.needs_facade for iid, spec in prep.instances}
-    return grow(prep, rb, config, seed=seed), needs
+    return grow(prep, rb, config, seed=seed, prior=prior), needs
 
 
 def build_floors(
@@ -292,72 +294,78 @@ def build_floors(
     level_of: Mapping[str, int],
     *,
     seed: int = 0,
+    typical: int | None = None,
 ) -> tuple[FloorResult, ...]:
-    """One :class:`FloorResult` per floor (``level_of`` maps every instance id to a level)."""
-    out = []
+    """One :class:`FloorResult` per floor (``level_of`` maps every instance id to a level).
+
+    Ticket M.3: floors are laid out from the ``typical`` floor (default: level 0) down to the
+    ground and then up; each floor uses the neighbouring floor already laid out as the
+    ``prior`` of its cell diagram (same room types on the same cells where the programme
+    allows)."""
+    done: dict[int, FloorResult] = {}
     expected = skeleton.core_cells | skeleton.wet_cells
-    for k in range(building.n_floors):
-        site, off = _floor_site(building, skeleton, k)
-        p_all, p_cells = floor_programs(program, level_of, k)
-        wet = skeleton.floors[k]
-        wet_cells = {r.iid: r.cells for r in wet.rooms}
-        wet_types = {r.iid: r.type for r in wet.rooms}
-        if p_cells is None:
-            out.append(
-                FloorResult(
-                    k,
-                    off,
-                    site,
-                    p_all,
-                    None,
-                    room_cells=wet_cells,
-                    room_types=wet_types,
-                    skeleton_cells=expected,
-                )
-            )
-            continue
-        try:
-            d0, needs = _diagram(p_cells, site, seed)
-        except Exception as exc:  # report and go on: one bad floor must not stop the others
-            out.append(
-                FloorResult(
-                    k,
-                    off,
-                    site,
-                    p_all,
-                    p_cells,
-                    room_cells=wet_cells,
-                    room_types=wet_types,
-                    error=f"Niveau {k} : diagramme impossible ({type(exc).__name__} : {exc}).",
-                )
-            )
-            continue
-        d, repaired = _repair(d0)
-        nofac, off_circ, short, frag = _metrics(d, needs)
-        cells = {r: frozenset((x + off[0], y + off[1]) for x, y in d.cells[r]) for r in d.rooms}
-        types = dict(d.types)
-        sk_cells = frozenset((x + off[0], y + off[1]) for x, y in d.cores)
-        cells.update(wet_cells)
-        types.update(wet_types)
-        out.append(
-            FloorResult(
-                k,
-                off,
-                site,
-                p_all,
-                p_cells,
-                d,
-                repaired,
-                nofac,
-                off_circ,
-                short,
-                frag,
-                sk_cells,
-                cells,
-                types,
-            )
+    n = building.n_floors
+    t0 = 0 if typical is None else min(max(typical, 0), n - 1)
+    for k in [*range(t0, -1, -1), *range(t0 + 1, n)]:
+        nb = k + 1 if k < t0 else k - 1
+        done[k] = _build_floor(
+            building,
+            skeleton,
+            program,
+            level_of,
+            k,
+            seed,
+            expected,
+            done.get(nb) if typical is not None else None,
         )
-    return tuple(out)
+    return tuple(done[k] for k in range(n))
+
+
+def _build_floor(
+    building: Building,
+    skeleton: Skeleton,
+    program: Program,
+    level_of: Mapping[str, int],
+    k: int,
+    seed: int,
+    expected: frozenset[Cell],
+    prior_floor: FloorResult | None,
+) -> FloorResult:
+    site, off = _floor_site(building, skeleton, k)
+    p_all, p_cells = floor_programs(program, level_of, k)
+    wet = skeleton.floors[k]
+    wet_cells = {r.iid: r.cells for r in wet.rooms}
+    wet_types = {r.iid: r.type for r in wet.rooms}
+    if p_cells is None:
+        return FloorResult(
+            k, off, site, p_all, None, room_cells=wet_cells, room_types=wet_types,
+            skeleton_cells=expected,
+        )  # fmt: skip
+    prior: dict[Cell, str] | None = None
+    if prior_floor is not None:
+        prior = {
+            (x - off[0], y - off[1]): t
+            for (x, y), t in prior_floor.layer().items()
+            if t not in WET_TYPES
+        }
+    try:
+        d0, needs = _diagram(p_cells, site, seed, prior)
+    except Exception as exc:  # report and go on: one bad floor must not stop the others
+        return FloorResult(
+            k, off, site, p_all, p_cells, room_cells=wet_cells, room_types=wet_types,
+            error=f"Niveau {k} : diagramme impossible ({type(exc).__name__} : {exc}).",
+        )  # fmt: skip
+    d, repaired = _repair(d0)
+    nofac, off_circ, short, frag = _metrics(d, needs)
+    cells = {r: frozenset((x + off[0], y + off[1]) for x, y in d.cells[r]) for r in d.rooms}
+    types = dict(d.types)
+    sk_cells = frozenset((x + off[0], y + off[1]) for x, y in d.cores)
+    cells.update(wet_cells)
+    types.update(wet_types)
+    return FloorResult(
+        k, off, site, p_all, p_cells, d, repaired, nofac, off_circ, short, frag, sk_cells,
+        cells, types,
+    )  # fmt: skip
 
 
 def stackability(layers: Sequence[Mapping[Cell, str]]) -> float:
@@ -374,10 +382,24 @@ def stackability(layers: Sequence[Mapping[Cell, str]]) -> float:
     return stacked / total if total else 0.0
 
 
+def pair_stackability(layers: Sequence[Mapping[Cell, str]]) -> tuple[float, ...]:
+    """For each pair of neighbouring floors ``(k, k+1)``: share of the room cells of both floors
+    whose cell on the other floor holds a room of the same type."""
+    out = []
+    for k in range(len(layers) - 1):
+        a, b = layers[k], layers[k + 1]
+        total = len(a) + len(b)
+        same = sum(1 for c, t in a.items() if b.get(c) == t) + sum(
+            1 for c, t in b.items() if a.get(c) == t
+        )
+        out.append(same / total if total else 0.0)
+    return tuple(out)
+
+
 def skeleton_identical(floors: Sequence[FloorResult], skeleton: Skeleton) -> bool:
     """Core and wet-stack cells of every floor diagram equal the skeleton's (hard check)."""
     expected = skeleton.core_cells | skeleton.wet_cells
     return all(f.diagram is None or f.skeleton_cells == expected for f in floors)
 
 
-__all__ += ["skeleton_identical"]
+__all__ += ["pair_stackability", "skeleton_identical"]

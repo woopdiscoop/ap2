@@ -30,7 +30,7 @@ import itertools
 import logging
 import math
 import time
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from fractions import Fraction
 from typing import Literal
 
@@ -550,6 +550,7 @@ def seed_plan(
     time_budget_s: float = 20.0,
     max_attempts: int | None = None,
     seeder: Literal["spring", "cells"] = "spring",
+    prior: Mapping[str, tuple[float, float]] | None = None,
 ) -> SeedResult:
     """A first valid corridor plan for ``prepared`` (RD 3.2 §5); never raises.
 
@@ -557,6 +558,10 @@ def seed_plan(
     its failing realisation. ``max_attempts`` (Q.3): when given (``>= 1``), at most this
     many attempts are made and time is only a safety net (:data:`SAFETY_TIME_S`), so the
     result does not depend on the machine's speed.
+
+    ``prior`` (Ticket M.3): room id -> position (footprint metres) that replaces the spring
+    embedding's position of that room, so that a floor repeats the room order of the floor
+    below. ``None`` leaves the result unchanged.
     """
     t0 = time.monotonic()
     choices = ("cells", "spring") if seeder == "cells" else ("spring",)
@@ -604,6 +609,8 @@ def seed_plan(
                     pos = _cells_positions(search, k)
                 else:
                     pos = embed(search.graph, prepared, rulebook, seed=_attempt_seed(seed, k))
+                    if prior:
+                        pos = {**pos, **{r: xy for r, xy in prior.items() if r in pos}}
                 counts = combos[k % len(combos)]
                 # Q311: the assignment cuts its searches short early enough for the realisation.
                 ctx.memo[DEADLINE_KEY] = search.deadline - _STEP_SAFETY * search.slowest

@@ -15,11 +15,13 @@ of ``(cell, room, seed)``.
 from __future__ import annotations
 
 import math
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 
 from ale.contracts.config import AleConfig
 from ale.contracts.models import RoomSpec, Rulebook
 from ale.program.models import PreparedInput
+from ale.topology.cellprior import Prior
 from ale.topology.graph import REQUIRED, build_graph, edges_of_kind
 
 __all__ = ["CellDiagram", "DiagramChecks", "grow"]
@@ -259,9 +261,15 @@ def grow(
     *,
     seed: int = 0,
     jitter: float = 0.0,
+    prior: Mapping[tuple[int, int], str] | None = None,
 ) -> CellDiagram:
     """The cell diagram of ``prepared`` (RD §3). ``jitter`` > 0 adds a small seeded noise to
-    the growth score (used by the seeder's later attempts); 0 is the plain algorithm."""
+    the growth score (used by the seeder's later attempts); 0 is the plain algorithm.
+
+    ``prior`` (Ticket M.3) maps diagram cells ``(cx, cy)`` to a label (the room type of
+    another floor): rooms of that type start on and grow towards the cells that carry their
+    label, so that a floor repeats the layout below it. ``None`` (or empty) leaves the output
+    byte-identical to the plain algorithm."""
     g = _Grid(prepared, rulebook, config)
     insts = prepared.instances
     ids = [iid for iid, _ in insts]
@@ -361,6 +369,8 @@ def grow(
             used[p] = True
         seed_cell[iid] = rib.cells[sorted(positions)[len(positions) // 2]] if positions else -1
 
+    pr = Prior.build(prior, g, rib.cells)
+
     if npos:
         # budget the shares to the usable perimeter
         total = sum(share.values())
@@ -411,7 +421,8 @@ def grow(
                 continue
             span = []
             near = next((placed_pos[q] for q in partners[iid] if q in placed_pos), None)
-            if near is not None:
+            span = pr.ribbon_span(str(spec_of[iid].type), used, ln)
+            if not span and near is not None:
                 for k in range(npos):
                     span = take_span(max(near) + 1 + k, ln) or take_span(min(near) - ln - k, ln)
                     if span:
@@ -452,7 +463,18 @@ def grow(
         dx, dy = centre[0] - x, centre[1] - y
         return (1 if dx >= 0 else -1, 0) if abs(dx) >= abs(dy) else (0, 1 if dy >= 0 else -1)
 
+    def place_prior(iid: str) -> bool:
+        """Ticket M.3: seed on the free prior cell of the room's type."""
+        c = pr.seed(g, str(spec_of[iid].type), dist_to)
+        if c is not None:
+            claim(iid, c)
+            placed_cells[iid] = c
+        return c is not None
+
     def place_rest(iid: str) -> bool:
+        return place_prior(iid) or place_plain(iid)
+
+    def place_plain(iid: str) -> bool:
         if graph.nodes[iid]["service_core"] and core_set:
             nxt = sorted(
                 {j for c in core_set for j in g.nbrs(c) if owner[j] == FREE},
@@ -496,6 +518,9 @@ def grow(
             claim(iid, c)
             placed_cells[iid] = c
 
+    # Ticket M.3: a room first takes the prior cells of its type connected to its seed
+    pr.prefill(g, {iid: str(spec_of[iid].type) for iid in ids}, mine, n_of, claim)
+
     # ------------------------------------------------------------------ growth
     sums = {iid: [0.0, 0.0] for iid in ids}
     for iid in ids:
@@ -513,6 +538,8 @@ def grow(
     quota = {iid: max(1, round(_QUOTA_FACTOR * n_of[iid] / n_max)) for iid in ids}
 
     reseeds = {iid: 0 for iid in ids}
+    present = {str(spec_of[iid].type) for iid in ids}
+    prior_bonus = {iid: pr.bonus(str(spec_of[iid].type), present) for iid in ids}
 
     def refresh(iid: str) -> None:
         sums[iid] = [sum(g.xy(c)[0] for c in mine[iid]), sum(g.xy(c)[1] for c in mine[iid])]
@@ -580,6 +607,7 @@ def grow(
                 cx0: float = cx0,
                 cy0: float = cy0,
                 pcs: list[tuple[float, float]] = pcs,
+                bonus: dict[int, float] = prior_bonus[iid],
             ) -> float:
                 x, y = g.xy(c)
                 s = _W_CENTROID * math.hypot(x - cx0, y - cy0)
@@ -587,6 +615,7 @@ def grow(
                     s += _W_FACADE * fd[c]
                     if fd[c] + 1 > limit_cells:
                         s += _FACADE_PENALTY
+                s += bonus.get(c, 0.0)
                 if iid in ent_room:
                     s += _W_ENTRANCE * (abs(x - ex) + abs(y - ey))
                 for px, py in pcs:

@@ -40,6 +40,10 @@ W_SPLIT = 250.0
 W_CONTIGUITY = 2000.0
 W_TOGETHER = 300.0
 W_IMBALANCE = 400.0
+TIGHT_SHARE = 0.93
+TIGHT_FACTOR = 10.0
+"""With the type term (Ticket M.3), load above ``TIGHT_SHARE`` of a floor's capacity costs
+``TIGHT_FACTOR x type_weight`` per m²: the exact-plan engine fails near full capacity."""
 _MAX_ITER = 10_000
 _SWAP_LIMIT = 60
 _SMALL = 12
@@ -65,6 +69,7 @@ class Unit:
     group: str
     area_m2: float
     pin: int | None = None
+    type: str = ""
 
 
 @dataclass(frozen=True)
@@ -78,6 +83,8 @@ class Problem:
     keep_whole: bool = False
     group_pins: dict[str, int] = field(default_factory=dict)
     notes: tuple[str, ...] = ()
+    type_weight: float = 0.0
+    """Weight of the unmatched-type term (0 = ignore room types, the M.1 objective)."""
 
     @property
     def n_floors(self) -> int:
@@ -206,7 +213,7 @@ def build_problem(
             pin = min(spec.floor, n - 1)
             if spec.floor > n - 1:
                 notes.append(f"Pièce {iid} : niveau {spec.floor} inexistant, ramené à {n - 1}.")
-        units.append(Unit(iid, spec.id, gname[iid], spec.target_area_m2, pin))
+        units.append(Unit(iid, spec.id, gname[iid], spec.target_area_m2, pin, str(spec.type)))
     group_pins: dict[str, int] = {}
     for g, where in sorted(rules.pins.items()):
         if g not in groups:
@@ -231,6 +238,7 @@ def build_problem(
         keep_whole=rules.keep_whole,
         group_pins=group_pins,
         notes=tuple(notes),
+        type_weight=rules.type_weight,
     )
     clashes = [
         f"Pièce {u.iid} : épingle de la pièce (niveau {u.pin}) prioritaire sur celle du groupe "
@@ -253,11 +261,14 @@ def evaluate(p: Problem, assign: Sequence[int]) -> Score:
     n = p.n_floors
     loads = [0.0] * n
     floors: dict[str, set[int]] = {}
+    by_type: dict[str, list[float]] = {}
     for u, k in zip(p.units, assign, strict=True):
         if k < 0:
             continue
         loads[k] += u.area_m2
         floors.setdefault(u.group, set()).add(k)
+        if p.type_weight:
+            by_type.setdefault(u.type, [0.0] * n)[k] += u.area_m2
     hard_n = 0
     hard_m2 = 0.0
     over = 0.0
@@ -271,6 +282,9 @@ def evaluate(p: Problem, assign: Sequence[int]) -> Score:
         over += max(0.0, load - cap)
         shares.append(load / max(cap, 1.0))
     soft = over
+    if p.type_weight:  # M.3: do not pile same-type rooms onto a floor already near capacity
+        for load, cap in zip(loads, p.capacity, strict=True):
+            soft += TIGHT_FACTOR * p.type_weight * max(0.0, load - TIGHT_SHARE * max(cap, 0.0))
     for fl in floors.values():
         if len(fl) > 1:
             soft += W_SPLIT
@@ -278,6 +292,11 @@ def evaluate(p: Problem, assign: Sequence[int]) -> Score:
     for a, b in p.together:
         soft += W_TOGETHER * max(0, _gap(sorted(floors.get(a, ())), sorted(floors.get(b, ()))) - 1)
     soft += W_IMBALANCE * (max(shares) - min(shares))
+    if p.type_weight:
+        for per_floor in by_type.values():
+            for k in range(n):
+                near = (per_floor[k - 1] if k else 0.0) + (per_floor[k + 1] if k + 1 < n else 0.0)
+                soft += p.type_weight * max(0.0, per_floor[k] - near)
     return Score(hard_n, round(hard_m2, 6), round(soft, 6))
 
 
