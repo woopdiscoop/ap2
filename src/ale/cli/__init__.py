@@ -15,6 +15,7 @@ from ale.cli.commands import doctor, extract, form, generate, ingest, init, laye
 from ale.cli.commands import parti as parti_cmd
 from ale.cli.commands import program as program_cmd
 from ale.cli.commands import score as score_cmd
+from ale.cli.commands import stack as stack_cmd
 from ale.cli.commands import status as status_cmd
 from ale.cli.commands import ui as ui_cmd
 from ale.cli.commands._common import LOG_LEVEL_EXPLICIT_KEY
@@ -90,6 +91,7 @@ app.command("score")(score_cmd.score)
 app.command("form")(form.form)
 app.command("ui")(ui_cmd.ui)
 app.command("parti")(parti_cmd.parti)
+app.command("stack")(stack_cmd.stack)
 
 
 def main() -> None:

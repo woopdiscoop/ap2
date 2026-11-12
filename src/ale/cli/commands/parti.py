@@ -24,6 +24,7 @@ from ale.parti import (
     match_forms,
     run_partis,
 )
+from ale.parti.building_export import write_building
 from ale.parti.card import FLAG_FR
 from ale.parti.evaluate import typical_floor_site
 
@@ -248,6 +249,7 @@ def parti(
         (out / f"{stem}.svg").write_text(parti_svg(spec, e), encoding="utf-8", newline="\n")
         d = out / stem
         d.mkdir(exist_ok=True)
+        write_building(d / "building.yaml", spec, e.massing)
         (d / "site.yaml").write_text(
             dump_yaml(typical_floor_site(spec, e.massing)), encoding="utf-8", newline="\n"
         )
