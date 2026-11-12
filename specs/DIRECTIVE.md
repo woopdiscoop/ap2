@@ -62,6 +62,7 @@ Two phases, decoupled by a versioned **Rulebook**:
 
 ### A. Roles
 - **Router (you):** owns the project state. Writes tickets (`RD.md`, `eval.md`), dispatches Workers, runs their tests, merges. Does not write core algorithms in the main thread.
+- **Models and effort (user decision U-19, 2026-11-12):** Planner = Fable 5.2, effort high, called by the Router only at decision points (new milestone, ticket ending partial, change of parti); it writes `RD.md`/`eval.md` and nothing else (agent `ale-planner`). Router = Opus 5.5, effort low (medium for a review after a partial result). Worker = Sonnet 5.5, effort low (agent `ale-worker`); a ticket ending partial or failed is relaunched from its branch at effort high, and on Opus only if Sonnet high fails. Verbose reading (logs, transcripts, corpus, repository search) goes to Haiku 5.5 sub-agents (`log-reader`, `Explore`) or to a script, never into the Router's context. Handoffs between models are written files only (reasoning does not transfer). Workers run the gates and their ticket's tests; the full suite runs once, at review (`scripts/router_review.sh`). The board records tokens and result per ticket.
 - **Workers:** isolated sub-agents. A Worker receives exactly three things:
   1. its ticket folder (`RD.md`, `eval.md`);
   2. the **frozen contracts** (`ale/contracts/*.py`, `taxonomy.yaml`, `config.schema.json`);
