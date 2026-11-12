@@ -183,7 +183,7 @@ def check_inputs(
     out.issues.extend(site_issues)
     if out.site is not None:
         try:
-            out.footprint = to_module_footprint(out.site, grid)
+            out.footprint = to_module_footprint(out.site, grid, strict_cores=True)
         except InputError as exc:
             out.issues.extend(exc.issues)
 
