@@ -23,11 +23,17 @@ depth; inside that the width windows (3-5 widths) cannot reach the 2.4 m lattice
 | B305 | PASS | Plan-level stackability, mean over floors 1-3 and seeds: **0.324** (M.3 report: about 0.31; my re-measure of `681987b` on the same seeds: 0.340, the difference is inside the seed to seed spread, the annealer being bound by wall-clock). |
 | B306 | PASS | No hint: `realize` output equal to the old path (`test_B306_*`: same canonical JSON with and without `use_bay_hint(None)`, no leak after a hinted call, shared solver unbound), `Solver.block` without lattice returns `bay_cost None`; the M206 digests (P08 / P25 / P60) and `cellgrow` with no prior pass in the full suite (no file of `topology/` is changed). |
 | B307 | PASS | `--plans` on the bar at budget 10, 4 runs in parallel on 4 cores: mean **72 s**, max 90 s (baseline in the same conditions: mean 63 s, max 85 s; the M.3 figure 75 s was measured alone). 1.14 x the baseline mean, under 1.5 x. The seeding is lattice-free; the annealer runs about 30 % fewer iterations under the hint. |
-| B308 | see Gates | |
+| B308 | PARTIAL | ruff, format, mypy, lock green; full suite 1607 passed, 2 wall-clock flakes that pass alone (see Gates). |
 
 ## Gates
 
-GATES_PLACEHOLDER
+| Gate | Result |
+|---|---|
+| `ruff check .` | clean |
+| `ruff format --check .` | 332 files formatted |
+| `mypy` | no issues in 163 source files |
+| `python -m ale.contracts.lock --check` | OK (no contract change) |
+| `pytest -m "not slow" -q` | **1607 passed**, 11 skipped, 54 deselected, 4 xfailed, **2 failed** in 910 s: `test_topology_m2b.py::test_B202_smoke_central_bar` and `test_topology_q3.py::test_Q311_short_budget_P60[1]` (`elapsed_s` 3.03 against a 3.0 s limit). Both are wall-clock bound, use no hint and no file changed here; they pass when run alone (3 passed, 67 s). Reported, not weakened. |
 
 ## What was built
 
