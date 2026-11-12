@@ -450,7 +450,7 @@ class Layout(BaseModel):
         from shapely import box
 
         solids = [ShapelyPolygon(r) for r in self.footprint.solids]
-        boxes = []
+        boxes: list[Any] = []
         for p in self.fixed:
             r = p.rect
             b = box(r.x, r.y, r.x2(), r.y2())
@@ -458,9 +458,7 @@ class Layout(BaseModel):
                 raise ValueError(f"fixed room {p.instance_id!r} does not lie inside a solid")
             for q, other in zip(self.fixed, boxes, strict=False):
                 if b.intersection(other).area > 0:
-                    raise ValueError(
-                        f"fixed rooms {q.instance_id!r} and {p.instance_id!r} overlap"
-                    )
+                    raise ValueError(f"fixed rooms {q.instance_id!r} and {p.instance_id!r} overlap")
             boxes.append(b)
 
 

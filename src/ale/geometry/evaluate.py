@@ -237,9 +237,7 @@ class _Eval:
             if any(solid_contact(c.rect, ring) >= 1 for c in circ):
                 continue
             around = tuple(
-                sorted(
-                    p.instance_id for p in self.layout.rooms if solid_contact(p.rect, ring) >= 1
-                )
+                sorted(p.instance_id for p in self.layout.rooms if solid_contact(p.rect, ring) >= 1)
             )
             self.flag(
                 "SOLID_NO_ACCESS",

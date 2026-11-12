@@ -780,9 +780,8 @@ def _module_footprint(site: SiteSpec, grid: GridSpec) -> ModuleFootprint:
             site.access_edge,
         )
     core_mm2 = sum(
-        Fraction(m_to_mm(c.rect[2] + c.rect[0]) - m_to_mm(c.rect[0])) * Fraction(
-            m_to_mm(c.rect[3] + c.rect[1]) - m_to_mm(c.rect[1])
-        )
+        Fraction(m_to_mm(c.rect[2] + c.rect[0]) - m_to_mm(c.rect[0]))
+        * Fraction(m_to_mm(c.rect[3] + c.rect[1]) - m_to_mm(c.rect[1]))
         for c in site.cores
     )
     metric_mm2 = Fraction(_twice_area(ext) + sum(_twice_area(h) for h in holes_mm), 2) - core_mm2

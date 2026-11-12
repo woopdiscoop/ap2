@@ -181,12 +181,12 @@ def check_layout(layout: Layout, prepared: PreparedInput, config: AleConfig) -> 
     if not _connected([c.rect for c in circ]):
         out.append("circulation is not connected")
     flagged_solids = {v.code for v in layout.metrics.violations}
-    for k, ring in enumerate(poly.solids):
+    for n_solid, ring in enumerate(poly.solids):
         if (
             not any(solid_contact(c.rect, ring) >= 1 for c in circ)
             and "SOLID_NO_ACCESS" not in flagged_solids
         ):
-            out.append(f"solid {k}: no circulation along its boundary")
+            out.append(f"solid {n_solid}: no circulation along its boundary")
     flagged = {(v.code, iid) for v in layout.metrics.violations for iid in v.instance_ids}
     specs = dict(prepared.instances)
     for room in rooms:
