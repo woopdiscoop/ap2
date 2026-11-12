@@ -49,6 +49,14 @@ from ale.contracts.config import AleConfig
 from ale.contracts.corridor_plan import BandPlan, ConnectorBay, CorridorPlan, FingerBay, RoomBay
 from ale.contracts.footprint import FootprintPieces, Junction, Piece, decompose_footprint
 from ale.contracts.models import Layout, LayoutMetrics, PlacedRoom, RoomSpec, Rulebook
+from ale.geometry.bay import (
+    WALL_MM,
+    BayHint,
+    BlockLattice,
+    axis_lattice,
+    count_lines,
+    current_bay_hint,
+)
 from ale.geometry.blocks import AnyBay, BlockOut, Consts, Item, RoomReq, Solver
 from ale.geometry.checks import exterior_contacts
 from ale.geometry.evaluate import evaluate
@@ -688,6 +696,76 @@ class _Realizer:
 _NO_FIT: Fail = ("JUNCTION_MISALIGNED", "a child piece does not fit its parent's spine band")
 
 
+class _BayRealizer(_Realizer):
+    """M.3b: a realiser whose blocks are laid out for the lattice of a :class:`BayHint`
+    (:meth:`Solver.bay_plan`). Only :meth:`block` differs; the depth search then ranks the
+    lattice cost ahead of the area deviation (it is part of ``BlockOut.area_dev``)."""
+
+    def __init__(
+        self,
+        prepared: PreparedInput,
+        plan: CorridorPlan,
+        fp: FootprintPieces,
+        consts: Consts,
+        hint: BayHint,
+    ) -> None:
+        super().__init__(prepared, plan, fp, consts)
+        self.hint = hint
+        ox, oy = prepared.footprint.origin_m
+        self._origin_mm = (round(ox * 1000), round(oy * 1000))
+
+    def lattice(self, p: int, k: int, side: str, depth: int) -> BlockLattice:
+        """The hint seen from block ``side`` of band ``k`` of piece ``p`` at ``depth``."""
+        piece = self.fp.pieces[p]
+        h = self.hint
+        mod = self.k.module_mm
+        along_x = piece.spine_axis == "X"
+        u0, _ = self.region(p)
+        a, c = (0, 1) if along_x else (1, 0)  # axis index along / across the spine
+        start = self._origin_mm[a] + (along_origin(piece) + u0) * mod
+        bay_mm = (h.bay_x_mm, h.bay_y_mm)[a]
+        line_mm = (h.line_x_mm, h.line_y_mm)[a]
+        col_mm = (h.col_x_mm, h.col_y_mm)[a]
+        colline_mm = (h.colline_x_mm, h.colline_y_mm)[a]
+        bay, bay_res = axis_lattice(line_mm, bay_mm, start, mod)
+        col, col_res = axis_lattice(colline_mm, col_mm, start, mod)
+        edge = WALL_MM // mod + 1
+        across_mm = (h.col_x_mm, h.col_y_mm)[c]
+        across_line = (h.colline_x_mm, h.colline_y_mm)[c]
+        origin = self._origin_mm[c] + across_origin(piece) * mod
+        if len(self.plan.pieces[p].bands) == 1:
+            full = frame(piece)[1]
+            v_lo = 0 if side == "A" else full - depth
+            lo = origin + (v_lo + edge) * mod
+            hi = origin + (v_lo + depth - edge) * mod
+            n_cross = count_lines(across_line, across_mm, lo, hi)
+        else:  # the block's position across the piece is not known here: expected count
+            n_cross = max(0, ((depth - 2 * edge) * mod) // across_mm) if across_mm > 0 else 0
+        return BlockLattice(
+            bay=bay,
+            bay_res=bay_res,
+            col=col,
+            col_res=col_res,
+            tol=h.tol_mm // mod,
+            edge=edge,
+            n_cross=n_cross,
+            small_mm2=h.small_mm2,
+        )
+
+    def block(self, p: int, k: int, side: str, depth: int) -> BlockOut:
+        key = (p, k, side, depth)
+        hit = self._blocks.get(key)
+        if hit is None:
+            band = self.plan.pieces[p].bands[k]
+            bays = band.block_a.bays if side == "A" else band.block_b.bays
+            _, length = self.region(p)
+            where = f"piece {p} band {k} block {side}"
+            lat = self.lattice(p, k, side, depth)
+            hit = self.solver.block(bays, depth, length, where, self.exterior(p, k, side), lat)
+            self._blocks[key] = hit
+        return hit
+
+
 def _flatten(po: _PieceOut) -> list[_PieceOut]:
     """``po`` and, recursively, every piece linked below it."""
     out = [po]
@@ -806,7 +884,29 @@ def realize(
     *,
     seed: int = 0,
 ) -> Realization:
-    """Realise ``plan`` on ``prepared``'s footprint and score it with :func:`evaluate`."""
+    """Realise ``plan`` on ``prepared``'s footprint and score it with :func:`evaluate`.
+
+    With a :class:`ale.geometry.bay.BayHint` active (:func:`ale.geometry.bay.use_bay_hint`,
+    M.3b) widths and depths are chosen for the lattice; a plan that then fails is realised
+    again without it (counted in ``hint.stats.fallbacks``). Without a hint: unchanged.
+    """
+    hint = current_bay_hint()
+    if hint is not None:
+        got = _realize(prepared, plan, rulebook, config, seed, hint)
+        if got.layout is not None:
+            return got
+        hint.stats.fallbacks += 1
+    return _realize(prepared, plan, rulebook, config, seed, None)
+
+
+def _realize(
+    prepared: PreparedInput,
+    plan: CorridorPlan,
+    rulebook: Rulebook,
+    config: AleConfig,
+    seed: int,
+    hint: BayHint | None,
+) -> Realization:
     try:
         fp = decompose_footprint(prepared.footprint.polygon)
     except ValueError as exc:
@@ -818,7 +918,11 @@ def realize(
     for i, piece in enumerate(fp.pieces):
         if frame(piece)[1] < consts.s:
             return _fail("PIECE_TOO_SMALL", f"piece {i} is narrower than the spine width")
-    real = _Realizer(prepared, plan, fp, consts)
+    real = (
+        _Realizer(prepared, plan, fp, consts)
+        if hint is None
+        else _BayRealizer(prepared, plan, fp, consts, hint)
+    )
     outs = real.search()
     if outs is None and real.timed_out:
         return _fail("DEPTH_SEARCH_TIMEOUT", "depth search budget exhausted")
@@ -834,6 +938,15 @@ def realize(
             failures=tuple(Failure(code=c, detail=d) for c, d in failures),
             depths=depths,
         )
+    if hint is not None:
+        hint.stats.realisations += 1
+        for po in outs:
+            for bo in po.bands:
+                for blk in (bo.a, bo.b):
+                    if blk.bay_cost is None:
+                        hint.stats.plain_blocks += 1
+                    else:
+                        hint.stats.lattice_blocks += 1
     layout = _build_layout(real, prepared, outs, seed)
     metrics = evaluate(layout, prepared, rulebook, config, plan)
     return Realization(

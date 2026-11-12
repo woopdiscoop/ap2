@@ -29,6 +29,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ale.config import AleConfig
+from ale.contracts.corridor_plan import CorridorPlan
 from ale.contracts.models import (
     GridSpec,
     Layout,
@@ -186,6 +187,9 @@ class FloorPlan:
     origin: tuple[float, float] = (0.0, 0.0)
     snapped: tuple[int, int, int] = (0, 0, 0)
     """Façade walls found, already on a bay line, moved onto one (:mod:`ale.stack.snap`)."""
+    lattice: tuple[int, int, int] = (0, 0, 0)
+    """M.3b: ``(1 if the plan was realised on the lattice else 0, blocks laid out on it, blocks
+    laid out as without)``; ``(0, 0, 0)`` when the lattice realisation was not kept."""
 
     @property
     def passes(self) -> bool:
@@ -413,7 +417,9 @@ def _generate_floor(
     res = anneal(prepared, rb, anneal_config, seeded.plan, seed=seed)
     base = res.layout
     snapped = (0, 0, 0)
+    lattice = (0, 0, 0)
     if rhythm is not None:
+        base, lattice = _on_lattice(prepared, rb, config, res.plan, base, rhythm, seed)
         from ale.stack.snap import snap_layout
 
         base, st = snap_layout(base, prepared, rb, config, rhythm)
@@ -493,7 +499,35 @@ def _generate_floor(
         outline=ring,
         origin=origin,
         snapped=snapped,
+        lattice=lattice,
     )
+
+
+def _on_lattice(
+    prepared: PreparedInput,
+    rulebook: Rulebook,
+    config: AleConfig,
+    plan: CorridorPlan,
+    base: Layout,
+    rhythm: Rhythm,
+    seed: int,
+) -> tuple[Layout, tuple[int, int, int]]:
+    """M.3b: realise the annealed ``plan`` again with the lattice of ``rhythm`` (widths inside the
+    area windows and depths chosen so that façade partitions fall on bay lines and column lines
+    stay off small rooms). The new layout replaces ``base`` unless it has more hard violations
+    (then ``base`` is kept and the lattice tuple is zero)."""
+    from ale.geometry.bay import use_bay_hint
+    from ale.geometry.realize import realize
+    from ale.optimize.anneal import hard_count
+
+    hint = rhythm.hint()
+    with use_bay_hint(hint):
+        got = realize(prepared, plan, rulebook, config, seed=seed)
+    if got.layout is None or hint.stats.fallbacks:
+        return base, (0, 0, 0)
+    if hard_count(got.layout) > hard_count(base):
+        return base, (0, 0, 0)
+    return got.layout, (1, hint.stats.lattice_blocks, hint.stats.plain_blocks)
 
 
 def _prior_positions(
