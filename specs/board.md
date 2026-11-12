@@ -51,7 +51,8 @@ Maintained by the Router only. Directive: `specs/DIRECTIVE.md` (v2.2, supersedes
 | A.4 | Contract: site anchors (entrances, cores, plot mode, setbacks, party edges) + room anchors + floors (1.5.0) | **DONE** | — | RD + eval | Needed by R.9, G.3 and multi-storey. |
 | R.8 | Depth/shape rules learned from built plans | QUEUED | Q.4 | roadmap | User decision U-9. |
 | R.7 | VLM geometry reader for raster plans | **DONE** | X.1 done | roadmap | |
-| M.2–3 | Multi-storey: M.2 exact per-floor plans inside the skeleton (engine honours fixed cores), M.3 room stacking + bay rhythm + column grid | QUEUED (in scope, U-13; after M.1) | A.4, R.9 | roadmap | |
+| M.2 | Exact per-floor plans inside the skeleton: `ModulePolygon.solids`, `Layout.fixed` (contracts 1.7.0), `ale stack --plans` | RUNNING | M.1 | RD + eval | Cores become solids at intake; circulation must touch each solid (hard). |
+| M.3 | Room stacking + shared bay rhythm + column grid | QUEUED (after M.2) | A.4, R.9 | roadmap | |
 | P.1 | Claude VLM provider | **DONE** | 3c9db4e | RD + eval + eval_report | User decision U-8: VLM = Claude (claude-opus-5-5, effort low, structured output, no sampling params, cached). |
 | I.1 | Integration: PDF/raster extract, labels, scale, `ale review` | **DONE** | — | RD + eval | Assigned to an external Codex agent; PR to be reviewed by the Router. |
 | 1.3 | Vector-PDF reader (library) | **DONE** | — | RD + eval | Plan-likeness on merged walls; HABS PDFs correctly identified as scanned (→ raster path). |
