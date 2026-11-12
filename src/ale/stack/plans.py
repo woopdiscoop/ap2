@@ -480,9 +480,9 @@ def _seed_and_anneal(
     hint: BayHint | None,
 ) -> tuple[AnnealResult | None, int, str]:
     """Seed (several tries) then anneal one floor; ``(None, tries, why)`` when no seeding
-    realises. With ``hint`` (M.3b) the realiser chooses widths and depths for the bay lines and
-    column lines of the building and the cost gains the lattice term, for the seeding and the
-    annealing alike."""
+    realises. With ``hint`` (M.3b) the annealing realises with widths and depths chosen for the
+    bay lines and column lines of the building and its cost gains the lattice term; the seeding
+    (a lattice-free arrangement of the rooms) is as before."""
     from ale.geometry.bay import use_bay_hint
     from ale.optimize.anneal import anneal
     from ale.topology import seed_plan
@@ -492,39 +492,43 @@ def _seed_and_anneal(
     why = ""
     spent = 0.0
     attempt = 0
-    with use_bay_hint(hint):
-        # The seeder is chancy on rings around a solid (about one seed in two succeeds): try
-        # other seeds, each bounded by a number of attempts (not by time, so that the result
-        # does not depend on the speed of the machine): at least SEED_TRIES_MIN tries, then
-        # more while the seeding share of the budget lasts, at most SEED_TRIES_MAX.
-        while seeded is None or seeded.realization.layout is None:
-            if attempt >= SEED_TRIES_MAX or (
-                attempt >= SEED_TRIES_MIN and spent >= SEED_SHARE * total
-            ):
-                break
-            seeded = seed_plan(
-                prepared,
-                rb,
-                config,
-                seed=seed + 1000 * attempt,
-                time_budget_s=max(total, 1.0),
-                max_attempts=TRY_ATTEMPTS,
-                prior=prior if attempt % 2 == 0 else None,
-            )
-            spent += seeded.elapsed_s
-            attempt += 1
-            if seeded.realization.layout is None:
-                why = "; ".join(f"{x.code}: {x.detail}" for x in seeded.realization.failures)
-        assert seeded is not None
-        if seeded.realization.layout is None:
-            return None, attempt, why
-        anneal_config = config.model_copy(
-            update={
-                "optimizer": config.optimizer.model_copy(
-                    update={"time_budget_s": max(1.0, total - spent)}
-                )
-            }
+    # The seeder is chancy on rings around a solid (about one seed in two succeeds): try
+    # other seeds, each bounded by a number of attempts (not by time, so that the result
+    # does not depend on the speed of the machine): at least SEED_TRIES_MIN tries, then
+    # more while the seeding share of the budget lasts, at most SEED_TRIES_MAX.
+    while seeded is None or seeded.realization.layout is None:
+        if attempt >= SEED_TRIES_MAX or (attempt >= SEED_TRIES_MIN and spent >= SEED_SHARE * total):
+            break
+        seeded = seed_plan(
+            prepared,
+            rb,
+            config,
+            seed=seed + 1000 * attempt,
+            time_budget_s=max(total, 1.0),
+            max_attempts=TRY_ATTEMPTS,
+            prior=prior if attempt % 2 == 0 else None,
         )
+        spent += seeded.elapsed_s
+        attempt += 1
+        if seeded.realization.layout is None:
+            why = "; ".join(f"{x.code}: {x.detail}" for x in seeded.realization.failures)
+    assert seeded is not None
+    if seeded.realization.layout is None:
+        return None, attempt, why
+    anneal_config = config.model_copy(
+        update={
+            "optimizer": config.optimizer.model_copy(
+                update={"time_budget_s": max(1.0, total - spent)}
+            )
+        }
+    )
+    try:
+        with use_bay_hint(hint):
+            return anneal(prepared, rb, anneal_config, seeded.plan, seed=seed), attempt, why
+    except ValueError:  # the start plan does not realise on the lattice: as without it
+        if hint is None:
+            raise
+        hint.stats.fallbacks += 1
         return anneal(prepared, rb, anneal_config, seeded.plan, seed=seed), attempt, why
 
 
