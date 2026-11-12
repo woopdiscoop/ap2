@@ -90,8 +90,8 @@ def fp(pts: tuple[tuple[int, int], ...]) -> FootprintPieces:
 
 def test_K01_version() -> None:
     assert (
-        CONTRACTS_VERSION == "1.6.0"
-    )  # superseded by A.3 (I01), Q.4 (D01), A.4 (A401), then G.1 (N01)
+        CONTRACTS_VERSION == "1.7.0"
+    )  # superseded by A.3 (I01), Q.4 (D01), A.4 (A401), G.1 (N01), then M.2, then M.2
 
 
 # SHA-256 of the contract files as frozen at 1.0.0 (CONTRACTS.lock before amendment A.1),
@@ -364,8 +364,8 @@ BASE_REV = "3dcd970"  # spec commit of Ticket A.2, before the amendment
 
 def test_B01_version_schema() -> None:
     assert (
-        CONTRACTS_VERSION == "1.6.0"
-    )  # superseded by A.3 (I01), Q.4 (D01), A.4 (A401), then G.1 (N01)
+        CONTRACTS_VERSION == "1.7.0"
+    )  # superseded by A.3 (I01), Q.4 (D01), A.4 (A401), G.1 (N01), then M.2, then M.2
     # ``pieces`` is required, so the default is read from the field (CorridorPlan() is invalid).
     assert CorridorPlan.model_fields["schema_version"].default == "ale.corridor_plan/2"
     assert plan(piece([room("R1")])).schema_version == "ale.corridor_plan/2"
@@ -407,6 +407,35 @@ G1_REPLACED_LINES = {
 }
 
 
+#: Lines of ``footprint.py`` / ``geometry.py`` / ``models.py`` that amendment M.2 (contracts
+#: 1.7.0) replaced (solids, ``Layout.fixed``; the hole validation became a shared ring check).
+M2_REPLACED_LINES = {
+    "-    :data:`MAX_PIECES` pieces are needed.",
+    '-        if isinstance(out, dict) and not out.get("holes"):',
+    '-            out.pop("holes", None)',
+    '-        """Area in module² cells (exact shoelace, holes subtracted)."""',
+    "-        holes = sum(_signed_area2(h) for h in self.holes)  # clockwise rings: negative",
+    "-def _check_holes(",
+    "-    exterior: tuple[ModulePoint, ...], holes: tuple[tuple[ModulePoint, ...], ...]",
+    "-) -> None:",
+    '-    """Validate courtyard rings: rectilinear, clockwise, no collinear neighbours, inside."""',
+    "-    import shapely",
+    "-",
+    "-    for k, ring in enumerate(holes):",
+    '-            raise ValueError(f"hole {k} needs at least 4 vertices")',
+    '-                raise ValueError(f"hole {k} ed'
+    'ge {i} is not axis-parallel or has zero length")',
+    '-            raise ValueError(f"hole {k} has collinear consecutive edges")',
+    '-            raise ValueError(f"hole {k} vertices must be clockwise")',
+    "-        return shapely.Polygon(g.exterior, g.holes)",
+    "-    party wall. None of the A.4 fields is used by the v1 engines.",
+    '-    """Output of Phase 3: placed rooms on the module grid (+y up, 1 unit = 1 module)."""',
+    "-    model_config = _CONFIG",
+    "-        ids = [p.instance_id for p in (*self.rooms, *self.circulation)]",
+    '-        for name in ("rooms", "circulation"):',
+}
+
+
 def test_B02_footprint_unchanged() -> None:
     files = (
         "src/ale/contracts/footprint.py",
@@ -425,7 +454,7 @@ def test_B02_footprint_unchanged() -> None:
     removed_fp = {
         line for line in proc.stdout.splitlines() if line.startswith("-") and line[:3] != "---"
     }
-    assert removed_fp <= G1_REPLACED_LINES
+    assert removed_fp <= G1_REPLACED_LINES | M2_REPLACED_LINES
     models = subprocess.run(
         ["git", "diff", BASE_REV, "--", "src/ale/contracts/models.py"],
         cwd=REPO_ROOT,
@@ -437,7 +466,7 @@ def test_B02_footprint_unchanged() -> None:
     removed = {
         line for line in models.stdout.splitlines() if line.startswith("-") and line[:3] != "---"
     }
-    assert removed <= A4_REPLACED_LINES
+    assert removed <= A4_REPLACED_LINES | M2_REPLACED_LINES
 
 
 def b03_plan() -> CorridorPlan:
@@ -757,7 +786,9 @@ def inner2(a0: list[Any], a1: list[Any]) -> PiecePlan:
 
 
 def test_I01_version_schema() -> None:
-    assert CONTRACTS_VERSION == "1.6.0"  # superseded by Q.4 (D01), A.4 (A401), then G.1 (N01)
+    assert (
+        CONTRACTS_VERSION == "1.7.0"
+    )  # superseded by Q.4 (D01), A.4 (A401), then G.1 (N01), then M.2
     assert export_schemas.main(["--check"]) == 0
     assert lock.main(["--check"]) == 0
     schema = json.loads(

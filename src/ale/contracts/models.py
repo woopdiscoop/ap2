@@ -407,7 +407,9 @@ class Layout(BaseModel):
     part of the tiling invariant: each lies inside a solid and none overlaps another.
     """
 
-    model_config = _CONFIG
+    # ``constants``: the wrap serializer below would otherwise turn a NaN metric into ``null``
+    # instead of letting ``canonical_json`` reject it.
+    model_config = ConfigDict(extra="forbid", frozen=True, ser_json_inf_nan="constants")
 
     schema_version: Literal["ale.layout/1"] = "ale.layout/1"
     grid: GridSpec
