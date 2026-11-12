@@ -722,20 +722,17 @@ class Quantiles(BaseModel):
 
 
 class TypeStats(BaseModel):
-    """Statistics of one room type: aspect (long/short), area (m²), orientation preference.
-
-    Ticket R.8 (contracts 1.8.0): optional façade statistics learned from built plans:
-    ``depth_m`` (depth from the façade, m), ``facade_width_m`` (length of the longest façade
-    edge, m), ``facade_m_per_m2`` (façade length per m² of room, rooms without façade count
-    as 0) and ``n_facade_samples``. Absent (``None`` / 0) they are left out of the serialised
-    form, so rulebooks without them serialise exactly as before.
-    """
+    """Statistics of one room type: aspect (long/short), area (m²), orientation preference."""
 
     model_config = _CONFIG
 
     aspect: Quantiles
     area_m2: Quantiles
     orientation: dict[Bearing, Unit]
+    # Ticket R.8 (contracts 1.8.0): façade statistics learned from built plans: depth from the
+    # façade (m), length of the longest façade edge (m), façade length per m² (rooms without
+    # façade count as 0) and the number of rooms with a façade. Absent (None / 0) they are left
+    # out of the serialised form, so rulebooks without them serialise exactly as before.
     depth_m: Quantiles | None = None
     facade_width_m: Quantiles | None = None
     facade_m_per_m2: Float | None = None
