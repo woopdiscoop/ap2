@@ -27,7 +27,7 @@ def poly(**kw: Any) -> ModulePolygon:
 
 
 def test_M201_version_lock_and_schemas() -> None:
-    assert CONTRACTS_VERSION == "1.7.0"
+    assert CONTRACTS_VERSION == "1.8.0"  # M.2 introduced 1.7.0; bumped by R.8
     assert lock.main(["--check"]) == 0
     assert export_schemas.main(["--check"]) == 0
     layout_schema = json.loads(

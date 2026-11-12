@@ -140,13 +140,53 @@
     },
     "TypeStats": {
       "additionalProperties": false,
-      "description": "Statistics of one room type: aspect (long/short), area (m\u00b2), orientation preference.",
+      "description": "Statistics of one room type: aspect (long/short), area (m\u00b2), orientation preference.\n\nTicket R.8 (contracts 1.8.0): optional fa\u00e7ade statistics learned from built plans:\n``depth_m`` (depth from the fa\u00e7ade, m), ``facade_width_m`` (length of the longest fa\u00e7ade\nedge, m), ``facade_m_per_m2`` (fa\u00e7ade length per m\u00b2 of room, rooms without fa\u00e7ade count\nas 0) and ``n_facade_samples``. Absent (``None`` / 0) they are left out of the serialised\nform, so rulebooks without them serialise exactly as before.",
       "properties": {
         "area_m2": {
           "$ref": "#/$defs/Quantiles"
         },
         "aspect": {
           "$ref": "#/$defs/Quantiles"
+        },
+        "depth_m": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Quantiles"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "facade_m_per_m2": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Facade M Per M2"
+        },
+        "facade_width_m": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Quantiles"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "n_facade_samples": {
+          "default": 0,
+          "minimum": 0,
+          "title": "N Facade Samples",
+          "type": "integer"
         },
         "orientation": {
           "additionalProperties": {

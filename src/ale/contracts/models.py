@@ -722,13 +722,35 @@ class Quantiles(BaseModel):
 
 
 class TypeStats(BaseModel):
-    """Statistics of one room type: aspect (long/short), area (m²), orientation preference."""
+    """Statistics of one room type: aspect (long/short), area (m²), orientation preference.
+
+    Ticket R.8 (contracts 1.8.0): optional façade statistics learned from built plans:
+    ``depth_m`` (depth from the façade, m), ``facade_width_m`` (length of the longest façade
+    edge, m), ``facade_m_per_m2`` (façade length per m² of room, rooms without façade count
+    as 0) and ``n_facade_samples``. Absent (``None`` / 0) they are left out of the serialised
+    form, so rulebooks without them serialise exactly as before.
+    """
 
     model_config = _CONFIG
 
     aspect: Quantiles
     area_m2: Quantiles
     orientation: dict[Bearing, Unit]
+    depth_m: Quantiles | None = None
+    facade_width_m: Quantiles | None = None
+    facade_m_per_m2: Float | None = None
+    n_facade_samples: NonNegInt = 0
+
+    @model_serializer(mode="wrap")
+    def _drop_empty_facade(self, handler: Any) -> Any:
+        out = handler(self)
+        if isinstance(out, dict):
+            for name in ("depth_m", "facade_width_m", "facade_m_per_m2"):
+                if out.get(name) is None:
+                    out.pop(name, None)
+            if not out.get("n_facade_samples"):
+                out.pop("n_facade_samples", None)
+        return out
 
     @model_validator(mode="after")
     def _ranges(self) -> TypeStats:

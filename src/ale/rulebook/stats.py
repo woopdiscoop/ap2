@@ -14,6 +14,11 @@ Conventions (literal readings of the RD, recorded in ``eval_report.md``):
   outside them (with equal weights this is the Hazen definition ``(i - 0.5) / n``).
 * Core offset: the footprint is the bounding box of every room of the plan (``fx, fy`` its
   centre, ``W, H`` its size); plans without a service-core room are not used.
+* Façade (Ticket R.8): the façade edges of a room are its ring edges lying on the exterior
+  outline (:func:`~ale.mining.topology._facing` within ``EXTERIOR_TOL_M``) over at least
+  :data:`MIN_FACADE_EDGE_M`; the longest one gives the façade width (its façade length) and
+  the depth (extent of the room perpendicular to it). Rooms without façade count for
+  ``facade_m_per_m2 = 0`` and not for depth / width.
 * Orientation: façade length per bearing (outward normal of the façade edges, binned by
   :func:`~ale.contracts.orientation.bearing_bin`); the type-independent share uses every
   room of the plan (typed or not).
@@ -44,7 +49,9 @@ from ale.mining.topology import (
 
 __all__ = [
     "BEARINGS",
+    "MIN_FACADE_EDGE_M",
     "CoreStat",
+    "FacadeStat",
     "OrientationStat",
     "PairStat",
     "PlanInput",
@@ -52,6 +59,7 @@ __all__ = [
     "adjacency_stats",
     "allowed_type",
     "core_offset_stats",
+    "facade_stats",
     "orientation_stats",
     "room_aspect",
     "room_facades",
@@ -59,6 +67,8 @@ __all__ = [
     "weighted_quantile",
 ]
 
+#: Shortest exterior stretch (m) of a room edge that counts as a façade edge (R.8).
+MIN_FACADE_EDGE_M = 0.6
 BEARINGS: tuple[Bearing, ...] = (Bearing.N, Bearing.E, Bearing.S, Bearing.W)
 #: Fidelities whose rooms feed the aspect / area statistics.
 SHAPE_FIDELITIES = frozenset({Fidelity.CAD, Fidelity.PDF_VECTOR})
@@ -98,6 +108,25 @@ class ShapeStat:
     @property
     def n(self) -> int:
         return len(self.area)
+
+
+@dataclass
+class FacadeStat:
+    """Weighted samples of depth (m) and façade width (m) of the rooms of one type with a
+    façade, and the weighted façade length / area totals of every room of the type."""
+
+    depth: list[tuple[float, float]] = field(default_factory=list)
+    width: list[tuple[float, float]] = field(default_factory=list)
+    facade_len: float = 0.0
+    area: float = 0.0
+
+    @property
+    def n(self) -> int:
+        return len(self.depth)
+
+    @property
+    def m_per_m2(self) -> float | None:
+        return self.facade_len / self.area if self.area > 0.0 else None
 
 
 @dataclass(frozen=True)
@@ -337,3 +366,49 @@ def orientation_stats(plans: Sequence[PlanInput]) -> dict[str, OrientationStat]:
         values = {b: (diff[b] / m if m > 1e-12 else 0.0) for b in BEARINGS}
         out[t] = OrientationStat(values=values, n_plans=plan_count[t])
     return out
+
+
+# --------------------------------------------------------------------------- façade depth / width
+
+
+def facade_stats(plans: Sequence[PlanInput]) -> dict[str, FacadeStat]:
+    """Depth, façade width and façade length per m² of every allowed type (R.8).
+
+    Every plan with a metric scale contributes (the plans are metric); rooms without a façade
+    edge add their area to the type's total with a façade length of 0.
+    """
+    out: dict[str, FacadeStat] = {}
+    for plan in plans:
+        rooms = _rooms(plan.metric)
+        if not rooms:
+            continue
+        outer = _outer_edges(rooms)
+        for r in rooms:
+            if not allowed_type(r.type) or r.type is None:
+                continue
+            st = out.setdefault(r.type, FacadeStat())
+            area = float(r.geom.area)
+            if area <= 0.0:
+                continue
+            st.area += area * plan.weight
+            ccw = orient(r.geom, 1.0)
+            best: tuple[float, float, tuple[float, float]] | None = None
+            total = 0.0
+            for edge in _ring_edges(ccw.exterior.coords):
+                length = _facing([edge], outer, EXTERIOR_TOL_M, [])
+                if length < MIN_FACADE_EDGE_M:
+                    continue
+                (ax, ay), (bx, by) = edge
+                full = math.hypot(bx - ax, by - ay)
+                total += min(length, full)
+                if best is None or length > best[0]:
+                    # inward normal of a counter-clockwise ring: left of the edge direction
+                    best = (length, full, (-(by - ay) / full, (bx - ax) / full))
+            if best is None:
+                continue
+            st.facade_len += total * plan.weight
+            nx, ny = best[2]
+            proj = [x * nx + y * ny for x, y in ccw.exterior.coords]
+            st.depth.append((max(proj) - min(proj), plan.weight))
+            st.width.append((min(best[0], best[1]), plan.weight))
+    return {k: out[k] for k in sorted(out)}

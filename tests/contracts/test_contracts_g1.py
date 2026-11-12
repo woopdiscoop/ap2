@@ -92,7 +92,7 @@ def poly(*pts: tuple[int, int], holes: tuple[tuple[tuple[int, int], ...], ...] =
 
 # ------------------------------------------------------------------------------ N01
 def test_N01_version_and_locks() -> None:
-    assert CONTRACTS_VERSION == "1.7.0"  # superseded by M.2
+    assert CONTRACTS_VERSION == "1.8.0"  # superseded by M.2, then R.8
     assert lock.main(["--check"]) == 0
     assert export_schemas.main(["--check"]) == 0
     assert PLAN_MAX_PIECES == MAX_PIECES == 12
