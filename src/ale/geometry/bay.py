@@ -17,13 +17,23 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
+
+import shapely
+
+if TYPE_CHECKING:
+    from ale.contracts.models import Layout
 
 __all__ = [
+    "LATTICE_COST",
     "BayHint",
     "BayStats",
     "BlockLattice",
+    "LatticeFigures",
     "axis_lattice",
     "current_bay_hint",
+    "lattice_figures",
+    "lines_in",
     "use_bay_hint",
 ]
 
@@ -33,6 +43,9 @@ WALL_MM = 150
 """A column within this distance of a room side stands on a wall (M.3 M305)."""
 TOL_MM = 300
 """A partition within this distance of a bay line is on it (M.3 M304)."""
+LATTICE_COST = "lattice"
+"""Name of the cost term added to ``cost_breakdown`` while a hint is active: façade partitions
+off a bay line plus columns inside small rooms, per room."""
 
 
 @dataclass
@@ -40,12 +53,9 @@ class BayStats:
     """Counters filled by the realiser while a hint is active."""
 
     realisations: int = 0
-    lattice_blocks: int = 0
-    """Blocks laid out with the lattice objective."""
-    plain_blocks: int = 0
-    """Blocks laid out as without a hint (marker, infeasible window, no room bay)."""
+    """:func:`ale.geometry.realize` calls that succeeded with the hint."""
     fallbacks: int = 0
-    """Realisations that failed with the hint and were redone without it."""
+    """:func:`ale.geometry.realize` calls that failed with the hint and were redone without it."""
 
 
 @dataclass(frozen=True)
@@ -63,6 +73,8 @@ class BayHint:
     colline_y_mm: int
     tol_mm: int = TOL_MM
     small_mm2: int = SMALL_ROOM_MM2
+    weight: float = 1.0
+    """Weight of the :data:`LATTICE_COST` term in ``total_cost``."""
     stats: BayStats = field(default_factory=BayStats, compare=False, hash=False, repr=False)
 
 
@@ -71,8 +83,8 @@ class BlockLattice:
     """A hint seen from one block, in modules. Bay lines lie at ``u`` with
     ``(u - bay_res) % bay == 0`` (``bay == 0``: no bay objective), column lines likewise with
     ``col`` / ``col_res``; ``tol``: distance counted as on a line; ``edge``: a column line at
-    least this far from both sides of a room is inside it; ``n_cross``: column lines across the
-    block's depth that are at least ``edge`` from both of its sides; ``small_mm2``: rooms
+    least this far from both sides of a room is inside it; ``cross_t``: distance ``t`` from the
+    spine of each column line across the block's depth (empty: not known); ``small_mm2``: rooms
     below this area count."""
 
     bay: int
@@ -81,7 +93,7 @@ class BlockLattice:
     col_res: int
     tol: int
     edge: int
-    n_cross: int
+    cross_t: tuple[int, ...]
     small_mm2: int
 
 
@@ -96,13 +108,13 @@ def axis_lattice(line_mm: int, period_mm: int, start_mm: int, module_mm: int) ->
     return period_mm // module_mm, off // module_mm
 
 
-def count_lines(line_mm: int, period_mm: int, lo_mm: int, hi_mm: int) -> int:
-    """Number of ``line_mm + n * period_mm`` in ``[lo_mm, hi_mm]``."""
+def lines_in(line_mm: int, period_mm: int, lo_mm: int, hi_mm: int) -> list[int]:
+    """The ``line_mm + n * period_mm`` in ``[lo_mm, hi_mm]``, ascending."""
     if period_mm <= 0 or hi_mm < lo_mm:
-        return 0
+        return []
     first = -((line_mm - lo_mm) // period_mm)  # ceil((lo - line) / period)
     last = (hi_mm - line_mm) // period_mm
-    return max(0, last - first + 1)
+    return [line_mm + n * period_mm for n in range(first, last + 1)]
 
 
 _HINT: ContextVar[BayHint | None] = ContextVar("ale_bay_hint", default=None)
@@ -121,3 +133,99 @@ def use_bay_hint(hint: BayHint | None) -> Iterator[None]:
         yield
     finally:
         _HINT.reset(token)
+
+
+@dataclass(frozen=True)
+class LatticeFigures:
+    """Façade partitions (and how many are off a bay line) and columns (and how many stand inside
+    a room of less than ``small_mm2``) of a layout, as :func:`ale.stack.grid.plan_facade_partitions`
+    and :func:`ale.stack.grid.plan_columns` measure them."""
+
+    partitions: int
+    off: int
+    columns: int
+    small: int
+
+
+def lattice_figures(layout: Layout, origin_mm: tuple[int, int], hint: BayHint) -> LatticeFigures:
+    """Figures of ``layout`` (footprint origin ``origin_mm``) against ``hint``."""
+    mod = layout.grid.module_mm
+    ring = list(layout.footprint.exterior)
+    edges = [(ring[i], ring[(i + 1) % len(ring)]) for i in range(len(ring))]
+    seen: set[tuple[int, int]] = set()
+    parts = off = 0
+    for room in layout.rooms:
+        r = room.rect
+        x0, y0, x1, y1 = r.x, r.y, r.x + r.w, r.y + r.h
+        for a, c in edges:
+            if a[1] == c[1]:  # horizontal exterior edge
+                if a[1] not in (y0, y1):
+                    continue
+                lo, hi = sorted((a[0], c[0]))
+                if x1 <= lo or x0 >= hi:
+                    continue
+                for x in (x0, x1):
+                    if lo < x < hi and (0, x) not in seen:
+                        seen.add((0, x))
+                        parts += 1
+                        dx = _off(origin_mm[0] + x * mod, hint.line_x_mm, hint.bay_x_mm)
+                        off += dx > hint.tol_mm
+            else:
+                if a[0] not in (x0, x1):
+                    continue
+                lo, hi = sorted((a[1], c[1]))
+                if y1 <= lo or y0 >= hi:
+                    continue
+                for y in (y0, y1):
+                    if lo < y < hi and (1, y) not in seen:
+                        seen.add((1, y))
+                        parts += 1
+                        dy = _off(origin_mm[1] + y * mod, hint.line_y_mm, hint.bay_y_mm)
+                        off += dy > hint.tol_mm
+    xs = [p[0] for p in ring]
+    ys = [p[1] for p in ring]
+    outline = shapely.Polygon(ring).buffer(1e-6)
+    cols = small = 0
+    solids = [
+        (min(q[0] for q in s), min(q[1] for q in s), max(q[0] for q in s), max(q[1] for q in s))
+        for s in layout.footprint.solids
+    ]
+    cell = mod * mod
+    for cx_mm in lines_in(
+        hint.colline_x_mm,
+        hint.col_x_mm,
+        origin_mm[0] + min(xs) * mod,
+        origin_mm[0] + max(xs) * mod,
+    ):
+        for cy_mm in lines_in(
+            hint.colline_y_mm,
+            hint.col_y_mm,
+            origin_mm[1] + min(ys) * mod,
+            origin_mm[1] + max(ys) * mod,
+        ):
+            fx, fy = (cx_mm - origin_mm[0]) / mod, (cy_mm - origin_mm[1]) / mod
+            if not outline.covers(shapely.Point(fx, fy)):
+                continue
+            if any(b[0] < fx < b[2] and b[1] < fy < b[3] for b in solids):
+                continue
+            cols += 1
+            for room in layout.rooms:
+                r = room.rect
+                if r.w * r.h * cell >= hint.small_mm2:
+                    continue
+                rx0, ry0 = origin_mm[0] + r.x * mod, origin_mm[1] + r.y * mod
+                if (
+                    rx0 + WALL_MM < cx_mm < rx0 + r.w * mod - WALL_MM
+                    and ry0 + WALL_MM < cy_mm < ry0 + r.h * mod - WALL_MM
+                ):
+                    small += 1
+                    break
+    return LatticeFigures(parts, off, cols, small)
+
+
+def _off(pos_mm: int, line_mm: int, period_mm: int) -> int:
+    """Distance (mm) from ``pos_mm`` to the nearest ``line_mm + n * period_mm``."""
+    if period_mm <= 0:
+        return 0
+    r = (pos_mm - line_mm) % period_mm
+    return min(r, period_mm - r)

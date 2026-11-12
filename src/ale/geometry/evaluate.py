@@ -10,6 +10,10 @@ exterior contact on the opposite side too: a through room) gets a ``FACADE_DEPTH
 (hard, see :data:`FACADE_CODES`). A *deep* room (``needs_facade`` and ``T > amax · dmax²``)
 cannot satisfy both depth and aspect: depth wins, and its aspect above ``amax`` is reported as
 ``ASPECT_DEPTH`` (soft, not counted in ``n_hard``) instead of ``ASPECT``.
+
+Ticket M.3b: while a :class:`ale.geometry.bay.BayHint` is active the cost gains a ``lattice``
+term (façade partitions off a bay line plus columns inside small rooms, per room); without a
+hint nothing changes.
 """
 
 from __future__ import annotations
@@ -24,6 +28,7 @@ from ale.contracts.models import Layout, LayoutMetrics, PlacedRoom, RoomSpec, Ru
 from ale.contracts.orientation import bearing_bin, compass_bearing_deg
 from ale.contracts.taxonomy import load_taxonomy
 from ale.contracts.units import to_decimal
+from ale.geometry.bay import LATTICE_COST, current_bay_hint, lattice_figures
 from ale.geometry.blocks import Consts, aspect_ok
 from ale.geometry.checks import exterior_contacts, share_length, solid_contact
 from ale.program.models import PreparedInput
@@ -335,6 +340,12 @@ def evaluate(
         # Q.4 soft depth rule: Σ max(0, depth - limit) / limit over the rooms, per room.
         terms[DEPTH_COST] = ev.per_room(float(ev.depth_excess))
         total += weights.facade_depth * terms[DEPTH_COST]
+    hint = current_bay_hint()
+    if hint is not None:  # M.3b: façade partitions off a bay line + columns in small rooms
+        ox, oy = prepared.footprint.origin_m
+        fig = lattice_figures(layout, (round(ox * 1000), round(oy * 1000)), hint)
+        terms[LATTICE_COST] = ev.per_room(float(fig.off + fig.small))
+        total += hint.weight * terms[LATTICE_COST]
     violations = sorted(ev.violations, key=lambda v: (v.code, v.instance_ids, v.detail))
     return LayoutMetrics(
         total_cost=total,

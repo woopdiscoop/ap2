@@ -29,7 +29,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ale.config import AleConfig
-from ale.contracts.corridor_plan import CorridorPlan
 from ale.contracts.models import (
     GridSpec,
     Layout,
@@ -60,6 +59,8 @@ from ale.stack.skeleton import (
 )
 
 if TYPE_CHECKING:
+    from ale.geometry.bay import BayHint
+    from ale.optimize.anneal import AnnealResult
     from ale.program.models import PreparedInput
     from ale.stack.report import StackResult
 
@@ -357,10 +358,8 @@ def _generate_floor(
     from ale.export import export_run
     from ale.geometry.checks import check_layout
     from ale.geometry.evaluate import FACADE_CODES
-    from ale.optimize.anneal import anneal
     from ale.program import load_rulebook, prepare_input
     from ale.program.models import InputError
-    from ale.topology import seed_plan
 
     if f.program_cells is None:
         return FloorPlan(f.level, "empty", "aucune pièce hors colonne humide à ce niveau")
@@ -376,50 +375,19 @@ def _generate_floor(
         return FloorPlan(f.level, "failed", f"entrées refusées : {errors}")
     rb, _ = load_rulebook(rulebook)
     assert rb is not None  # prepare_input validated it
-    total = config.optimizer.time_budget_s
     prior = _prior_positions(prepared, rb, below, seed)
-    seeded = None
-    why = ""
-    spent = 0.0
-    attempt = 0
-    # The seeder is chancy on rings around a solid (about one seed in two succeeds): try other
-    # seeds, each bounded by a number of attempts (not by time, so that the result does not
-    # depend on the speed of the machine): at least SEED_TRIES_MIN tries, then more while the
-    # seeding share of the budget lasts, at most SEED_TRIES_MAX.
-    while seeded is None or seeded.realization.layout is None:
-        if attempt >= SEED_TRIES_MAX or (attempt >= SEED_TRIES_MIN and spent >= SEED_SHARE * total):
-            break
-        seeded = seed_plan(
-            prepared,
-            rb,
-            config,
-            seed=seed + 1000 * attempt,
-            time_budget_s=max(total, 1.0),
-            max_attempts=TRY_ATTEMPTS,
-            prior=prior if attempt % 2 == 0 else None,
-        )
-        spent += seeded.elapsed_s
-        attempt += 1
-        if seeded.realization.layout is None:
-            why = "; ".join(f"{x.code}: {x.detail}" for x in seeded.realization.failures)
-    assert seeded is not None
-    if seeded.realization.layout is None:
+    hint = None if rhythm is None else rhythm.hint()
+    res, attempt, why = _seed_and_anneal(prepared, rb, config, prior, seed, hint)
+    if res is None:
         return FloorPlan(
             f.level, "failed", f"aucune réalisation exacte après {attempt} essai(s) ({why})"
         )
-    anneal_config = config.model_copy(
-        update={
-            "optimizer": config.optimizer.model_copy(
-                update={"time_budget_s": max(1.0, total - spent)}
-            )
-        }
-    )
-    res = anneal(prepared, rb, anneal_config, seeded.plan, seed=seed)
     base = res.layout
     snapped = (0, 0, 0)
     lattice = (0, 0, 0)
     if rhythm is not None:
-        base, lattice = _on_lattice(prepared, rb, config, res.plan, base, rhythm, seed)
+        assert hint is not None
+        lattice = (1, hint.stats.realisations, hint.stats.fallbacks)
         from ale.stack.snap import snap_layout
 
         base, st = snap_layout(base, prepared, rb, config, rhythm)
@@ -503,31 +471,61 @@ def _generate_floor(
     )
 
 
-def _on_lattice(
+def _seed_and_anneal(
     prepared: PreparedInput,
-    rulebook: Rulebook,
+    rb: Rulebook,
     config: AleConfig,
-    plan: CorridorPlan,
-    base: Layout,
-    rhythm: Rhythm,
+    prior: Mapping[str, tuple[float, float]] | None,
     seed: int,
-) -> tuple[Layout, tuple[int, int, int]]:
-    """M.3b: realise the annealed ``plan`` again with the lattice of ``rhythm`` (widths inside the
-    area windows and depths chosen so that façade partitions fall on bay lines and column lines
-    stay off small rooms). The new layout replaces ``base`` unless it has more hard violations
-    (then ``base`` is kept and the lattice tuple is zero)."""
+    hint: BayHint | None,
+) -> tuple[AnnealResult | None, int, str]:
+    """Seed (several tries) then anneal one floor; ``(None, tries, why)`` when no seeding
+    realises. With ``hint`` (M.3b) the realiser chooses widths and depths for the bay lines and
+    column lines of the building and the cost gains the lattice term, for the seeding and the
+    annealing alike."""
     from ale.geometry.bay import use_bay_hint
-    from ale.geometry.realize import realize
-    from ale.optimize.anneal import hard_count
+    from ale.optimize.anneal import anneal
+    from ale.topology import seed_plan
 
-    hint = rhythm.hint()
+    total = config.optimizer.time_budget_s
+    seeded = None
+    why = ""
+    spent = 0.0
+    attempt = 0
     with use_bay_hint(hint):
-        got = realize(prepared, plan, rulebook, config, seed=seed)
-    if got.layout is None or hint.stats.fallbacks:
-        return base, (0, 0, 0)
-    if hard_count(got.layout) > hard_count(base):
-        return base, (0, 0, 0)
-    return got.layout, (1, hint.stats.lattice_blocks, hint.stats.plain_blocks)
+        # The seeder is chancy on rings around a solid (about one seed in two succeeds): try
+        # other seeds, each bounded by a number of attempts (not by time, so that the result
+        # does not depend on the speed of the machine): at least SEED_TRIES_MIN tries, then
+        # more while the seeding share of the budget lasts, at most SEED_TRIES_MAX.
+        while seeded is None or seeded.realization.layout is None:
+            if attempt >= SEED_TRIES_MAX or (
+                attempt >= SEED_TRIES_MIN and spent >= SEED_SHARE * total
+            ):
+                break
+            seeded = seed_plan(
+                prepared,
+                rb,
+                config,
+                seed=seed + 1000 * attempt,
+                time_budget_s=max(total, 1.0),
+                max_attempts=TRY_ATTEMPTS,
+                prior=prior if attempt % 2 == 0 else None,
+            )
+            spent += seeded.elapsed_s
+            attempt += 1
+            if seeded.realization.layout is None:
+                why = "; ".join(f"{x.code}: {x.detail}" for x in seeded.realization.failures)
+        assert seeded is not None
+        if seeded.realization.layout is None:
+            return None, attempt, why
+        anneal_config = config.model_copy(
+            update={
+                "optimizer": config.optimizer.model_copy(
+                    update={"time_budget_s": max(1.0, total - spent)}
+                )
+            }
+        )
+        return anneal(prepared, rb, anneal_config, seeded.plan, seed=seed), attempt, why
 
 
 def _prior_positions(
