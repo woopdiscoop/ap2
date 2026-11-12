@@ -390,7 +390,7 @@ def _decompose_tree(fp: ModulePolygon, solid_aware: bool = False) -> FootprintPi
         if len(rects) > MAX_PIECES:
             continue
         for flip in (False, True) if solid_aware else (False,):
-            got = _tree(rects, flip)
+            got = _tree(rects, flip, solid_aware)
             n_j2 = sum(j.kind == "J2" for j in got.junctions)
             asp = max(_aspect(r) for r in rects)
             order = tuple(sorted(_order(r) for r in rects))
@@ -415,7 +415,16 @@ def _spans_short_side(r: ModuleRect, fp: ModulePolygon) -> bool:
     return r.h == h if w >= h else r.w == w
 
 
-def _tree(rects: list[ModuleRect], flip_root: bool = False) -> FootprintPieces:
+def _level(parent: dict[int, int], i: int) -> int:
+    """Depth of piece ``i`` in the parent map (the root has depth 0)."""
+    d = 0
+    while i in parent:
+        i = parent[i]
+        d += 1
+    return d
+
+
+def _tree(rects: list[ModuleRect], flip_root: bool = False, deep_parents: bool = False) -> FootprintPieces:
     """Spanning tree of the contact graph rooted at the largest piece (BFS), pre-order."""
     n = len(rects)
     contact: dict[tuple[int, int], tuple[ModulePoint, ModulePoint]] = {}
@@ -436,6 +445,20 @@ def _tree(rects: list[ModuleRect], flip_root: bool = False) -> FootprintPieces:
                 seen.add(nb)
                 parent[nb] = cur
                 queue.append(nb)
+    if deep_parents:
+        # A J2 child must follow its parent's spine band: hang each piece on the deepest of
+        # the pieces of the previous tree level it touches (a thin strip pins the band to
+        # the outline), lowest-leftmost on ties.
+        level = {root: 0}
+        for c in sorted(parent, key=lambda i: _level(parent, i)):
+            level[c] = level[parent[c]] + 1
+        for c in parent:
+            near = [
+                q
+                for q in by_pos
+                if level.get(q) == level[c] - 1 and (min(c, q), max(c, q)) in contact
+            ]
+            parent[c] = max(near, key=lambda q: min(rects[q].w, rects[q].h))
     kids: dict[int, list[int]] = {i: [] for i in range(n)}
     for c, p in parent.items():
         kids[p].append(c)
