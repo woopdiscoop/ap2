@@ -395,7 +395,7 @@ def _decompose_tree(fp: ModulePolygon, solid_aware: bool = False) -> FootprintPi
             asp = max(_aspect(r) for r in rects)
             order = tuple(sorted(_order(r) for r in rects))
             key = (
-                (len(rects), not _spans_short_side(got.pieces[0].rect, fp), -got.pieces[0].rect.area_cells(), not flip, -n_j2, asp, order)
+                (len(rects), not _spans_short_side(got.pieces[0].rect, fp), -got.pieces[0].rect.area_cells(), sum(j.kind == "J2" and j.parent == 0 for j in got.junctions), not flip, -n_j2, asp, order)
                 if solid_aware
                 else (len(rects), n_j2, asp, order)
             )
