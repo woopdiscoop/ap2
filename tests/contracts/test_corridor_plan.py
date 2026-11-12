@@ -91,7 +91,7 @@ def fp(pts: tuple[tuple[int, int], ...]) -> FootprintPieces:
 def test_K01_version() -> None:
     assert (
         CONTRACTS_VERSION == "1.7.0"
-    )  # superseded by A.3 (I01), Q.4 (D01), A.4 (A401), G.1 (N01), then M.2, then M.2
+    )  # superseded by A.3 (I01), Q.4 (D01), A.4 (A401), G.1 (N01), then M.2 (M201)
 
 
 # SHA-256 of the contract files as frozen at 1.0.0 (CONTRACTS.lock before amendment A.1),
@@ -365,7 +365,7 @@ BASE_REV = "3dcd970"  # spec commit of Ticket A.2, before the amendment
 def test_B01_version_schema() -> None:
     assert (
         CONTRACTS_VERSION == "1.7.0"
-    )  # superseded by A.3 (I01), Q.4 (D01), A.4 (A401), G.1 (N01), then M.2, then M.2
+    )  # superseded by A.3 (I01), Q.4 (D01), A.4 (A401), G.1 (N01), then M.2 (M201)
     # ``pieces`` is required, so the default is read from the field (CorridorPlan() is invalid).
     assert CorridorPlan.model_fields["schema_version"].default == "ale.corridor_plan/2"
     assert plan(piece([room("R1")])).schema_version == "ale.corridor_plan/2"
