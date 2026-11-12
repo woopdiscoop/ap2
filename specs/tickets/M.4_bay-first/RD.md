@@ -4,7 +4,7 @@
 > reaches ≈ 83 % fill and ≤ 55 % partitions on bay lines), `ale.stack` (`skeleton.py`, `grid.py`, `plans.py`),
 > R.8 (`TypeStats.depth_m`, contracts 1.8.0, merged at `dbdafa6`), `ale.geometry.checks.check_layout`,
 > `ale.geometry.evaluate.evaluate`, `Layout` / `PlacedRoom` (contracts). User decisions U-9, U-10, U-14, U-15,
-> U-16 and **U-18** (2026-11-12: office bars are planned bay-first, rooms = whole bays; the existing engine stays
+> U-16 and **U-18** (2026-11-12: office bars are planned bay-first, rooms = whole bays; amended by **U-20**, 2026-11-12: half-bay partitions (b/2 = 1.2 m) allowed; the existing engine stays
 > for other footprints). **No contract change. No new dependency. No randomness, no annealing.**
 > Reviewed by the Planner (U-19) before dispatch: the original ticket was split into **M.4 (this file)** and
 > **M.4b** (§9). Every target in `eval.md` was checked with a throw-away probe (plain greedy fill, not given to
@@ -12,7 +12,7 @@
 
 ## 1. Purpose
 Plan a bar floor the way an architect draws one: the section first (façade rows, corridors, central band), then the
-bays, then rooms as **whole numbers of bays** along each long façade. Partitions on the long façades are on bay
+bays, then rooms as **whole numbers of half-bays** (k a multiple of 0.5, U-20) along each long façade. Partitions on the long façades are on half-bay
 lines by construction. Output: a normal contract `Layout` per floor, valid for `check_layout`, exported and
 reported like today. M.4 plans **each floor on its own**; making floors repeat is M.4b.
 
@@ -98,16 +98,15 @@ whole bays; one corridor row keeps a clear width ≥ `circulation.min_width_m` b
 Bar floors 0–2 without heads: ≈ 367 m² = 32.7 % of the plate minus the solid (1123 m²).
 
 ### 4.5 Room shapes (the catalogue; a test recomputes it from these formulas)
-`F k`: k bays of a façade row, k·b × row depth. `D k`: k bays × (d_f + c + band depth), in a head. `T k`: k bays ×
+`F k`: k bays of a façade row, k·b × row depth. `D k`: k bays × (d_f + c + band depth), in a head. For F and D, k is a multiple of 0.5 (half-bay partitions, U-20); T keeps whole bays. `T k`: k bays ×
 plate depth, at a gable. `B w`: band, w × band depth, w a multiple of 0.60 m ≥ 1.2 m. `b w`: half band (two rooms
 back to back, each on its corridor), only when the band is ≥ 4.8 m deep. `needs_facade` rooms: F, D, T. Other
 rooms: B, b first, then F, D. A shape is **admissible** when its area is in the room's sketch window, its aspect is
 ≤ `aspect_max` and it meets `min_width_m`; with `facade.max_depth_hard` also depth ≤ the limit.
-Bar (19.2 m plate): F = 11.52·k m² (k ≤ 4), D = 30.24·k (3 ≤ k ≤ 10), T = 46.08·k (k ≥ 4). So 12 → F1, 24 → F2,
-150 and 163.2 → D5, 170 → D6 or T4; 15, 30, 40 and 80 m² have **no** admissible shape.
+Bar (19.2 m plate): F = 11.52·k m² (k ≤ 4, step 0.5), D = 30.24·k (2.5 ≤ k ≤ 10, step 0.5), T = 46.08·k (k ≥ 4). So 12 → F1, 24 → F2,
+30 → F2.5, 40 → F3.5, 80 m² has none either (D2.5 = 6.0 × 12.6 m, aspect 2.1), 150 and 163.2 → D5, 170 → D5.5, D6 or T4; 15 and 80 m² have **no** admissible shape. Prefer whole k on ties (rhythm).
 - A room with an admissible shape is placed with one, or is **unplaced** (never stretched or squeezed).
-- A room with none is placed with the aspect-legal shape of the smallest relative area deviation (15 → F1,
-  30 and 40 → F3, 80 → D3) and carries its `AREA_UNDER` / `AREA_OVER` (listed « à ajuster »), or is unplaced.
+- A room with none is placed with the aspect-legal shape of the smallest relative area deviation (15 → F1.5 or F1, 80 → D3) and carries its `AREA_UNDER` / `AREA_OVER` (listed « à ajuster »), or is unplaced.
 
 ### 4.6 Packing (deterministic; a constructive fill is enough)
 Order of concern: (1) least unplaced target area; (2) rooms of one group (`ale.stack.assign.default_group`) next to
@@ -155,8 +154,7 @@ is byte-identical to the base commit, the M206 digests pass, `plans.md` has no n
 byte-reproducible (wall-clock budget, M.2 issue 4): prove the engine path by a call spy, not by file hashes.
 
 ## 7. Not architecture you may invent
-Corridor width, row depths, link positions, shapes and tolerances are fixed by §4. Do not add half-bay
-partitions, a second row depth, an L-shaped room, a moved core or a search over sections: propose them in the
+Corridor width, row depths, link positions, shapes and tolerances are fixed by §4. Do not add a second row depth, an L-shaped room, a moved core or a search over sections: propose them in the
 report instead.
 
 ## 8. Stop and report (write the figures reached in `eval_report.md`, commit, end)
