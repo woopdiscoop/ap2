@@ -21,7 +21,17 @@ Branch `worktree-agent-afcdf4a1a7379c883` (base `62cade3`). Contracts bumped to 
 
 ## Gates
 
-GATES_PLACEHOLDER
+| Gate | Result |
+|---|---|
+| `ruff check .` | clean |
+| `ruff format --check .` | 320 files formatted |
+| `mypy` (strict, 159 files) | no issues |
+| `python -m ale.contracts.lock --check` / `export_schemas --check` | OK (1.7.0) |
+| `pytest tests/stack tests/geometry/test_geometry_m2.py tests/contracts/test_contracts_m2.py --cov=src/ale/stack ...` | 74 passed under coverage; `ale.stack` 97 % (plans 94, report 97, floors 99, skeleton 99, assign 99, building 97) |
+| Changed engine modules (same run, M.2 tests + contracts / export / program / topology suites, 650 tests) | `contracts/footprint` 99 %, `contracts/geometry` 98 %, `contracts/models` 99 %, `geometry/checks` 99 %, `export/dxf` and `svg` covered by M208, `program/site` 96 %, `program/prepare` 96 %. The base coverage was not re-measured; the lines added by M.2 are covered except the defensive branches listed by `term-missing` (site.py rare snapping errors, plans.py exception path). |
+| `pytest -m "not slow"` 1533 passed, 11 skipped, 3 xfailed (pre-existing), 35 deselected; 593 s (the M.2 tests add 40; `tests/cli/test_P08` passes after the commit) |
+| 4-floor `--plans`, `--budget 5` | 16.9 s (limit 60 s); `--budget 10`: about 24 s |
+
 
 ## Per-floor table, `ale stack --plans` on the M.2 case (`--budget 12`, exit code 0)
 
@@ -56,8 +66,8 @@ The M.1 outputs (`stacking.md`, `floor_NN/*`) are written as usual, `plans.md` l
    - `ale stack --plans` runs the stacking with `build_skeleton_strict` (`plans.py`, `run_stack(strict_solids=True)`): the wet stack keeps a gap of 6, 4, 2 or 1 cells (0.60 m each; the widest that places it) from the top outline. Without `--plans` the M.1 skeleton is unchanged. `run_plans` redoes the stacking itself when the result it is given has a wet stack touching an outline (note in `plans.md`).
 2. **The engine cannot lay out the M.1 bar around its skeleton.** (a) The exact-plan engine tiles the whole footprint: the M.1 floors are loaded at 45 % of the plate, so a plan would stretch rooms / circulation beyond the area rules. (b) More importantly, a ring of 4-6 pieces around a solid in a long shallow plate defeats the seeder: the facing block of the parent piece does not hold enough rooms to reach the child's cut, which gives `JUNCTION_MISALIGNED` (finger at the start of the block) whatever the seed; the repair move (shift the finger by one bay) cannot add rooms. Narrow pieces (gap to the wall below about 7 m) give `BLOCK_TOO_SHALLOW` / `PLAN_OVERFLOW`. A seeder improvement (move rooms into the junction block before placing the finger) is the fix; it is outside what this ticket could verify. For M207 I therefore used a re-sized case (`tests/stack/plans_case.py`): the room types of the M.1 case in four identical groups, 30.0 x 21.6 m plates, a 4.8 x 4.8 m core (a 4.8 x 6.0 m core, the M.1 one, fails on all seeds in the same plate).
 3. **The solid of a plan is the bounding rectangle of core and wet stack.** An L-shaped solid (core + stack side by side) gives 6 pieces with 2.4 m wide slivers and failed on every seed; the rectangle gives the 4-piece pinwheel the engine handles. The corner left between core and stack becomes `reserve_technique_gN` fixed rooms (their cost: part of the plate is not rentable; M.1 uses it).
-4. **"One variant per floor"**: the seeder is chancy on rings (about 2 seeds in 3 succeed in `plans_case`), so a floor is seeded with up to a few seeds (`seed + level + 1000 k`) while 60 % of `--budget` lasts, then annealed with the rest. One layout per floor is still produced. `--budget` is a wall-clock budget as for `ale generate`, so results can differ between machines.
+4. **"One variant per floor"**: the seeder is chancy on rings (about one seed in two succeeds in `plans_case`), so a floor is seeded with 8 to 12 seeds (`seed + level + 1000 k`, each bounded by 12 restarts, not by time, so the outcome does not depend on the machine's speed or on coverage) before it is declared failed, then annealed with the rest of `--budget` (wall clock, as for `ale generate`: the annealed result can differ between machines). One layout per floor is still produced.
 5. **"Wet rooms rectangles identical on every floor"**: the wet rooms differ from floor to floor (M.1 distributes them), so the hard check compares the rectangles that are common to all floors: the core, the wet stack (union of the wet rooms, `gaine_humide` and `reserve_technique`) and the solid, in absolute metres. The wet rooms of each floor are listed in `plans.md`.
-6. **`SOLID_NO_ACCESS` `instance_ids`** name the rooms that line the solid (an id list is needed by `hard_rooms`, the annealer's focus). The solid itself is « Noyau k » in the detail.
+6. **`SOLID_NO_ACCESS` is hard through `hard_codes_of`** (`SOLID_CODES`), not through `HARD_CODES`: `tests/optimize/test_optimize_anneal.py::test_hard_codes` pins the literal sets of `anneal.HARD_CODES` and `seed.HARD_CODES`, which I may not change; the seeder, the annealer and `plans.py` all count hard violations with `hard_codes_of`. Its `instance_ids` name the rooms that line the solid (`hard_rooms`, the annealer's focus); the solid is « Noyau k » in the detail.
 7. **`Layout` wrap serializer**: dropping an empty `fixed` needs a model serializer, which would turn a NaN metric into `null` and hide it from `canonical_json`; `Layout.model_config` therefore sets `ser_json_inf_nan="constants"`. Test `test_M201_nan_metric_still_rejected` guards it.
 8. **`area_cells()` and `rect_in_polygon_cells`** subtract solids (so `check_layout` "areas sum to footprint" means footprint minus solids, and a room over the core is "outside the footprint").
