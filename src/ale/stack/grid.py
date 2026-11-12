@@ -22,7 +22,7 @@ façade contact is shorter than one bay.
 from __future__ import annotations
 
 import math
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -49,6 +49,7 @@ __all__ = [
     "partition_off_bay",
     "plan_columns",
     "plan_facade_partitions",
+    "plan_longside_partitions",
     "plan_stackability",
     "validate_overrides",
 ]
@@ -491,6 +492,56 @@ def plan_facade_partitions(rhythm: Rhythm, plan: PlanLike, tol_m: float = TOL_M)
                         n += 1
                         ok += rhythm.off_bay_y(y) <= tol_m + _EPS
     return n, ok
+
+
+def plan_longside_partitions(
+    rhythm: Rhythm, plan: PlanLike, tol_m: float = 1e-3
+) -> tuple[int, int, int]:
+    """``(partitions, on a half-bay line, on a whole bay line)`` of one plan (Ticket M.4, U-20):
+    the ends of the rooms' sides (reserve rooms included) that lie on a *long* side of the
+    outline (an edge at least half as long as the longest one) and strictly inside it. Half-bay
+    lines are the absolute bay lines and their midpoints; the distance is exact (``tol_m``
+    only absorbs the millimetre rounding of the coordinates)."""
+    ring = list(plan.outline)
+    if len(ring) < 3:
+        return 0, 0, 0
+    edges = [(ring[i], ring[(i + 1) % len(ring)]) for i in range(len(ring))]
+    longest = max(abs(a[0] - c[0]) + abs(a[1] - c[1]) for a, c in edges)
+    seen: set[tuple[str, float]] = set()
+    n = half = whole = 0
+    half_m = rhythm.bay_m / 2
+    for r in plan.rooms_abs:
+        if r.kind != "room":
+            continue
+        x0, y0, w, h = r.rect
+        x1, y1 = x0 + w, y0 + h
+        for a, c in edges:
+            length = abs(a[0] - c[0]) + abs(a[1] - c[1])
+            if length < longest / 2 - tol_m:
+                continue
+            horizontal = abs(a[1] - c[1]) < _EPS
+            if horizontal:
+                if not (abs(a[1] - y0) < tol_m or abs(a[1] - y1) < tol_m):
+                    continue
+                lo, hi = sorted((a[0], c[0]))
+                span, ends, axis = (x0, x1), (lo, hi), "x"
+                off: Callable[[float], float] = rhythm.off_bay_x
+            else:
+                if not (abs(a[0] - x0) < tol_m or abs(a[0] - x1) < tol_m):
+                    continue
+                lo, hi = sorted((a[1], c[1]))
+                span, ends, axis = (y0, y1), (lo, hi), "y"
+                off = rhythm.off_bay_y
+            if span[1] <= ends[0] + tol_m or span[0] >= ends[1] - tol_m:
+                continue
+            for t in span:
+                if ends[0] + tol_m < t < ends[1] - tol_m and (axis, round(t, 3)) not in seen:
+                    seen.add((axis, round(t, 3)))
+                    n += 1
+                    on_whole = off(t) <= tol_m
+                    whole += on_whole
+                    half += on_whole or off(t - half_m) <= tol_m
+    return n, half, whole
 
 
 def plan_columns(

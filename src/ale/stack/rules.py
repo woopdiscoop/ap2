@@ -31,6 +31,8 @@ _RULE_KEYS = {
     "bay_m",
     "grid_m",
     "typical_floor",
+    "corridor_m",
+    "sketch_tolerance_pct",
 }
 
 
@@ -62,6 +64,11 @@ class StackRules:
     """Column grid spans ``(sx, sy)`` override, multiples of 0.60 m."""
     typical_floor: int | None = None
     """Level laid out first (default: the most loaded floor)."""
+    corridor_m: float | None = None
+    """Corridor width of the bay-first planner (Ticket M.4), a multiple of 0.60 m
+    (``None``: 1.8 m)."""
+    sketch_tolerance_pct: float | None = None
+    """Area tolerance (percent, 0 to 20) of bay floors (Ticket M.4; ``None``: 10)."""
 
 
 def _parse_groups(data: dict[str, Any], errors: list[str]) -> dict[str, tuple[str, ...]]:
@@ -136,6 +143,31 @@ def _parse_rhythm(
     return bay, grid, typical
 
 
+def _parse_bay_keys(data: dict[str, Any], errors: list[str]) -> tuple[float | None, float | None]:
+    """``corridor_m`` (positive, multiple of 0.60 m) and ``sketch_tolerance_pct`` (0 to 20)."""
+    corridor = tol = None
+    if data.get("corridor_m") is not None:
+        v = _number(data["corridor_m"])
+        cells = None if v is None else round(v / 0.6)
+        if v is None or v <= 0 or cells is None or cells < 1 or abs(cells * 0.6 - v) > 1e-6:
+            errors.append(
+                f"« corridor_m » doit être un multiple de 0,60 m (par exemple 1,8) "
+                f"(reçu {data['corridor_m']!r})."
+            )
+        else:
+            corridor = v
+    if data.get("sketch_tolerance_pct") is not None:
+        v = _number(data["sketch_tolerance_pct"])
+        if v is None or not 0.0 <= v <= 20.0:
+            errors.append(
+                "« sketch_tolerance_pct » doit être un nombre de 0 à 20 "
+                f"(reçu {data['sketch_tolerance_pct']!r})."
+            )
+        else:
+            tol = v
+    return corridor, tol
+
+
 def parse_rules(data: Any) -> StackRules:
     """Validate a decoded YAML mapping; every problem is reported at once (French)."""
     if data is None:
@@ -171,6 +203,7 @@ def parse_rules(data: Any) -> StackRules:
         share = CIRCULATION_SHARE
     before = len(errors)
     bay, grid, typical = _parse_rhythm(data, errors)
+    corridor, tol = _parse_bay_keys(data, errors)
     rhythm_errors = len(errors) > before
     if errors:
         if rhythm_errors:
@@ -185,6 +218,8 @@ def parse_rules(data: Any) -> StackRules:
         bay_m=bay,
         grid_m=grid,
         typical_floor=typical,
+        corridor_m=corridor,
+        sketch_tolerance_pct=tol,
     )
 
 

@@ -59,6 +59,7 @@ from ale.stack.skeleton import (
 )
 
 if TYPE_CHECKING:
+    from ale.bayplan import BayResult
     from ale.geometry.bay import BayHint
     from ale.optimize.anneal import AnnealResult
     from ale.program.models import PreparedInput
@@ -191,6 +192,12 @@ class FloorPlan:
     lattice: tuple[int, int, int] = (0, 0, 0)
     """M.3b: ``(1 if the annealing ran on the lattice else 0, realisations of
     :func:`ale.geometry.realize` on it, fallbacks to a lattice-free run)``."""
+    planner: str = "engine"
+    """M.4: ``"bay"`` when the floor was planned bay-first, else ``"engine"``."""
+    why: str = ""
+    """M.4: French reason why a floor was left to the engine under planner ``bay``."""
+    bay: BayResult | None = None
+    """M.4: the bay planner's figures (section, unplaced, « à ajuster », reserve, notes)."""
 
     @property
     def passes(self) -> bool:
@@ -222,11 +229,34 @@ class PlansResult:
     rhythms: tuple[FloorRhythm, ...] = ()
     stacking: tuple[float, ...] = ()
     """Plan-level stackability of floors 1.. against the floor below (exact plans)."""
+    planner: str = "engine"
+    section_note: str = ""
+    """M.4: French reason for the facade-row depth of the building (planner ``bay``)."""
+    bound: tuple[float, ...] = ()
+    """M.4: type-area bound of floors 1.. (planner ``bay``)."""
+    entrances: tuple[tuple[float, float], ...] = ()
+    """M.4: entrance points of the building (planner ``bay``)."""
+    anchored: tuple[str, ...] = ()
+    """M.4: ids of the programme rooms anchored at the entrance (planner ``bay``)."""
+    longside: tuple[tuple[int, int, int, int], ...] = ()
+    """M.4: ``(level, partitions, on half-bay lines, on bay lines)`` of the bay floors."""
 
     @property
     def ok(self) -> bool:
         """No hard miss."""
         return not self.misses
+
+
+# ------------------------------------------------------------------- bay context
+@dataclass(frozen=True)
+class BayContext:
+    """What the bay planner (Ticket M.4) needs from the building: the facade-row depth
+    (modules), the corridor width, the sketch configuration and the room groups."""
+
+    df: int
+    corridor_m: float
+    sketch: AleConfig
+    group_of: Callable[[str, RoomSpec], str]
 
 
 # --------------------------------------------------------------------- one floor
@@ -351,10 +381,12 @@ def _generate_floor(
     seed: int,
     rhythm: Rhythm | None = None,
     below: FloorPlan | None = None,
+    bay: BayContext | None = None,
 ) -> FloorPlan:
     """Prepare, seed, anneal, snap to the bay lines, add the fixed rooms, check and export one
     floor. ``below`` is the neighbouring floor already planned (its room order is the prior of
-    the seeding)."""
+    the seeding). With ``bay`` (Ticket M.4) an eligible floor is planned bay-first instead
+    (no seed, no annealing); the rest of the function is shared."""
     from ale.export import export_run
     from ale.geometry.checks import check_layout
     from ale.geometry.evaluate import FACADE_CODES
@@ -375,26 +407,59 @@ def _generate_floor(
         return FloorPlan(f.level, "failed", f"entrées refusées : {errors}")
     rb, _ = load_rulebook(rulebook)
     assert rb is not None  # prepare_input validated it
-    prior = _prior_positions(prepared, rb, below, seed)
-    hint = None if rhythm is None else rhythm.hint()
-    res, attempt, why = _seed_and_anneal(prepared, rb, config, prior, seed, hint)
-    if res is None:
-        return FloorPlan(
-            f.level, "failed", f"aucune réalisation exacte après {attempt} essai(s) ({why})"
-        )
-    base = res.layout
-    snapped = (0, 0, 0)
-    lattice = (0, 0, 0)
-    if rhythm is not None:
-        assert hint is not None
-        lattice = (int(hint.stats.fallbacks == 0), hint.stats.realisations, hint.stats.fallbacks)
-        from ale.stack.snap import snap_layout
+    bay_res: BayResult | None = None
+    why = ""
+    if bay is not None:
+        from ale.bayplan import NotEligible, plan_bar
 
-        base, st = snap_layout(base, prepared, rb, config, rhythm)
-        snapped = (st.walls, st.already, st.moved)
+        if rhythm is None:
+            why = "aucune trame de travée : le moteur dessine le niveau."
+        else:
+            try:
+                bay_res = plan_bar(
+                    prepared,
+                    rb,
+                    bay.sketch,
+                    rhythm,
+                    df=bay.df,
+                    corridor_m=bay.corridor_m,
+                    group_of=bay.group_of,
+                )
+            except NotEligible as exc:
+                why = f"{exc.reason} : le moteur dessine le niveau."
+    check_config = config
+    if bay_res is not None:
+        base = bay_res.layout
+        check_config = bay.sketch if bay is not None else config
+        snapped = (0, 0, 0)
+        lattice = (0, 0, 0)
+    else:
+        prior = _prior_positions(prepared, rb, below, seed)
+        hint = None if rhythm is None else rhythm.hint()
+        res, attempt, why_seed = _seed_and_anneal(prepared, rb, config, prior, seed, hint)
+        if res is None:
+            return FloorPlan(
+                f.level,
+                "failed",
+                f"aucune réalisation exacte après {attempt} essai(s) ({why_seed})",
+            )
+        base = res.layout
+        snapped = (0, 0, 0)
+        lattice = (0, 0, 0)
+        if rhythm is not None:
+            assert hint is not None
+            lattice = (
+                int(hint.stats.fallbacks == 0),
+                hint.stats.realisations,
+                hint.stats.fallbacks,
+            )
+            from ale.stack.snap import snap_layout
+
+            base, st = snap_layout(base, prepared, rb, config, rhythm)
+            snapped = (st.walls, st.already, st.moved)
     fixed = _fixed_rooms(f, sk, building, config.grid.module_mm)
     layout = Layout.model_validate({**base.model_dump(), "fixed": [p.model_dump() for p in fixed]})
-    problems = check_layout(layout, prepared, config)
+    problems = check_layout(layout, prepared, check_config)
     for stale in ("layout.json", "layout.dxf", "preview.svg", "report.md"):
         (plan_dir / stale).unlink(missing_ok=True)
     export_run(
@@ -403,7 +468,7 @@ def _generate_floor(
         plan_dir,
         rulebook_version=prepared.rulebook_version,
         run_id=f"plan-{f.level:02d}",
-        config=config,
+        config=check_config,
         rulebook=rb,
     )
     origin = prepared.footprint.origin_m
@@ -412,7 +477,7 @@ def _generate_floor(
     stack_rects = [r for i, r in rects.items() if i != core_id and not i.startswith(GAP_PREFIX)]
     fixed_m = tuple((i, _metres(layout, origin, r)) for i, r in sorted(rects.items()))
     target = sum(s.target_area_m2 for _, s in prepared.instances)
-    placed = sum(p.area_m2(layout.grid) for p in layout.rooms)
+    placed = sum(p.area_m2(layout.grid) for p in layout.rooms if p.spec_id is not None)
     types = {r.id: str(r.type) for r in f.program_all.rooms} if f.program_all else {}
     rooms_abs = tuple(
         PlanRoom(
@@ -469,6 +534,9 @@ def _generate_floor(
         origin=origin,
         snapped=snapped,
         lattice=lattice,
+        planner="bay" if bay_res is not None else "engine",
+        why=why,
+        bay=bay_res,
     )
 
 
@@ -611,6 +679,11 @@ def plans_misses(plans: Sequence[FloorPlan], vertical_ok: bool) -> tuple[str, ..
             out.append(f"Niveau {p.level} : plan impossible ({p.message}).")
         for msg in p.problems:
             out.append(f"Niveau {p.level} : invariant du plan violé ({msg}).")
+        if p.bay is not None and p.bay.unplaced:
+            out.append(
+                f"Niveau {p.level} : pièce(s) non placée(s) par le plan en travées : "
+                f"{', '.join(p.bay.unplaced)}."
+            )
     if not vertical_ok:
         out.append("Contrôle vertical : noyau ou colonne humide différents selon les niveaux.")
     return tuple(out)
@@ -639,6 +712,7 @@ def run_plans(
     *,
     budget_s: float = DEFAULT_BUDGET_S,
     seed: int = 0,
+    planner: str = "engine",
 ) -> tuple[PlansResult, StackResult]:
     """Lay out every floor of ``result`` (a :class:`ale.stack.report.StackResult`) and write
     ``floor_NN/plan/`` and ``plans.md`` under ``out``.
@@ -646,6 +720,10 @@ def run_plans(
     Returns the plans and the stacking result actually used: when the given one has a wet
     stack that touches an outline, the stacking is re-run with :func:`build_skeleton_strict`
     (and the note says so). One variant per floor, seed ``seed + level``.
+
+    ``planner`` (Ticket M.4): ``"engine"`` (default, as before) or ``"bay"``: an eligible bar
+    floor is planned bay-first (:mod:`ale.bayplan`), the others by the engine with the reason in
+    ``plans.md``.
     """
     from ale.stack.report import run_stack
 
@@ -662,6 +740,9 @@ def run_plans(
         result = run_stack(
             result.program, result.building, result.rules, seed=seed, strict_solids=True
         )
+    bay_ctx, section_note = (None, "")
+    if planner == "bay":
+        bay_ctx, section_note = _bay_context(result, rulebook, config)
     done: dict[int, FloorPlan] = {}
     n = len(result.floors)
     t0 = min(max(result.typical, 0), n - 1)
@@ -680,6 +761,7 @@ def run_plans(
                 seed + f.level,
                 result.rhythm,
                 nb if nb is not None and nb.status == "ok" else None,
+                bay_ctx,
             )
         except Exception as exc:  # one bad floor must not stop the others
             done[k] = FloorPlan(
@@ -702,6 +784,17 @@ def run_plans(
             figures.append(FloorRhythm(p.level, n_part, on_bay, len(cols), len(small)))
             _write_grid_svg(result.rhythm, p, cols, small)
         rhythms = tuple(figures)
+    longside: list[tuple[int, int, int, int]] = []
+    bound: tuple[float, ...] = ()
+    if planner == "bay":
+        from ale.stack.grid import plan_longside_partitions
+
+        if result.rhythm is not None:
+            for p in plans:
+                if p.status == "ok" and p.planner == "bay":
+                    ls = plan_longside_partitions(result.rhythm, p)
+                    longside.append((p.level, *ls))
+        bound = _type_area_bound(plans)
     res = PlansResult(
         floors=tuple(plans),
         vertical=lines,
@@ -711,9 +804,83 @@ def run_plans(
         rhythm=result.rhythm,
         rhythms=rhythms,
         stacking=stacking,
+        planner=planner,
+        section_note=section_note,
+        bound=bound,
+        longside=tuple(longside),
+        entrances=tuple((e.point[0], e.point[1]) for e in result.building.entrances)
+        if planner == "bay"
+        else (),
+        anchored=tuple(
+            sorted({sp.id for _, sp in result.program.instances() if sp.anchor == "entrance"})
+        )
+        if planner == "bay"
+        else (),
     )
     write_plans(res, out)
     return res, result
+
+
+def _bay_context(
+    result: StackResult, rulebook: Path, config: AleConfig
+) -> tuple[BayContext | None, str]:
+    """The building-level data of the bay planner: facade-row depth, corridor, sketch
+    configuration, groups. ``(None, reason)`` when there is no bay."""
+    from ale.bayplan import choose_facade_depth
+    from ale.geometry.blocks import Consts
+    from ale.program import load_rulebook
+    from ale.stack.assign import _explicit_group, default_group
+    from ale.stack.rules import WET_TYPES
+
+    rules = result.rules
+    if result.rhythm is None:
+        return None, "Aucune trame de travée : tous les niveaux vont au moteur."
+    pct = 10.0 if rules.sketch_tolerance_pct is None else rules.sketch_tolerance_pct
+    sketch = config.model_copy(
+        update={"area": config.area.model_copy(update={"tol_down_pct": pct, "tol_up_pct": pct})}
+    )
+    rb, _ = load_rulebook(rulebook)
+    k = Consts.from_config(sketch)
+    specs = [s for _, s in result.program.instances() if str(s.type) not in WET_TYPES]
+    bay = result.rhythm.bay * 600 // config.grid.module_mm
+    df, total = choose_facade_depth(
+        specs, k, bay, rulebook=rb, max_depth_m=config.facade.max_depth_m
+    )
+    ref = ""
+    if rb is not None and "office" in rb.types and rb.types["office"].depth_m is not None:
+        ref = f" (profondeur de référence {rb.types['office'].depth_m.p50:.1f} m)"
+    note = (
+        f"profondeur de rangée de façade d_f = {df * config.grid.module_mm / 1000:.1f} m : "
+        f"maximise la surface cible des pièces de façade ayant une forme dans la fenêtre "
+        f"({total:.0f} m²), à égalité la plus proche de la profondeur de référence{ref}"
+    )
+    corridor = 1.8 if rules.corridor_m is None else rules.corridor_m
+
+    def group_of(iid: str, spec: RoomSpec) -> str:
+        return _explicit_group(iid, spec.id, rules) or default_group(spec.id)
+
+    return BayContext(df, corridor, sketch, group_of), note
+
+
+def _type_area_bound(plans: Sequence[FloorPlan]) -> tuple[float, ...]:
+    """Bound of the stackability of floors 1..: ``sum over types of min(area on k, area on
+    k-1) / area on k`` (rooms with a type, circulation and reserve excluded)."""
+    out: list[float] = []
+    for upper, lower in zip(plans[1:], plans[:-1], strict=True):
+        if upper.status != "ok" or lower.status != "ok":
+            continue
+
+        def area(p: FloorPlan) -> dict[str, float]:
+            acc: dict[str, float] = {}
+            for r in p.rooms_abs:
+                if r.type and r.kind == "room":
+                    acc[r.type] = acc.get(r.type, 0.0) + r.rect[2] * r.rect[3]
+            return acc
+
+        a, b = area(upper), area(lower)
+        total = sum(a.values())
+        out.append(sum(min(v, b.get(t, 0.0)) for t, v in a.items()) / total if total else 0.0)
+    return tuple(out)
 
 
 # --------------------------------------------------------------------------- report
@@ -850,6 +1017,129 @@ def _write_grid_svg(
     (p.out_dir / "grille.svg").write_text("\n".join(out) + "\n", encoding="utf-8", newline="\n")
 
 
+def _on_side(x: float, y: float, r: MetreRect, tol: float = 1e-3) -> bool:
+    """The point lies on the boundary of the rectangle ``r`` (x, y, w, h)."""
+    inside_x = r[0] - tol <= x <= r[0] + r[2] + tol
+    inside_y = r[1] - tol <= y <= r[1] + r[3] + tol
+    on_x = abs(x - r[0]) <= tol or abs(x - r[0] - r[2]) <= tol
+    on_y = abs(y - r[1]) <= tol or abs(y - r[1] - r[3]) <= tol
+    return inside_x and inside_y and (on_x or on_y)
+
+
+def _bay_lines(res: PlansResult) -> list[str]:
+    """Section « Plans en travées » of ``plans.md`` (planner ``bay`` only, Ticket M.4)."""
+    from ale.bayplan.measures import dead_end_and_reach, group_stretches
+
+    lines = ["", "## Plans en travées (M.4)", "", f"- Section : {res.section_note}."]
+    longside = {x[0]: x for x in res.longside}
+    for p in res.floors:
+        if p.status != "ok":
+            continue
+        if p.bay is None or p.layout is None:
+            lines += ["", f"### Niveau {p.level}", "", "- Planificateur : moteur de plans exacts."]
+            if p.why:
+                lines.append(f"- Raison : {p.why}")
+            continue
+        b, lay = p.bay, p.layout
+        unit = lay.grid.module_mm / 1000
+        sec = b.section
+        plate = lay.footprint.area_cells() * unit * unit
+        circ_area = sum(c.area_m2(lay.grid) for c in lay.circulation)
+        by_kind: dict[str, float] = {}
+        for c in lay.circulation:
+            kind = b.kinds[c.instance_id]
+            by_kind[kind] = by_kind.get(kind, 0.0) + c.area_m2(lay.grid)
+        palier, reliquat = by_kind.get("palier", 0.0), by_kind.get("reliquat", 0.0)
+        reserve = [r for r in lay.rooms if r.spec_id is None]
+        res_m2 = sum(r.area_m2(lay.grid) for r in reserve)
+        placed = [r for r in lay.rooms if r.spec_id is not None]
+        dead, reach = dead_end_and_reach(lay, round(1.2 / unit))
+        bay_mod = round(sec["bay"] / unit)
+        st = group_stretches(
+            lay,
+            b.groups,
+            bool(sec["transposed"]),
+            (round(sec["core0"] / unit), round(sec["core1"] / unit)),
+            bay_mod,
+        )
+        multi = ", ".join(f"{g} ({n})" for g, n in sorted(st.items()) if n > 1) or "aucun"
+        depth = sec["plate_depth"]
+        lines += [
+            "",
+            f"### Niveau {p.level}",
+            "",
+            "- Planificateur : plan en travées (rangées de façade, couloirs, bande centrale).",
+            f"- Section ({depth:.1f} m de profondeur) : façade {sec['df']:.1f} m, couloir "
+            f"{sec['c']:.1f} m, bande centrale {sec['band']:.1f} m, couloir {sec['c']:.1f} m, "
+            f"façade {sec['df']:.1f} m ; d_f = {sec['df']:.1f} m (voir ci-dessus) ; travée "
+            f"{sec['bay']:.1f} m ; segment du noyau de {sec['core0']:.1f} à {sec['core1']:.1f} m.",
+            f"- Travées de façade : {b.facade_bays_used:.1f} occupées sur "
+            f"{b.facade_bays_available:.1f} disponibles ; bande disponible "
+            f"{b.band_m_available:.1f} m.",
+            f"- Pièces : {len(placed)} placées, {len(b.unplaced)} non placée(s)"
+            + (f" ({', '.join(b.unplaced)})." if b.unplaced else "."),
+        ]
+        if b.adjust:
+            lines += ["- À ajuster (aucune forme admissible) :"]
+            lines += [
+                f"  - {i} : cible {t:.1f} m², placée {a:.1f} m² ({(a - t) / t:+.0%})"
+                for i, t, a in b.adjust
+            ]
+        else:
+            lines.append("- À ajuster : aucune pièce.")
+        lines += [
+            f"- Réserve : {len(reserve)} pièce(s), {res_m2:.1f} m² "
+            f"({res_m2 / plate:.1%} du plateau).",
+            f"- Circulation : {circ_area:.1f} m² ({circ_area / plate:.1%} du plateau), dont palier "
+            f"{palier:.1f} m² et reliquat {reliquat:.1f} m² (affichés à part).",
+        ]
+        if sec["narrowed"]:
+            lines.append("- Couloir rétréci le long du noyau.")
+        lines += [
+            f"- Pièces d'un même groupe en plusieurs tronçons : {multi}.",
+            f"- Plus long cul-de-sac de couloir : {dead:.1f} m"
+            + (" (> 10 m)" if dead > 10 else "")
+            + f" ; plus longue distance d'une pièce au noyau : {reach:.1f} m"
+            + (" (> 40 m)" if reach > 40 else (" (> 10 m)" if reach > 10 else ""))
+            + ".",
+        ]
+        lines += [f"- Remarque : {n}." for n in b.notes]
+        if p.level == 0:
+            circ_abs = [r.rect for r in p.rooms_abs if r.kind == "circulation"]
+            for ex, ey in res.entrances:
+                on = any(_on_side(ex, ey, r) for r in circ_abs)
+                lines.append(
+                    f"- Entrée ({ex:.1f} ; {ey:.1f}) : sur un côté de la circulation : "
+                    + ("oui." if on else "non (entrée sur un pignon ou hors travée).")
+                )
+            for r in p.rooms_abs:
+                if r.kind == "room" and r.spec_id in res.anchored:
+                    for ex, ey in res.entrances[:1]:
+                        d = math.hypot(
+                            max(r.rect[0] - ex, 0.0, ex - r.rect[0] - r.rect[2]),
+                            max(r.rect[1] - ey, 0.0, ey - r.rect[1] - r.rect[3]),
+                        )
+                        lines.append(f"- Pièce d'entrée {r.iid} : à {d:.1f} m de l'entrée.")
+        if p.level in longside:
+            _, n, half, whole = longside[p.level]
+            lines.append(
+                f"- Cloisons de façade longue : {half} sur {n} sur une ligne de demi-travée, "
+                f"{whole} sur une ligne de travée entière."
+            )
+    if res.bound:
+        lines += [
+            "",
+            "Borne d'empilement par type (surface de même type au niveau inférieur) :",
+            "",
+        ]
+        lines += [
+            f"- Niveaux {k} / {k + 1} : plans {s:.1%}, borne {bd:.1%}"
+            for k, (s, bd) in enumerate(zip(res.stacking, res.bound, strict=False))
+        ]
+    lines.append("")
+    return lines
+
+
 def render_plans_markdown(res: PlansResult) -> str:
     """``plans.md`` (French)."""
     lines = [
@@ -903,6 +1193,8 @@ def render_plans_markdown(res: PlansResult) -> str:
     ]
     lines += ["", *(f"- {v}" for v in res.vertical)]
     lines += _trame_lines(res)
+    if res.planner == "bay":
+        lines += _bay_lines(res)
     lines += ["", "## Locaux fixes par niveau", ""]
     for p in res.floors:
         if p.status != "ok":

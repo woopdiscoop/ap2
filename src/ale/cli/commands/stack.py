@@ -9,6 +9,10 @@ Ticket M.2, ``--plans [--rulebook R] [--budget S]``: after the stacking every fl
 plan (``floor_NN/plan/``, ``plans.md``). Exit 1 also when a floor cannot be generated, a plan
 does not pass ``check_layout`` or the vertical check (core and wet stack identical on every
 floor) fails; the other floors are still produced. ``--rulebook`` is required with ``--plans``.
+
+Ticket M.4, ``--planner bay|engine`` (default ``bay``): office bars are planned bay-first, every
+other floor by the engine; ``engine`` keeps the M.2 behaviour. A room the bay planner could not
+place is a hard miss (exit 1, files still written).
 """
 
 from __future__ import annotations
@@ -41,6 +45,14 @@ def stack(
     budget: Annotated[
         float, typer.Option("--budget", min=1.0, help="Secondes par niveau (avec --plans).")
     ] = 20.0,
+    planner: Annotated[
+        str,
+        typer.Option(
+            "--planner",
+            help="Planificateur des niveaux (avec --plans) : bay (barres en travées, défaut) "
+            "ou engine (moteur de plans exacts).",
+        ),
+    ] = "bay",
 ) -> None:
     """Stack the programme on the floors, fix the vertical skeleton, lay out each floor."""
     from ale.cli.commands.program import _issue_line
@@ -50,6 +62,8 @@ def stack(
 
     if plans and rulebook is None:
         raise typer.BadParameter("--plans demande --rulebook.", param_hint="--rulebook")
+    if planner not in ("bay", "engine"):
+        raise typer.BadParameter("valeurs admises : bay, engine.", param_hint="--planner")
     prog, report = read_program(program)
     errors = [i for i in report.issues if i.severity == "error"]
     if prog is None or errors:
@@ -84,7 +98,7 @@ def stack(
         assert rulebook is not None
         from ale.stack.plans import run_plans
 
-        pr, used = run_plans(result, rulebook, out, budget_s=budget, seed=seed)
+        pr, used = run_plans(result, rulebook, out, budget_s=budget, seed=seed, planner=planner)
         done = sum(1 for p in pr.floors if p.passes)
         typer.echo(f"plans : {done}/{len(pr.floors)} niveaux, rapport : {out / 'plans.md'}")
         misses += list(pr.misses)
