@@ -395,7 +395,7 @@ def _decompose_tree(fp: ModulePolygon, solid_aware: bool = False) -> FootprintPi
             asp = max(_aspect(r) for r in rects)
             order = tuple(sorted(_order(r) for r in rects))
             key = (
-                (len(rects), -got.pieces[0].rect.area_cells(), not flip, -n_j2, asp, order)
+                (len(rects), not _spans_short_side(got.pieces[0].rect, fp), -got.pieces[0].rect.area_cells(), not flip, -n_j2, asp, order)
                 if solid_aware
                 else (len(rects), n_j2, asp, order)
             )
@@ -404,6 +404,15 @@ def _decompose_tree(fp: ModulePolygon, solid_aware: bool = False) -> FootprintPi
         raise ValueError(UNSUPPORTED_MESSAGE)
     cands.sort(key=lambda t: t[0])
     return cands[0][1]
+
+
+def _spans_short_side(r: ModuleRect, fp: ModulePolygon) -> bool:
+    """Whether ``r`` crosses the whole bounding box of ``fp`` in the box's short direction
+    (a *wing* of a bar: the cross-section piece, as opposed to a strip along the bar)."""
+    xs = [p[0] for p in fp.exterior]
+    ys = [p[1] for p in fp.exterior]
+    w, h = max(xs) - min(xs), max(ys) - min(ys)
+    return r.h == h if w >= h else r.w == w
 
 
 def _tree(rects: list[ModuleRect], flip_root: bool = False) -> FootprintPieces:
