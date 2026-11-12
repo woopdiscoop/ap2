@@ -21,7 +21,7 @@ __all__ = [
 #: Room types that form the wet stack instead of being stacked with their group (RD 4).
 WET_TYPES: frozenset[str] = frozenset({"sanitary", "cleaning_room", "technical_room"})
 CIRCULATION_SHARE = 0.25
-TYPE_WEIGHT = 3.0
+TYPE_WEIGHT = 5.0
 _RULE_KEYS = {
     "groups",
     "pins",

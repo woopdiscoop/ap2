@@ -24,6 +24,7 @@ from __future__ import annotations
 import math
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 import shapely
 from shapely import Polygon as ShPolygon
@@ -45,6 +46,9 @@ __all__ = [
     "diagram_column_stats",
     "diagram_facade_stats",
     "partition_off_bay",
+    "plan_columns",
+    "plan_facade_partitions",
+    "plan_stackability",
     "validate_overrides",
 ]
 
@@ -57,6 +61,9 @@ W_OFF_BAY = 0.25
 W_LOST = 2.0
 _EPS = 1e-6
 Cell = tuple[int, int]
+
+if TYPE_CHECKING:
+    from ale.stack.plans import FloorPlan as PlanLike
 
 
 def _cells(metres: float) -> int | None:
@@ -397,3 +404,95 @@ def _score(
         off += o
         lost += lo
     return RhythmScore(small, cols, off, parts, lost)
+
+
+# ------------------------------------------------------------------------ exact plans
+def plan_stackability(plans: Sequence[PlanLike]) -> tuple[float, ...]:
+    """For each floor ``k >= 1`` that has a plan and a plan below it: share of its room area
+    (typed rooms, wet rooms included) whose type is the type directly below (exact)."""
+    out: list[float] = []
+    for upper, lower in zip(plans[1:], plans[:-1], strict=True):
+        if upper.status != "ok" or lower.status != "ok":
+            continue
+        below: dict[str, list[ShPolygon]] = {}
+        for r in lower.rooms_abs:
+            if r.type and r.kind != "circulation":
+                below.setdefault(r.type, []).append(_box(r.rect))
+        union = {t: shapely.unary_union(v) for t, v in below.items()}
+        total = same = 0.0
+        for r in upper.rooms_abs:
+            if not r.type or r.kind == "circulation":
+                continue
+            b = _box(r.rect)
+            total += b.area
+            if r.type in union:
+                same += b.intersection(union[r.type]).area
+        out.append(same / total if total else 0.0)
+    return tuple(out)
+
+
+def _box(r: tuple[float, float, float, float]) -> ShPolygon:
+    return shapely.box(r[0], r[1], r[0] + r[2], r[1] + r[3])
+
+
+def plan_facade_partitions(rhythm: Rhythm, plan: PlanLike, tol_m: float = TOL_M) -> tuple[int, int]:
+    """``(partitions, on a bay line)`` of one plan: the ends of the rooms' sides that lie on an
+    exterior edge of the outline and strictly inside it (each partition counted once)."""
+    ring = list(plan.outline)
+    if len(ring) < 3:
+        return 0, 0
+    edges = [(ring[i], ring[(i + 1) % len(ring)]) for i in range(len(ring))]
+    seen: set[tuple[str, float]] = set()
+    n = ok = 0
+    for r in plan.rooms_abs:
+        if r.kind != "room":
+            continue
+        x0, y0, w, h = r.rect
+        x1, y1 = x0 + w, y0 + h
+        for a, c in edges:
+            if abs(a[1] - c[1]) < _EPS:  # horizontal exterior edge
+                if not (abs(a[1] - y0) < 1e-3 or abs(a[1] - y1) < 1e-3):
+                    continue
+                lo, hi = sorted((a[0], c[0]))
+                if x1 <= lo + 1e-3 or x0 >= hi - 1e-3:
+                    continue
+                for x in (x0, x1):
+                    if lo + 1e-3 < x < hi - 1e-3 and ("x", round(x, 3)) not in seen:
+                        seen.add(("x", round(x, 3)))
+                        n += 1
+                        ok += rhythm.off_bay_x(x) <= tol_m + _EPS
+            else:  # vertical exterior edge
+                if not (abs(a[0] - x0) < 1e-3 or abs(a[0] - x1) < 1e-3):
+                    continue
+                lo, hi = sorted((a[1], c[1]))
+                if y1 <= lo + 1e-3 or y0 >= hi - 1e-3:
+                    continue
+                for y in (y0, y1):
+                    if lo + 1e-3 < y < hi - 1e-3 and ("y", round(y, 3)) not in seen:
+                        seen.add(("y", round(y, 3)))
+                        n += 1
+                        ok += rhythm.off_bay_y(y) <= tol_m + _EPS
+    return n, ok
+
+
+def plan_columns(
+    rhythm: Rhythm, plan: PlanLike, skeleton: Skeleton
+) -> tuple[list[tuple[float, float]], list[tuple[float, float]]]:
+    """``(columns, columns inside a room of less than 30 m²)`` of one plan; a column is inside
+    a room when it is farther than 0.15 m from every side (otherwise it is on a wall)."""
+    outline = ShPolygon(list(plan.outline)) if len(plan.outline) >= 3 else None
+    if outline is None:
+        return [], []
+    solids = [skeleton.core] + ([skeleton.wet] if skeleton.wet is not None else [])
+    cols = columns_of(rhythm, outline, solids)
+    small: list[tuple[float, float]] = []
+    for x, y in cols:
+        for r in plan.rooms_abs:
+            if r.kind != "room":
+                continue
+            rx, ry, w, h = r.rect
+            m = 0.15
+            if rx + m < x < rx + w - m and ry + m < y < ry + h - m and w * h < SMALL_ROOM_M2:
+                small.append((x, y))
+                break
+    return cols, small

@@ -22,7 +22,7 @@ one cell (0.60 m) from the outline: :func:`build_skeleton_strict` places it so, 
 from __future__ import annotations
 
 import time
-from collections.abc import Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -32,6 +32,7 @@ from ale.contracts.models import GridSpec, Layout, PlacedRoom, RoomSpec, SiteSpe
 from ale.contracts.serialization import dump_yaml
 from ale.stack.building import Building
 from ale.stack.floors import FloorResult, _core_spec, write_programme_xlsx
+from ale.stack.grid import Rhythm
 from ale.stack.skeleton import (
     AREA_CELL_M2,
     CellRect,
@@ -49,6 +50,7 @@ from ale.stack.skeleton import (
 )
 
 if TYPE_CHECKING:
+    from ale.program.models import PreparedInput
     from ale.stack.report import StackResult
 
 __all__ = [
@@ -74,6 +76,18 @@ a thinner gap leaves a piece too shallow for the corridor grammar, so the widest
 places the stack wins."""
 #: ``(x, y, w, h)`` in metres, rounded to the millimetre.
 MetreRect = tuple[float, float, float, float]
+
+
+@dataclass(frozen=True)
+class PlanRoom:
+    """A room of a plan in building coordinates (metres); ``kind`` is ``room``, ``fixed`` or
+    ``circulation``; ``type`` is the room type (``None`` for the core, shaft, circulation)."""
+
+    iid: str
+    spec_id: str | None
+    type: str | None
+    rect: MetreRect
+    kind: str
 
 
 # ------------------------------------------------------------------ strict skeleton
@@ -158,11 +172,27 @@ class FloorPlan:
     stack: MetreRect | None = None
     solids: tuple[MetreRect, ...] = ()
     fixed: tuple[tuple[str, MetreRect], ...] = ()
+    rooms_abs: tuple[PlanRoom, ...] = ()
+    outline: tuple[tuple[float, float], ...] = ()
+    origin: tuple[float, float] = (0.0, 0.0)
+    snapped: tuple[int, int, int] = (0, 0, 0)
+    """Façade walls found, already on a bay line, moved onto one (:mod:`ale.stack.snap`)."""
 
     @property
     def passes(self) -> bool:
         """A layout was produced and passes ``check_layout``."""
         return self.status == "ok" and not self.problems
+
+
+@dataclass(frozen=True)
+class FloorRhythm:
+    """Bay and column figures of one plan (Ticket M.3)."""
+
+    level: int
+    partitions: int
+    on_bay: int
+    columns: int
+    small: int
 
 
 @dataclass(frozen=True)
@@ -174,6 +204,10 @@ class PlansResult:
     vertical_ok: bool
     notes: tuple[str, ...] = ()
     misses: tuple[str, ...] = field(default=())
+    rhythm: Rhythm | None = None
+    rhythms: tuple[FloorRhythm, ...] = ()
+    stacking: tuple[float, ...] = ()
+    """Plan-level stackability of floors 1.. against the floor below (exact plans)."""
 
     @property
     def ok(self) -> bool:
@@ -301,8 +335,12 @@ def _generate_floor(
     plan_dir: Path,
     config: AleConfig,
     seed: int,
+    rhythm: Rhythm | None = None,
+    below: FloorPlan | None = None,
 ) -> FloorPlan:
-    """Prepare, seed, anneal, add the fixed rooms, check and export one floor."""
+    """Prepare, seed, anneal, snap to the bay lines, add the fixed rooms, check and export one
+    floor. ``below`` is the neighbouring floor already planned (its room order is the prior of
+    the seeding)."""
     from ale.export import export_run
     from ale.geometry.checks import check_layout
     from ale.geometry.evaluate import FACADE_CODES
@@ -326,6 +364,7 @@ def _generate_floor(
     rb, _ = load_rulebook(rulebook)
     assert rb is not None  # prepare_input validated it
     total = config.optimizer.time_budget_s
+    prior = _prior_positions(prepared, below)
     seeded = None
     why = ""
     spent = 0.0
@@ -344,6 +383,7 @@ def _generate_floor(
             seed=seed + 1000 * attempt,
             time_budget_s=max(total, 1.0),
             max_attempts=TRY_ATTEMPTS,
+            prior=prior,
         )
         spent += seeded.elapsed_s
         attempt += 1
@@ -363,6 +403,12 @@ def _generate_floor(
     )
     res = anneal(prepared, rb, anneal_config, seeded.plan, seed=seed)
     base = res.layout
+    snapped = (0, 0, 0)
+    if rhythm is not None:
+        from ale.stack.snap import snap_layout
+
+        base, st = snap_layout(base, prepared, rb, config, rhythm)
+        snapped = (st.walls, st.already, st.moved)
     fixed = _fixed_rooms(f, sk, building, config.grid.module_mm)
     layout = Layout.model_validate({**base.model_dump(), "fixed": [p.model_dump() for p in fixed]})
     problems = check_layout(layout, prepared, config)
@@ -383,6 +429,29 @@ def _generate_floor(
     fixed_m = tuple((i, _metres(layout, origin, r)) for i, r in sorted(rects.items()))
     target = sum(s.target_area_m2 for _, s in prepared.instances)
     placed = sum(p.area_m2(layout.grid) for p in layout.rooms)
+    types = {r.id: str(r.type) for r in f.program_all.rooms} if f.program_all else {}
+    rooms_abs = tuple(
+        PlanRoom(
+            p.instance_id,
+            p.spec_id,
+            types.get(p.spec_id) if p.spec_id else None,
+            _metres(layout, origin, (p.rect.x, p.rect.y, p.rect.w, p.rect.h)),
+            kind,
+        )
+        for kind, group in (
+            ("room", layout.rooms),
+            ("circulation", layout.circulation),
+            ("fixed", layout.fixed),
+        )
+        for p in group
+    )
+    ring = tuple(
+        (
+            round(origin[0] + x * layout.grid.module_mm / 1000, 3),
+            round(origin[1] + y * layout.grid.module_mm / 1000, 3),
+        )
+        for x, y in layout.footprint.exterior
+    )
     return FloorPlan(
         level=f.level,
         status="ok",
@@ -411,7 +480,45 @@ def _generate_floor(
             for s in (_bbox(r) for r in layout.footprint.solids)
         ),
         fixed=fixed_m,
+        rooms_abs=rooms_abs,
+        outline=ring,
+        origin=origin,
+        snapped=snapped,
     )
+
+
+def _prior_positions(
+    prepared: PreparedInput, below: FloorPlan | None
+) -> Mapping[str, tuple[float, float]] | None:
+    """Positions (footprint metres) of this floor's rooms taken from the rooms of the same spec
+    (then the same type) on ``below``: the k-th room of a spec takes the k-th room of that spec
+    below (ordered by position), so that the floor repeats the room order of its neighbour."""
+    if below is None or not below.rooms_abs:
+        return None
+    ox, oy = prepared.footprint.origin_m
+    specs = dict(prepared.instances)
+    old = [r for r in below.rooms_abs if r.kind == "room" and r.spec_id]
+    by_spec: dict[str, list[PlanRoom]] = {}
+    by_type: dict[str, list[PlanRoom]] = {}
+    for r in sorted(old, key=lambda r: (r.rect[0], r.rect[1], r.iid)):
+        by_spec.setdefault(str(r.spec_id), []).append(r)
+        by_type.setdefault(str(r.type), []).append(r)
+    taken: set[str] = set()
+    out: dict[str, tuple[float, float]] = {}
+    new_ids = sorted(specs)
+    for use_spec in (True, False):
+        for iid in new_ids:
+            if iid in out:
+                continue
+            spec = specs[iid]
+            pool = by_spec.get(spec.id, []) if use_spec else by_type.get(str(spec.type), [])
+            cand = [r for r in pool if r.iid not in taken]
+            if cand:
+                r = cand[0]
+                taken.add(r.iid)
+                x, y, w, h = r.rect
+                out[iid] = (x + w / 2 - ox, y + h / 2 - oy)
+    return out or None
 
 
 def _bbox(ring: Sequence[tuple[int, int]]) -> tuple[int, int, int, int]:
@@ -505,26 +612,55 @@ def run_plans(
         result = run_stack(
             result.program, result.building, result.rules, seed=seed, strict_solids=True
         )
-    plans: list[FloorPlan] = []
-    for f in result.floors:
+    done: dict[int, FloorPlan] = {}
+    n = len(result.floors)
+    t0 = min(max(result.typical, 0), n - 1)
+    for k in [*range(t0, -1, -1), *range(t0 + 1, n)]:  # typical floor first, then outward
+        f = result.floors[k]
         plan_dir = out / f"floor_{f.level:02d}" / "plan"
+        nb = done.get(k + 1 if k < t0 else k - 1)
         try:
-            plans.append(
-                _generate_floor(
-                    f, result.skeleton, result.building, rulebook, plan_dir, config, seed + f.level
-                )
+            done[k] = _generate_floor(
+                f,
+                result.skeleton,
+                result.building,
+                rulebook,
+                plan_dir,
+                config,
+                seed + f.level,
+                result.rhythm,
+                nb if nb is not None and nb.status == "ok" else None,
             )
         except Exception as exc:  # one bad floor must not stop the others
-            plans.append(
-                FloorPlan(f.level, "failed", f"{type(exc).__name__} : {exc}", out_dir=plan_dir)
+            done[k] = FloorPlan(
+                f.level, "failed", f"{type(exc).__name__} : {exc}", out_dir=plan_dir
             )
+    plans = [done[k] for k in range(n)]
     lines, ok = _vertical(plans, sum(1 for p in plans if p.status != "empty"))
+    rhythms: tuple[FloorRhythm, ...] = ()
+    stacking: tuple[float, ...] = ()
+    if result.rhythm is not None:
+        from ale.stack.grid import plan_columns, plan_facade_partitions, plan_stackability
+
+        stacking = plan_stackability(plans)
+        figures = []
+        for p in plans:
+            if p.status != "ok":
+                continue
+            n_part, on_bay = plan_facade_partitions(result.rhythm, p)
+            cols, small = plan_columns(result.rhythm, p, result.skeleton)
+            figures.append(FloorRhythm(p.level, n_part, on_bay, len(cols), len(small)))
+            _write_grid_svg(result.rhythm, p, cols, small)
+        rhythms = tuple(figures)
     res = PlansResult(
         floors=tuple(plans),
         vertical=lines,
         vertical_ok=ok,
         notes=tuple(notes),
         misses=plans_misses(plans, ok),
+        rhythm=result.rhythm,
+        rhythms=rhythms,
+        stacking=stacking,
     )
     write_plans(res, out)
     return res, result
@@ -533,6 +669,130 @@ def run_plans(
 # --------------------------------------------------------------------------- report
 def _fmt_rect(r: MetreRect | None) -> str:
     return "—" if r is None else f"({r[0]:.2f} ; {r[1]:.2f}), {r[2]:.2f} x {r[3]:.2f} m"
+
+
+def _trame_lines(res: PlansResult) -> list[str]:
+    """Section « Trame et empilement » of ``plans.md`` (exact plans)."""
+    rh = res.rhythm
+    if rh is None:
+        return []
+    cols = sum(f.columns for f in res.rhythms)
+    small = sum(f.small for f in res.rhythms)
+    parts = sum(f.partitions for f in res.rhythms)
+    on_bay = sum(f.on_bay for f in res.rhythms)
+    lines = [
+        "",
+        "## Trame et empilement",
+        "",
+        f"- Trame de poteaux : portées {rh.span_x_m:.2f} x {rh.span_y_m:.2f} m, identique à tous "
+        f"les niveaux, noyau sur la trame ; module de travée {rh.bay_m:.2f} m.",
+        (
+            f"- Poteaux : {cols} (tous niveaux), dont {small} dans une pièce de moins de 30 m² "
+            f"({small / cols:.1%})."
+            if cols
+            else "- Poteaux : aucun."
+        ),
+        f"- Cloisons de façade sur une ligne de travée (à 0,30 m près) : {on_bay} sur {parts}"
+        + (f" ({on_bay / parts:.1%})." if parts else "."),
+        "",
+        "| Niveau | Cloisons de façade | Sur la travée | Poteaux | Poteaux en pièce < 30 m² | "
+        "Parois déplacées |",
+        "|---|---|---|---|---|---|",
+    ]
+    by_level = {p.level: p for p in res.floors}
+    for f in res.rhythms:
+        sn = by_level[f.level].snapped
+        share = f"{f.on_bay / f.partitions:.0%}" if f.partitions else "—"
+        lines.append(
+            f"| {f.level} | {f.partitions} | {f.on_bay} ({share}) | {f.columns} | {f.small} | "
+            f"{sn[2]} sur {sn[0]} |"
+        )
+    lines += [
+        "",
+        "| Niveaux | Empilabilité des plans (surface de même type au niveau inférieur) |",
+        "|---|---|",
+    ]
+    lines += [f"| {k} / {k + 1} | {v:.1%} |" for k, v in enumerate(res.stacking)]
+    lines.append("")
+    return lines
+
+
+def _line(
+    axis: str,
+    at: float,
+    lo: float,
+    hi: float,
+    dark: bool,
+    px: Callable[[float], float],
+    py: Callable[[float], float],
+) -> str:
+    stroke = "#c0392b" if dark else "#999999"
+    dash = "" if dark else ' stroke-dasharray="2 3"'
+    cls = "column-line" if dark else "bay-line"
+    if axis == "x":
+        a, b = (px(at), py(lo)), (px(at), py(hi))
+    else:
+        a, b = (px(lo), py(at)), (px(hi), py(at))
+    return (
+        f'<line class="{cls}" x1="{a[0]:.1f}" y1="{a[1]:.1f}" x2="{b[0]:.1f}" y2="{b[1]:.1f}" '
+        f'stroke="{stroke}" stroke-width="0.8"{dash}/>'
+    )
+
+
+def _write_grid_svg(
+    rh: Rhythm,
+    p: FloorPlan,
+    cols: list[tuple[float, float]],
+    small: list[tuple[float, float]],
+) -> None:
+    """``grille.svg`` next to the plan: rooms, bay lines (grey), column lines (red), columns."""
+    if p.out_dir is None or len(p.outline) < 3:
+        return
+    xs = [q[0] for q in p.outline]
+    ys = [q[1] for q in p.outline]
+    x0, y0, x1, y1 = min(xs), min(ys), max(xs), max(ys)
+    k = 10.0
+    h = (y1 - y0) * k
+
+    def px(x: float) -> float:
+        return 10 + (x - x0) * k
+
+    def py(y: float) -> float:
+        return 10 + h - (y - y0) * k
+
+    out = [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{(x1 - x0) * k + 20:.0f}" '
+        f'height="{h + 20:.0f}">',
+        '<rect width="100%" height="100%" fill="#ffffff"/>',
+        '<g id="rooms" fill="#f4f1ea" stroke="#555555" stroke-width="0.6">',
+    ]
+    for r in p.rooms_abs:
+        if r.kind == "circulation":
+            continue
+        x, y, w, hh = r.rect
+        out.append(
+            f'<rect x="{px(x):.1f}" y="{py(y + hh):.1f}" width="{w * k:.1f}" '
+            f'height="{hh * k:.1f}"/>'
+        )
+    out.append("</g>")
+    out.append('<g id="grid" fill="none">')
+    colx = set(rh.grid_lines_x(x0, x1))
+    coly = set(rh.grid_lines_y(y0, y1))
+    for x in rh.bay_lines_x(x0, x1):
+        out.append(_line("x", x, y0, y1, x in colx, px, py))
+    for y in rh.bay_lines_y(y0, y1):
+        out.append(_line("y", y, x0, x1, y in coly, px, py))
+    out.append("</g>")
+    bad = set(small)
+    for x, y in cols:
+        flag = (x, y) in bad
+        out.append(
+            f'<circle class="column{" in-room" if flag else ""}" cx="{px(x):.1f}" '
+            f'cy="{py(y):.1f}" r="3" fill="{"#c0392b" if flag else "#333333"}"/>'
+        )
+    out.append("</svg>")
+    (p.out_dir / "grille.svg").write_text("\n".join(out) + "\n", encoding="utf-8", newline="\n")
 
 
 def render_plans_markdown(res: PlansResult) -> str:
@@ -587,6 +847,7 @@ def render_plans_markdown(res: PlansResult) -> str:
         if p.status == "ok"
     ]
     lines += ["", *(f"- {v}" for v in res.vertical)]
+    lines += _trame_lines(res)
     lines += ["", "## Locaux fixes par niveau", ""]
     for p in res.floors:
         if p.status != "ok":

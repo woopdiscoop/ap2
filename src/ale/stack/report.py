@@ -266,12 +266,40 @@ def render_markdown(r: StackResult) -> str:
         "Part des cellules de pièces dont la cellule juste au-dessus ou au-dessous est occupée "
         "par une pièce du même type.",
         "",
+        *trame_lines(r),
         "## Manques durs",
         "",
     ]
     lines += [f"- {m}" for m in r.misses] or ["Aucun."]
     lines.append("")
     return "\n".join(lines)
+
+
+def trame_lines(r: StackResult) -> list[str]:
+    """Section « Trame et empilement » of ``stacking.md`` (cell level, French)."""
+    rh = r.rhythm
+    lines = ["## Trame et empilement", ""]
+    if rh is None:
+        return [*lines, "Pas de trame.", ""]
+    ov = f" (imposé : {', '.join(rh.overridden)})" if rh.overridden else ""
+    cols = rh.score.columns
+    lines += [
+        f"- Trame de poteaux : portées {rh.span_x_m:.2f} x {rh.span_y_m:.2f} m, module de travée "
+        f"{rh.bay_m:.2f} m{ov}, {rh.candidates} combinaisons évaluées.",
+        f"- Noyau sur la trame : {_yn(rh.core_on_grid(r.skeleton.core))} (ses côtés ouest et sud "
+        "sont sur des lignes de poteaux).",
+        f"- Niveau typique (posé en premier, les autres s'appuient sur lui) : {r.typical}.",
+        f"- Poteaux (tous niveaux) : {cols}, dont {rh.score.small_columns} dans une pièce de moins "
+        "de 30 m² (diagrammes de cellules).",
+        f"- Cloisons de façade : {rh.score.partitions}, dont {rh.score.off_bay} hors d'une ligne "
+        f"de travée ; pièces de façade plus étroites qu'une travée : {rh.score.lost}.",
+        "",
+        "| Niveaux | Empilabilité des cellules (types identiques) |",
+        "|---|---|",
+    ]
+    lines += [f"| {k} / {k + 1} | {v:.1%} |" for k, v in enumerate(r.pair_stackability)]
+    lines += [""]
+    return lines
 
 
 # ---------------------------------------------------------------------------- svg
@@ -335,6 +363,7 @@ def render_svg(r: StackResult) -> str:
             f'height="{n * (_BAND + _GAP) - _GAP:.1f}" fill="{fill}" '
             'fill-opacity="0.75"/>'
         )
+    out += _grid_svg(r, gb, n)
     ly = n * (_BAND + _GAP) + 14
     for i, g in enumerate(p.groups):
         lx = 10 + (i % 4) * (width / 4)
@@ -348,6 +377,28 @@ def render_svg(r: StackResult) -> str:
         )
     out.append("</svg>")
     return "\n".join(out) + "\n"
+
+
+def _grid_svg(r: StackResult, gb: tuple[float, float, float, float], n: int) -> list[str]:
+    """``<g id="grid">``: bay lines (light) and column lines (dark) across the section."""
+    rh = r.rhythm
+    if rh is None:
+        return []
+    h = n * (_BAND + _GAP) - _GAP
+    out = ['<g id="grid" fill="none">']
+    cols = set(rh.grid_lines_x(gb[0], gb[2]))
+    for x in rh.bay_lines_x(gb[0], gb[2]):
+        px = 10 + (x - gb[0]) * _PX_M
+        kind = "column" if x in cols else "bay"
+        stroke, dash = (
+            ("#c0392b", "") if kind == "column" else ("#999999", ' stroke-dasharray="2 3"')
+        )
+        out.append(
+            f'<line class="{kind}-line" x1="{px:.1f}" y1="2" x2="{px:.1f}" y2="{h + 6:.1f}" '
+            f'stroke="{stroke}" stroke-width="1"{dash}/>'
+        )
+    out.append("</g>")
+    return out
 
 
 # --------------------------------------------------------------------------- outputs

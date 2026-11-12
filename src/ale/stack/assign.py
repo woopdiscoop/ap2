@@ -40,6 +40,10 @@ W_SPLIT = 250.0
 W_CONTIGUITY = 2000.0
 W_TOGETHER = 300.0
 W_IMBALANCE = 400.0
+TIGHT_SHARE = 0.93
+TIGHT_FACTOR = 10.0
+"""With the type term (Ticket M.3), load above ``TIGHT_SHARE`` of a floor's capacity costs
+``TIGHT_FACTOR x type_weight`` per m²: the exact-plan engine fails near full capacity."""
 _MAX_ITER = 10_000
 _SWAP_LIMIT = 60
 _SMALL = 12
@@ -278,6 +282,9 @@ def evaluate(p: Problem, assign: Sequence[int]) -> Score:
         over += max(0.0, load - cap)
         shares.append(load / max(cap, 1.0))
     soft = over
+    if p.type_weight:  # M.3: do not pile same-type rooms onto a floor already near capacity
+        for load, cap in zip(loads, p.capacity, strict=True):
+            soft += TIGHT_FACTOR * p.type_weight * max(0.0, load - TIGHT_SHARE * max(cap, 0.0))
     for fl in floors.values():
         if len(fl) > 1:
             soft += W_SPLIT
